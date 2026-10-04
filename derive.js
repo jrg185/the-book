@@ -85,12 +85,27 @@ export function mergeLiveBook(committed, signal) {
   return next;
 }
 
+function summaryRows(summary) {
+  if (Array.isArray(summary)) return summary;
+  if (Array.isArray(summary?.rows)) return summary.rows;
+  return [];
+}
+
+// Crypto sleeve row from kpi_summary. Equities and combined stay off the live card.
+export function cryptoSnapshot(summary) {
+  const row = summaryRows(summary).find((item) => sleeveKey(item) === "crypto");
+  return row ? deriveSleeve(row) : null;
+}
+
 // One crypto book. Equities are $0 and are not a second book.
-export function cryptoBookView(book) {
+// Day P&L stays the live signal dollar. Realized, unrealized, and running
+// P&L are the crypto sleeve snapshot (seed × fraction), not a second book.
+export function cryptoBookView(book, summary) {
   const bookUsd = num(book?.book_usd);
   if (bookUsd == null) return null;
   const dayPnl = num(book?.day_pnl_usd);
   const killHeadroom = num(book?.kill_remaining_usd);
+  const snap = cryptoSnapshot(summary);
   return {
     sleeve: "crypto",
     label: "Crypto",
@@ -104,11 +119,17 @@ export function cryptoBookView(book) {
     dayTarget: money(bookUsd, LIVE_RAILS.dayTargetFrac),
     killHeadroom,
     killHeadroomFrac: bookUsd === 0 || killHeadroom == null ? null : killHeadroom / bookUsd,
+    realizedPnl: snap?.realizedPnl ?? null,
+    realizedPnlFrac: snap?.realizedPnlFrac ?? null,
+    unrealizedPnl: snap?.unrealizedPnl ?? null,
+    unrealizedPnlFrac: snap?.unrealizedPnlFrac ?? null,
+    runningPnl: snap?.runningPnl ?? null,
+    runningPnlFrac: snap?.runningPnlFrac ?? null,
   };
 }
 
-export function shownBooks(book) {
-  const crypto = cryptoBookView(book);
+export function shownBooks(book, summary) {
+  const crypto = cryptoBookView(book, summary);
   return crypto ? [crypto] : [];
 }
 

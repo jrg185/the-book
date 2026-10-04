@@ -262,6 +262,11 @@ function renderLiveBook(view, trades) {
   balance.append(el("p", "fine", "Full Agentic account. Signal book_usd. One crypto book."));
   grid.append(balance);
   grid.append(metric("Day P&L", formatUsd(view.dayPnl, { signed: true }), tone(view.dayPnl)));
+  grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));
+  grid.append(pnlMetric("Unrealized P&L", view.unrealizedPnl, view.unrealizedPnlFrac));
+  const running = pnlMetric("Running P&L", view.runningPnl, view.runningPnlFrac);
+  running.append(el("p", "fine", "Crypto sleeve snapshot. Seed \u00d7 fraction."));
+  grid.append(running);
 
   const kill = metric("Day kill rail");
   kill.querySelector(".v").replaceChildren(
@@ -562,9 +567,19 @@ function renderTape(sleeve, trades) {
   return section;
 }
 
-function render(tradeRows, meta, book) {
+function pnlMetric(label, dollars, frac) {
+  const node = metric(label);
+  const value = node.querySelector(".v");
+  value.classList.add(tone(dollars));
+  value.replaceChildren(
+    pair(formatUsd(dollars, { signed: true }), frac == null ? "" : formatPct(frac, { signed: true, digits: 2 }))
+  );
+  return node;
+}
+
+function render(tradeRows, meta, book, summary) {
   const trades = Array.isArray(tradeRows) ? tradeRows : [];
-  const books = shownBooks(book);
+  const books = shownBooks(book, summary);
   const view = books[0] || null;
   renderStatus(meta || {}, view?.asOf || null);
   boardEl.replaceChildren();
@@ -1206,7 +1221,7 @@ async function main() {
       loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
       loadJson("data/model_scorecard.json", token).catch(() => null),
     ]);
-    render(trades, meta, book);
+    render(trades, meta, book, summary);
     renderPositions(book);
     curvePayload = curves;
     paintCurves();
