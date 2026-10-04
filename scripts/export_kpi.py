@@ -1892,6 +1892,120 @@ def write_model_scorecard(target: Path, bundle: dict) -> None:
     write_json(target / "model_scorecard.json", payload)
 
 
+LIVE_SIGNAL_URL = (
+    "https://raw.githubusercontent.com/jrg185/agentic-crypto-signals/main/signals/latest.json"
+)
+
+
+def account_book_usd(holdings) -> float | None:
+    """Sum of crypto holding values, in cents. A missing value leaves the book unknown.
+
+    Same names the page keeps. Tape tickers are not added here.
+    """
+    rows = []
+    for row in holdings or []:
+        if not isinstance(row, dict):
+            continue
+        if not str(row.get("ticker") or "").strip():
+            continue
+        sleeve = str(row.get("sleeve") or "crypto").strip().lower()
+        if sleeve != "crypto":
+            continue
+        rows.append(row)
+    if not rows:
+        return None
+    total = Decimal("0")
+    for row in rows:
+        value = _decimal_or_none(row.get("value_usd"))
+        if value is None:
+            return None
+        total += value
+    return float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def merge_live_book(committed, signal) -> dict:
+    """Copy the signal file without putting its book_usd on the account.
+
+    Holdings, including each value and cost basis, stay. book_usd becomes the
+    sum of those values. The signal book is kept as signal_book_usd so the
+    −10% kill and the +2.5% target are not recomputed from the holdings sum.
+    Day P&L and kill headroom are copied when the signal has them. Candidates
+    and a signal holding list are not the account. Realized and running P&L
+    are dropped so a closed-trade total is not written back.
+    """
+    base = dict(committed) if isinstance(committed, dict) else {}
+    holdings = [dict(row) for row in base.get("holdings") or [] if isinstance(row, dict)]
+    live = signal if isinstance(signal, dict) else None
+    generated = base.get("generated_at")
+    day = base.get("day_pnl_usd")
+    kill = base.get("kill_remaining_usd")
+    signal_book = _finite_number(base.get("signal_book_usd"))
+    if live:
+        if live.get("generated_at"):
+            generated = live.get("generated_at")
+        signal_value = _finite_number(live.get("book_usd"))
+        if signal_value is not None:
+            signal_book = signal_value
+        day_value = _finite_number(live.get("day_pnl_usd"))
+        if day_value is not None:
+            day = day_value
+        kill_value = _finite_number(live.get("kill_remaining_usd"))
+        if kill_value is not None:
+            kill = kill_value
+    account = account_book_usd(holdings)
+    book = account if account is not None else _finite_number(base.get("book_usd"))
+    out = {}
+    if base.get("source"):
+        out["source"] = base.get("source")
+    if generated:
+        out["generated_at"] = generated
+    if book is not None:
+        out["book_usd"] = book
+    if signal_book is not None:
+        out["signal_book_usd"] = signal_book
+    if day is not None:
+        out["day_pnl_usd"] = day
+    if kill is not None:
+        out["kill_remaining_usd"] = kill
+    out["holdings"] = holdings
+    return out
+
+
+def fetch_live_signal() -> dict | None:
+    """Read the public signal file. A 404 or a private repo leaves the account file."""
+    request = urllib.request.Request(
+        LIVE_SIGNAL_URL,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "the-book-live-book",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def refresh_live_book(target: Path, signal: dict | None = None, *, fetch: bool = True) -> dict | None:
+    """Rewrite data/live_book.json so book_usd is the holdings sum.
+
+    Does nothing when the account file is absent. Does not invent holdings.
+    """
+    path = target / "live_book.json"
+    if not path.exists():
+        return None
+    committed = _read_json(path, None)
+    if not isinstance(committed, dict):
+        return None
+    if signal is None and fetch:
+        signal = fetch_live_signal()
+    merged = merge_live_book(committed, signal)
+    write_json(path, merged)
+    return merged
+
+
 def write_bundle(target: Path, bundle: dict) -> None:
     for name in (*VIEWS, "meta"):
         write_json(target / f"{name}.json", bundle[name])
@@ -2321,6 +2435,49 @@ def self_test() -> int:
         commit = workflow.split("Commit refreshed JSON", 1)[1].split("Publish export failure", 1)[0]
         if "data/model_scorecard.json" not in commit:
             raise RuntimeError(f"{relative} does not git add data/model_scorecard.json")
+        if "data/live_book.json" not in commit:
+            raise RuntimeError(f"{relative} does not git add data/live_book.json")
+    copied = {
+        "generated_at": "2026-10-04T20:41:10Z",
+        "book_usd": 775,
+        "day_pnl_usd": 0,
+        "kill_remaining_usd": 77.5,
+        "holdings": [{"ticker": "USDC", "sleeve": "crypto", "value_usd": 775}],
+        "candidates": [{"symbol": "BTC", "side": "sell"}],
+    }
+    account = {
+        "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
+        "generated_at": "2026-10-04T16:34:23Z",
+        "book_usd": 775,
+        "signal_book_usd": 775,
+        "day_pnl_usd": 0,
+        "kill_remaining_usd": 77.5,
+        "realized_pnl_usd": 3.73,
+        "running_pnl_usd": 3.73,
+        "holdings": [
+            {"ticker": "USD", "sleeve": "crypto", "value_usd": 760.64},
+            {"ticker": "USDC", "sleeve": "crypto", "value_usd": 14.07, "cost_basis_usd": 14.07},
+        ],
+    }
+    merged_book = merge_live_book(account, copied)
+    expected_book = account_book_usd(account["holdings"])
+    if expected_book is None or merged_book["book_usd"] != expected_book:
+        raise RuntimeError(f"live book was not the holdings sum: {merged_book}")
+    if merged_book["book_usd"] == copied["book_usd"] or merged_book["book_usd"] == 775:
+        raise RuntimeError("signal book_usd was copied onto the account")
+    if merged_book.get("signal_book_usd") != 775:
+        raise RuntimeError(f"signal rail book was dropped: {merged_book}")
+    if merged_book.get("realized_pnl_usd") is not None or merged_book.get("running_pnl_usd") is not None:
+        raise RuntimeError("closed-trade pnl was written back onto the live book")
+    if "candidates" in merged_book or [row["ticker"] for row in merged_book["holdings"]] != ["USD", "USDC"]:
+        raise RuntimeError(f"signal holdings replaced the account: {merged_book}")
+    if merged_book["holdings"][1].get("cost_basis_usd") != 14.07:
+        raise RuntimeError("USDC cost basis changed")
+    if merged_book["day_pnl_usd"] != 0 or merged_book["kill_remaining_usd"] != 77.5:
+        raise RuntimeError("day pnl or kill headroom was recomputed")
+    stale_book = merge_live_book(account, None)
+    if stale_book["book_usd"] != expected_book or stale_book.get("signal_book_usd") != 775:
+        raise RuntimeError(f"a missing signal put 775 back: {stale_book}")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
     if card["kill"]["kill_headroom_usd"] != 3.75 or card["kill"]["day_kill_usd"] != -30.0:
@@ -2392,6 +2549,11 @@ def main(argv: list[str] | None = None) -> int:
             print("Sample JSON missing; installing fixtures.", file=sys.stderr)
             install_sample(DATA)
         try:
+            refresh_live_book(DATA)
+        except OSError as exc:
+            print(f"Could not refresh data/live_book.json: {exc}", file=sys.stderr)
+            return 1
+        try:
             stamp_export_failure(DATA, "stale", MISSING_CREDS)
         except OSError as exc:
             print(f"Could not record export status in data/meta.json: {exc}", file=sys.stderr)
@@ -2403,6 +2565,7 @@ def main(argv: list[str] | None = None) -> int:
         if refresh_expected:
             assert_summary_fresh(bundle["kpi_summary"])
         write_bundle(DATA, bundle)
+        refresh_live_book(DATA)
     except Exception as exc:
         frozen = committed_as_of(DATA)
         status, message, warehouse_status = classify_failure(exc, frozen)
