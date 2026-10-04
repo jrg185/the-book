@@ -52,10 +52,13 @@ test("equities is not rendered as its own book", () => {
 test("open names are the live book holdings, not tape coins", () => {
   const rows = holdingRows(live);
   assert.deepEqual(
-    rows.map((row) => row.ticker),
-    ["USDC"]
+    rows.map((row) => [row.ticker, row.valueUsd]),
+    [
+      ["USD", 760.64],
+      ["USDC", 14.07],
+    ]
   );
-  assert.equal(rows[0].valueUsd, live.book_usd);
+  assert.ok(rows.every((row) => row.valueUsd !== live.book_usd));
   const tapeNames = new Set((openPositions.positions || []).map((row) => row.ticker));
   for (const row of rows) assert.equal(tapeNames.has(row.ticker), false);
   const merged = mergeLiveBook(live, {
@@ -68,47 +71,63 @@ test("open names are the live book holdings, not tape coins", () => {
   assert.equal(merged.candidates, undefined);
   assert.deepEqual(
     holdingRows(merged).map((row) => row.ticker),
-    ["USDC"]
+    ["USD", "USDC"]
   );
 });
 
-test("a funded cash book shows snapshot P&L and USDC, not tape coins", () => {
+test("the $775 account is not a seed snapshot beside one cash row", () => {
   const crypto = summary.find((row) => row.sleeve === "crypto");
   const equities = summary.find((row) => row.sleeve === "equities");
   const snap = deriveSleeve(crypto);
   const view = cryptoBookView(live, summary);
   assert.equal(view.sleeve, "crypto");
   assert.equal(view.bookUsd, live.book_usd);
+  assert.equal(view.bookUsd, 775);
   assert.equal(view.equitiesUsd, 0);
   assert.equal(view.dayPnl, live.day_pnl_usd);
-  assert.equal(view.realizedPnl, snap.realizedPnl);
-  assert.equal(view.unrealizedPnl, snap.unrealizedPnl);
-  assert.equal(view.runningPnl, snap.runningPnl);
-  assert.notEqual(view.realizedPnl, null);
-  assert.notEqual(view.unrealizedPnl, null);
-  assert.notEqual(view.runningPnl, null);
+  assert.notEqual(view.realizedPnl, snap.realizedPnl);
+  assert.notEqual(view.unrealizedPnl, snap.unrealizedPnl);
+  assert.notEqual(view.runningPnl, snap.runningPnl);
+  assert.equal(view.realizedPnl, live.realized_pnl_usd);
+  assert.equal(view.unrealizedPnl, live.unrealized_pnl_usd);
+  assert.equal(view.runningPnl, live.running_pnl_usd);
+  assert.equal(view.realizedPnl, 3.73);
+  assert.equal(view.unrealizedPnl, 0);
+  assert.equal(view.runningPnl, 3.73);
+  assert.ok(Math.abs(view.realizedPnlFrac - 3.73 / 775) < 1e-12);
+  assert.equal(view.unrealizedPnlFrac, 0);
+  assert.ok(Math.abs(view.runningPnlFrac - 3.73 / 775) < 1e-12);
   assert.notEqual(view.bookUsd, snap.runningBalance);
   assert.notEqual(view.realizedPnl, deriveSleeve(equities).realizedPnl);
   const books = shownBooks(live, summary);
   assert.equal(books.length, 1);
-  assert.equal(books[0].realizedPnl, snap.realizedPnl);
-  assert.equal(books[0].unrealizedPnl, snap.unrealizedPnl);
-  assert.equal(books[0].runningPnl, snap.runningPnl);
+  assert.equal(books[0].realizedPnl, 3.73);
+  assert.equal(books[0].unrealizedPnl, 0);
+  assert.equal(books[0].runningPnl, 3.73);
   const rows = holdingRows(live);
   assert.deepEqual(
-    rows.map((row) => row.ticker),
-    ["USDC"]
+    rows.map((row) => [row.ticker, row.valueUsd]),
+    [
+      ["USD", 760.64],
+      ["USDC", 14.07],
+    ]
   );
-  assert.equal(rows[0].valueUsd, live.book_usd);
+  const painted = holdingRows({
+    book_usd: 775,
+    holdings: [{ ticker: "USDC", sleeve: "crypto" }],
+  });
+  assert.equal(painted.length, 1);
+  assert.notEqual(painted[0].valueUsd, 775);
   const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
   assert.ok(tapeNames.length > 1);
   for (const name of tapeNames) {
     assert.equal(rows.some((row) => row.ticker === name), false, name);
   }
-  assert.equal(/shownBooks\(book,\s*summary\)/.test(app), true);
   assert.equal(app.includes("Realized P&L"), true);
   assert.equal(app.includes("Unrealized P&L"), true);
   assert.equal(app.includes("Running P&L"), true);
+  assert.equal(app.includes("Crypto sleeve snapshot"), false);
+  assert.equal(app.includes("Seed \\u00d7 fraction"), false);
   assert.equal(app.includes("renderSleeve"), false);
   assert.equal(app.includes("open_positions.json"), false);
 });
