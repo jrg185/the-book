@@ -1926,10 +1926,10 @@ def account_book_usd(holdings) -> float | None:
 # Whole-account card. The crypto sleeve row is not this book, and these
 # dollars are not divided by the $300 / $500 / $800 seeds.
 ACCOUNT_PNL_KEYS = (
+    "running_balance_usd",
     "realized_pnl_usd",
     "unrealized_pnl_usd",
     "running_pnl_usd",
-    "day_pnl_usd",
 )
 
 
@@ -1943,9 +1943,10 @@ def _cents_number(value):
 def latest_account_pnl(rows: list) -> dict | None:
     """Latest combined snapshot, in dollars.
 
-    Reads realized_pnl_usd, unrealized_pnl_usd, running_pnl_usd, and
-    day_pnl_usd when that column is present. A fraction column is not
-    multiplied by a sleeve seed. A crypto-only row is not the account.
+    Reads running_balance_usd, realized_pnl_usd, unrealized_pnl_usd, and
+    running_pnl_usd. The snapshot table has no day_pnl_usd column, so this
+    read does not supply day P&L. A fraction column is not multiplied by a
+    sleeve seed. A crypto-only row is not the account.
     """
     chosen = None
     chosen_at = None
@@ -1977,11 +1978,12 @@ def latest_account_pnl(rows: list) -> dict | None:
     return out or None
 
 
-def apply_account_pnl(book: dict, pnl: dict | None, *, clear_missing_day: bool = False) -> dict:
+def apply_account_pnl(book: dict, pnl: dict | None) -> dict:
     """Copy snapshot dollar columns onto the account file.
 
-    Does not invent a figure when the column was not on the row. A successful
-    read with no day_pnl_usd drops a previously typed day figure.
+    Does not invent a figure when the column was not on the row. Does not
+    touch day_pnl_usd. The snapshot table has no day column, and a missing
+    key must not clear the signal day already on the file.
     """
     out = dict(book) if isinstance(book, dict) else {}
     if not isinstance(pnl, dict):
@@ -1993,78 +1995,60 @@ def apply_account_pnl(book: dict, pnl: dict | None, *, clear_missing_day: bool =
         if number is None:
             continue
         out[key] = number
-    if clear_missing_day and "day_pnl_usd" not in pnl:
-        out.pop("day_pnl_usd", None)
     return out
 
 
-def _account_snapshot_sql(with_day: bool) -> str:
-    day = ", day_pnl_usd" if with_day else ""
+def _account_snapshot_sql() -> str:
     return (
-        "select sleeve, as_of, realized_pnl_usd, unrealized_pnl_usd, running_pnl_usd"
-        f"{day} from public.kpi_sleeve_snapshots "
+        "select sleeve, as_of, running_balance_usd, realized_pnl_usd, "
+        "unrealized_pnl_usd, running_pnl_usd "
+        "from public.kpi_sleeve_snapshots "
         "where lower(btrim(sleeve)) = 'combined' "
         "order by as_of desc limit 1"
     )
 
 
 def _fetch_account_snapshot_rest(base_url: str, key: str) -> list:
-    selects = (
-        "sleeve,as_of,realized_pnl_usd,unrealized_pnl_usd,running_pnl_usd,day_pnl_usd",
-        "sleeve,as_of,realized_pnl_usd,unrealized_pnl_usd,running_pnl_usd",
+    query = urllib.parse.urlencode(
+        {
+            "select": "sleeve,as_of,running_balance_usd,realized_pnl_usd,unrealized_pnl_usd,running_pnl_usd",
+            "sleeve": "eq.combined",
+            "order": "as_of.desc",
+            "limit": "1",
+        }
     )
-    last_error: Exception | None = None
-    for select in selects:
-        query = urllib.parse.urlencode(
-            {
-                "select": select,
-                "order": "as_of.desc",
-                "limit": "6",
-            }
-        )
-        url = base_url.rstrip("/") + f"/rest/v1/kpi_sleeve_snapshots?{query}"
-        request = urllib.request.Request(
-            url,
-            headers={
-                "apikey": key,
-                "Authorization": f"Bearer {key}",
-                "Accept": "application/json",
-                "User-Agent": "agentic-sleeves-kpi-export",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                body = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:180]
-            if key and key in detail:
-                detail = detail.replace(key, "[redacted]")
-            if "day_pnl_usd" in select and ("day_pnl_usd" in detail or exc.code == 400):
-                last_error = RuntimeError(f"REST kpi_sleeve_snapshots HTTP {exc.code}: {detail}")
-                continue
-            raise RuntimeError(f"REST kpi_sleeve_snapshots HTTP {exc.code}: {detail}") from None
-        payload = json.loads(body)
-        if not isinstance(payload, list):
-            raise RuntimeError("REST kpi_sleeve_snapshots did not return a row list")
-        return [scrub_row(row) for row in payload if isinstance(row, dict)]
-    if last_error:
-        raise last_error
-    return []
+    url = base_url.rstrip("/") + f"/rest/v1/kpi_sleeve_snapshots?{query}"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Accept": "application/json",
+            "User-Agent": "agentic-sleeves-kpi-export",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:180]
+        if key and key in detail:
+            detail = detail.replace(key, "[redacted]")
+        raise RuntimeError(f"REST kpi_sleeve_snapshots HTTP {exc.code}: {detail}") from None
+    payload = json.loads(body)
+    if not isinstance(payload, list):
+        raise RuntimeError("REST kpi_sleeve_snapshots did not return a row list")
+    return [scrub_row(row) for row in payload if isinstance(row, dict)]
 
 
 def _fetch_account_snapshot_db(db_url: str) -> list:
     try:
         import psycopg
-        from psycopg.errors import UndefinedColumn
     except ImportError as exc:
         raise RuntimeError("psycopg is required for SUPABASE_DB_URL") from exc
     with psycopg.connect(db_url, connect_timeout=20) as conn:
         with conn.cursor() as cur:
-            try:
-                cur.execute(_account_snapshot_sql(True))
-            except UndefinedColumn:
-                conn.rollback()
-                cur.execute(_account_snapshot_sql(False))
+            cur.execute(_account_snapshot_sql())
             columns = [desc.name for desc in cur.description]
             return [scrub_row(dict(zip(columns, row))) for row in cur.fetchall()]
 
@@ -2072,8 +2056,8 @@ def _fetch_account_snapshot_db(db_url: str) -> list:
 def load_account_pnl(base_url: str, key: str | None, db_url: str | None) -> dict | None:
     """Read the latest combined row of public.kpi_sleeve_snapshots.
 
-    Columns: realized_pnl_usd, unrealized_pnl_usd, running_pnl_usd, and
-    day_pnl_usd when the table has it. Returns None when there is no credential.
+    Columns: running_balance_usd, realized_pnl_usd, unrealized_pnl_usd, and
+    running_pnl_usd. sleeve=combined, one row. Returns None when there is no credential.
     """
     if not key and not db_url:
         return None
@@ -2111,9 +2095,11 @@ def merge_live_book(committed, signal) -> dict:
     Holdings, including each value and cost basis, stay. book_usd becomes the
     sum of those values. The signal book is kept as signal_book_usd so the
     −10% kill and the +2.5% target are not recomputed from the holdings sum.
-    Kill headroom is copied when the signal has it. Day P&L, realized,
-    unrealized, and running P&L already on the account are kept. Candidates
-    and a signal holding list are not the account.
+    Kill headroom is copied when the signal has it. Day P&L is copied from
+    the signal when that file has a finite day_pnl_usd. A missing signal day
+    leaves the day already on the account. Realized, unrealized, running P&L,
+    and running_balance_usd already on the account are kept. Candidates and a
+    signal holding list are not the account.
     """
     base = dict(committed) if isinstance(committed, dict) else {}
     holdings = [dict(row) for row in base.get("holdings") or [] if isinstance(row, dict)]
@@ -2128,6 +2114,9 @@ def merge_live_book(committed, signal) -> dict:
         signal_value = _finite_number(live.get("book_usd"))
         if signal_value is not None:
             signal_book = signal_value
+        day_value = _finite_number(live.get("day_pnl_usd"))
+        if day_value is not None:
+            day = day_value
         kill_value = _finite_number(live.get("kill_remaining_usd"))
         if kill_value is not None:
             kill = kill_value
@@ -2144,7 +2133,7 @@ def merge_live_book(committed, signal) -> dict:
         out["signal_book_usd"] = signal_book
     if day is not None:
         out["day_pnl_usd"] = day
-    for key in ("realized_pnl_usd", "unrealized_pnl_usd", "running_pnl_usd"):
+    for key in ("running_balance_usd", "realized_pnl_usd", "unrealized_pnl_usd", "running_pnl_usd"):
         if base.get(key) is not None:
             out[key] = base.get(key)
     if kill is not None:
@@ -2176,13 +2165,13 @@ def refresh_live_book(
     *,
     fetch: bool = True,
     account_pnl: dict | None = None,
-    clear_missing_day: bool = False,
 ) -> dict | None:
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
     Does nothing when the account file is absent. Does not invent holdings.
-    When account_pnl is the latest combined snapshot, those dollar columns are
-    written through. A missing snapshot does not delete P&L already on the file.
+    When account_pnl is the latest combined snapshot, running_balance_usd and
+    the three P&L columns are written through. Day P&L stays the signal copy.
+    A missing snapshot does not delete P&L or day P&L already on the file.
     """
     path = target / "live_book.json"
     if not path.exists():
@@ -2194,7 +2183,7 @@ def refresh_live_book(
         signal = fetch_live_signal()
     merged = merge_live_book(committed, signal)
     if account_pnl:
-        merged = apply_account_pnl(merged, account_pnl, clear_missing_day=clear_missing_day)
+        merged = apply_account_pnl(merged, account_pnl)
         merged = merge_live_book(merged, None)
     write_json(path, merged)
     return merged
@@ -2646,6 +2635,7 @@ def self_test() -> int:
         "signal_book_usd": 775,
         "day_pnl_usd": 1.5,
         "kill_remaining_usd": 77.5,
+        "running_balance_usd": 812.4,
         "realized_pnl_usd": 8.5,
         "unrealized_pnl_usd": 1.25,
         "running_pnl_usd": 9.75,
@@ -2670,8 +2660,14 @@ def self_test() -> int:
         raise RuntimeError(f"signal holdings replaced the account: {merged_book}")
     if merged_book["holdings"][1].get("cost_basis_usd") != 14.07:
         raise RuntimeError("USDC cost basis changed")
-    if merged_book["day_pnl_usd"] != 1.5 or merged_book["kill_remaining_usd"] != 77.5:
-        raise RuntimeError("day pnl or kill headroom was recomputed")
+    if merged_book["day_pnl_usd"] != copied["day_pnl_usd"] or merged_book["kill_remaining_usd"] != 77.5:
+        raise RuntimeError("day pnl was not copied from the signal, or kill headroom changed")
+    if merged_book["day_pnl_usd"] == 1.5:
+        raise RuntimeError("account day replaced the signal day")
+    if merged_book.get("running_balance_usd") != 812.4:
+        raise RuntimeError(f"merge dropped running balance: {merged_book}")
+    if merged_book["running_balance_usd"] == expected_book or merged_book["running_balance_usd"] == 775:
+        raise RuntimeError("running balance was replaced by the holdings sum or the signal book")
     snapshot_rows = [
         {
             "sleeve": "crypto",
@@ -2679,6 +2675,7 @@ def self_test() -> int:
             "realized_pnl_usd": "4.25",
             "unrealized_pnl_usd": "1.10",
             "running_pnl_usd": "5.35",
+            "running_balance_usd": "305.35",
         },
         {
             "sleeve": "combined",
@@ -2686,26 +2683,31 @@ def self_test() -> int:
             "realized_pnl_usd": "6.00",
             "unrealized_pnl_usd": "1.00",
             "running_pnl_usd": "7.00",
+            "running_balance_usd": "807.00",
         },
         {
             "sleeve": "combined",
             "as_of": "2026-10-04T21:40:15Z",
-            "realized_pnl_usd": "-1.171683",
-            "unrealized_pnl_usd": "-9.231475",
-            "running_pnl_usd": "-10.403158",
-            "day_pnl_usd": "1.50",
+            "realized_pnl_usd": "3.40",
+            "unrealized_pnl_usd": "0.60",
+            "running_pnl_usd": "4.00",
+            "running_balance_usd": "804.00",
         },
     ]
     account_pnl = latest_account_pnl(snapshot_rows)
     if account_pnl != {
-        "realized_pnl_usd": -1.17,
-        "unrealized_pnl_usd": -9.23,
-        "running_pnl_usd": -10.4,
-        "day_pnl_usd": 1.5,
+        "running_balance_usd": 804.0,
+        "realized_pnl_usd": 3.4,
+        "unrealized_pnl_usd": 0.6,
+        "running_pnl_usd": 4.0,
     }:
         raise RuntimeError(f"combined snapshot was not the account P&L: {account_pnl}")
-    if account_pnl["realized_pnl_usd"] == 4.25:
+    if "day_pnl_usd" in account_pnl:
+        raise RuntimeError("snapshot read supplied a day figure")
+    if account_pnl["realized_pnl_usd"] == 4.25 or account_pnl["running_balance_usd"] == 305.35:
         raise RuntimeError("crypto-only snapshot replaced the account")
+    if account_pnl["running_balance_usd"] == 807.0:
+        raise RuntimeError("an older combined row replaced the latest")
     seeded = float((Decimal("0.049797") * Decimal("300")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     if account_pnl["realized_pnl_usd"] == seeded or account_pnl["running_pnl_usd"] == seeded:
         raise RuntimeError("account P&L was recomputed as a fraction of the sleeve seed")
@@ -2720,12 +2722,27 @@ def self_test() -> int:
         ]
     ):
         raise RuntimeError("a seed fraction was turned back into account dollars")
-    published = apply_account_pnl(merged_book, account_pnl, clear_missing_day=True)
+    exporter = Path(__file__).read_text(encoding="utf-8")
+    rest = exporter.split("def _fetch_account_snapshot_rest", 1)[1].split("def _fetch_account_snapshot_db", 1)[0]
+    sql = exporter.split("def _account_snapshot_sql", 1)[1].split("def _fetch_account_snapshot_rest", 1)[0]
+    if "eq.combined" not in rest or '"limit": "1"' not in rest:
+        raise RuntimeError("REST account read must filter sleeve=combined and limit 1")
+    if '"limit": "6"' in rest or "day_pnl_usd" in rest:
+        raise RuntimeError("REST account read must not scan every sleeve or select day_pnl_usd")
+    if "combined" not in sql or "limit 1" not in sql or "day_pnl_usd" in sql:
+        raise RuntimeError("SQL account read must filter combined, limit 1, and skip day_pnl_usd")
+    published = apply_account_pnl(merged_book, account_pnl)
     published = merge_live_book(published, copied)
     if published.get("realized_pnl_usd") != account_pnl["realized_pnl_usd"]:
         raise RuntimeError(f"writer dropped realized: {published}")
     if published.get("running_pnl_usd") != account_pnl["running_pnl_usd"]:
         raise RuntimeError(f"writer dropped running: {published}")
+    if published.get("running_balance_usd") != account_pnl["running_balance_usd"]:
+        raise RuntimeError(f"writer dropped running balance: {published}")
+    if published["running_balance_usd"] == published["book_usd"] or published["running_balance_usd"] == 775:
+        raise RuntimeError("writer put the holdings sum or the signal book on running balance")
+    if published.get("day_pnl_usd") != copied["day_pnl_usd"]:
+        raise RuntimeError(f"writer dropped the signal day: {published}")
     if published["book_usd"] != expected_book or published.get("signal_book_usd") != 775:
         raise RuntimeError(f"writer moved the book off the holdings sum: {published}")
     no_day = latest_account_pnl(
@@ -2736,17 +2753,20 @@ def self_test() -> int:
                 "realized_pnl_usd": "8.5",
                 "unrealized_pnl_usd": "1.25",
                 "running_pnl_usd": "9.75",
+                "running_balance_usd": "812.40",
             }
         ]
     )
-    cleared = apply_account_pnl(published, no_day, clear_missing_day=True)
-    if "day_pnl_usd" in cleared:
-        raise RuntimeError(f"a missing day column left a typed day figure: {cleared}")
+    kept = apply_account_pnl(published, no_day)
+    if kept.get("day_pnl_usd") != copied["day_pnl_usd"]:
+        raise RuntimeError(f"a snapshot without day_pnl_usd cleared the signal day: {kept}")
     stale_book = merge_live_book(account, None)
     if stale_book["book_usd"] != expected_book or stale_book.get("signal_book_usd") != 775:
         raise RuntimeError(f"a missing signal put 775 back: {stale_book}")
     if stale_book.get("realized_pnl_usd") != 8.5 or stale_book.get("running_pnl_usd") != 9.75:
         raise RuntimeError(f"a missing signal deleted account P&L: {stale_book}")
+    if stale_book.get("day_pnl_usd") != 1.5 or stale_book.get("running_balance_usd") != 812.4:
+        raise RuntimeError(f"a missing signal cleared day P&L or running balance: {stale_book}")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
     if card["kill"]["kill_headroom_usd"] != 3.75 or card["kill"]["day_kill_usd"] != -30.0:
@@ -2835,11 +2855,7 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"])
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        refresh_live_book(
-            DATA,
-            account_pnl=account_pnl,
-            clear_missing_day=account_pnl is not None,
-        )
+        refresh_live_book(DATA, account_pnl=account_pnl)
     except Exception as exc:
         frozen = committed_as_of(DATA)
         status, message, warehouse_status = classify_failure(exc, frozen)

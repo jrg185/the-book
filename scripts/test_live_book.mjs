@@ -31,7 +31,9 @@ test("the published book is the holdings sum, and the rails stay on the signal b
   assert.equal(live.book_usd, sum);
   assert.equal(books[0].bookUsd, sum);
   assert.equal(books[0].bookUsd, live.book_usd);
-  assert.equal(books[0].runningBalance, sum);
+  assert.equal(books[0].runningBalance, live.running_balance_usd ?? null);
+  assert.notEqual(books[0].runningBalance, sum);
+  assert.notEqual(books[0].runningBalance, live.signal_book_usd);
   assert.equal(books[0].equitiesUsd, 0);
   assert.equal(live.signal_book_usd, 775);
   assert.equal(books[0].dayPnl, live.day_pnl_usd ?? null);
@@ -131,6 +133,11 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(oldView.realizedPnl, null);
   assert.notEqual(oldView.runningPnl, null);
   assert.equal(oldView.equitiesUsd, 0);
+  assert.equal(mergedOld.day_pnl_usd, publicSignal.day_pnl_usd);
+  const keptDay = mergeLiveBook(old, { book_usd: 775, kill_remaining_usd: 77.5 });
+  assert.equal(keptDay.day_pnl_usd, old.day_pnl_usd);
+  assert.equal(keptDay.realized_pnl_usd, old.realized_pnl_usd);
+  assert.equal(keptDay.running_pnl_usd, old.running_pnl_usd);
 
   const crypto = summary.find((row) => row.sleeve === "crypto");
   const equities = summary.find((row) => row.sleeve === "equities");
@@ -140,6 +147,7 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
     realized_pnl_usd: 8.5,
     unrealized_pnl_usd: 1.25,
     running_pnl_usd: 9.75,
+    running_balance_usd: 812.4,
     day_pnl_usd: 1.5,
   };
   const merged = mergeLiveBook(withPnl, publicSignal);
@@ -160,18 +168,23 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(merged.book_usd, sum);
   assert.equal(merged.signal_book_usd, 775);
   assert.notEqual(merged.book_usd, publicSignal.book_usd);
-  assert.equal(merged.day_pnl_usd, withPnl.day_pnl_usd);
-  assert.notEqual(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.notEqual(merged.day_pnl_usd, withPnl.day_pnl_usd);
   assert.equal(merged.kill_remaining_usd, 77.5);
   assert.equal(merged.realized_pnl_usd, withPnl.realized_pnl_usd);
   assert.equal(merged.unrealized_pnl_usd, withPnl.unrealized_pnl_usd);
   assert.equal(merged.running_pnl_usd, withPnl.running_pnl_usd);
+  assert.equal(merged.running_balance_usd, withPnl.running_balance_usd);
+  assert.notEqual(merged.running_balance_usd, sum);
+  assert.notEqual(merged.running_balance_usd, 775);
   assert.equal(merged.candidates, undefined);
   assert.equal(view.bookUsd, sum);
-  assert.equal(view.runningBalance, sum);
+  assert.equal(view.runningBalance, withPnl.running_balance_usd);
+  assert.notEqual(view.runningBalance, sum);
+  assert.notEqual(view.runningBalance, 775);
   assert.notEqual(view.bookUsd, 775);
   assert.notEqual(view.bookUsd, publicSignal.book_usd);
-  assert.equal(view.dayPnl, withPnl.day_pnl_usd);
+  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
   assert.equal(view.dayKill, -77.5);
   assert.equal(view.dayTarget, 19.38);
   assert.equal(view.killHeadroom, 77.5);
@@ -203,8 +216,8 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   for (const name of tapeNames) {
     assert.equal(rows.some((row) => row.ticker === name), false, name);
   }
-  assert.equal(app.includes('formatUsd(view.bookUsd)'), true);
-  assert.equal(app.includes('formatUsd(view.runningBalance)'), false);
+  assert.equal(app.includes('formatUsd(view.runningBalance)'), true);
+  assert.equal(app.includes('formatUsd(view.bookUsd)'), false);
   assert.equal(app.includes("Realized P&L"), true);
   assert.equal(app.includes("Unrealized P&L"), true);
   assert.equal(app.includes("Running P&L"), true);
@@ -238,7 +251,17 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(exporter.includes("realized_pnl_usd"), true);
   assert.equal(exporter.includes("unrealized_pnl_usd"), true);
   assert.equal(exporter.includes("running_pnl_usd"), true);
+  assert.equal(exporter.includes("running_balance_usd"), true);
   assert.equal(exporter.includes("refresh_live_book(DATA)"), true);
+  const rest = exporter.split("def _fetch_account_snapshot_rest")[1].split("def _fetch_account_snapshot_db")[0];
+  assert.match(rest, /eq\.combined/);
+  assert.match(rest, /"limit": "1"/);
+  assert.equal(rest.includes('"limit": "6"'), false);
+  assert.equal(rest.includes("day_pnl_usd"), false);
+  assert.equal(exporter.includes("clear_missing_day"), false);
+  assert.equal(exporter.includes("out.pop(\"day_pnl_usd\""), false);
+  assert.equal(derive.includes("next.day_pnl_usd = day"), true);
+  assert.equal(derive.includes("runningBalance: account"), false);
   assert.equal(derive.includes("const realizedPnl = null"), false);
   assert.equal(derive.includes("const runningPnl = null"), false);
   assert.equal(derive.includes("delete base.realized_pnl"), false);
@@ -257,6 +280,13 @@ test("the page does not hardcode the holdings sum in place of the writer", () =>
   const published = readFileSync(new URL("../data/live_book.json", import.meta.url), "utf8");
   assert.equal(published.includes("774.71"), true);
   assert.equal(deriveSourceHasSeedRebuild(published), false);
+  for (const banned of ["789.60", "-1.17", "-9.23", "-10.40"]) {
+    assert.equal(published.includes(banned), false, banned);
+    for (const file of ["derive.js", "app.js", "index.html"]) {
+      const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      assert.equal(text.includes(banned), false, `${file} ${banned}`);
+    }
+  }
 });
 
 function deriveSourceHasSeedRebuild(published) {
