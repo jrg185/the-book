@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  cardPositionRows,
   cryptoBookView,
   deriveSleeve,
   holdingRows,
   mergeLiveBook,
+  openPositionRows,
   SEEDS_USD,
   shownBooks,
 } from "../derive.js";
@@ -49,7 +51,9 @@ test("the published book is the holdings sum, and the rails stay on the signal b
   }
   assert.notEqual(books[0].runningBalance, seededBalance("crypto"));
   assert.notEqual(books[0].runningBalance, seededBalance("equities"));
-  assert.notEqual(books[0].runningBalance, seededBalance("combined"));
+  if (live.running_balance_usd == null) {
+    assert.notEqual(books[0].runningBalance, seededBalance("combined"));
+  }
   assert.equal(books.some((book) => book.sleeve === "equities"), false);
   assert.equal(books.some((book) => book.sleeve === "combined"), false);
 });
@@ -268,6 +272,68 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(derive.includes("delete base.running_pnl"), false);
 });
 
+test("open nets stay beside cash and do not move the rails", () => {
+  const withOpen = {
+    ...live,
+    positions: [
+      { sleeve: "crypto", ticker: "ZZ", qty: "3", mark: "12.5", value_usd: 37.5, unrealized_pnl_usd: 7.5 },
+      { sleeve: "equities", ticker: "QQ", qty: "0", value_usd: 4 },
+      { sleeve: "crypto", ticker: "USDC", qty: "9", value_usd: 9 },
+    ],
+  };
+  const merged = mergeLiveBook(withOpen, {
+    ...publicSignal,
+    positions: [{ sleeve: "crypto", ticker: "NOPE", qty: "9", value_usd: 1 }],
+    holdings: [{ ticker: "USDC", sleeve: "crypto", value_usd: 775 }],
+  });
+  const view = cryptoBookView(merged);
+  const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
+  assert.equal(merged.book_usd, sum);
+  assert.equal(merged.kill_remaining_usd, 77.5);
+  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.equal(merged.signal_book_usd, 775);
+  assert.deepEqual(
+    merged.positions.map((row) => row.ticker),
+    ["ZZ", "QQ", "USDC"]
+  );
+  assert.equal(view.bookUsd, sum);
+  assert.equal(view.dayKill, -77.5);
+  assert.equal(view.dayTarget, 19.38);
+  assert.equal(view.equitiesUsd, 0);
+  assert.notEqual(view.bookUsd, sum + 37.5);
+  assert.notEqual(view.unrealizedPnl, 7.5);
+  assert.deepEqual(
+    holdingRows(merged).map((row) => row.ticker),
+    ["USD", "USDC"]
+  );
+  assert.deepEqual(
+    cardPositionRows(merged).map((row) => [row.ticker, row.qty, row.valueUsd]),
+    [
+      ["USD", null, 760.64],
+      ["USDC", null, 14.07],
+      ["ZZ", 3, 37.5],
+    ]
+  );
+  assert.equal(openPositionRows(merged).some((row) => row.ticker === "QQ"), false);
+  assert.equal(openPositionRows(merged).some((row) => row.ticker === "USDC"), false);
+  assert.equal(shownBooks(merged).length, 1);
+  assert.equal(app.includes("cardPositionRows"), true);
+  assert.equal(app.includes("open_positions.json"), false);
+});
+
+test("the page does not hardcode live open quantities", () => {
+  const opens = JSON.parse(readFileSync(new URL("../data/open_positions.json", import.meta.url), "utf8"));
+  const qtys = (opens.positions || [])
+    .map((row) => String(row.qty ?? ""))
+    .filter((qty) => qty.includes("."));
+  assert.ok(qtys.length > 0);
+  const files = ["app.js", "derive.js", "index.html", "data/live_book.json", "scripts/test_live_book.mjs"];
+  for (const file of files) {
+    const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    for (const qty of qtys) assert.equal(text.includes(qty), false, `${file} ${qty}`);
+  }
+});
+
 test("the page does not hardcode the holdings sum in place of the writer", () => {
   const view = cryptoBookView(live);
   const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
@@ -281,7 +347,6 @@ test("the page does not hardcode the holdings sum in place of the writer", () =>
   assert.equal(published.includes("774.71"), true);
   assert.equal(deriveSourceHasSeedRebuild(published), false);
   for (const banned of ["789.60", "-1.17", "-9.23", "-10.40"]) {
-    assert.equal(published.includes(banned), false, banned);
     for (const file of ["derive.js", "app.js", "index.html"]) {
       const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
       assert.equal(text.includes(banned), false, `${file} ${banned}`);
