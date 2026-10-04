@@ -11,6 +11,7 @@ import {
   formatWinPct,
   formatWinRecord,
   headroomFill,
+  cardPositionRows,
   holdingRows,
   inferLiveBackend,
   labelFor,
@@ -611,7 +612,7 @@ function render(tradeRows, meta, book) {
 function renderPositions(book) {
   if (!positionsEl) return;
   positionsEl.replaceChildren();
-  const rows = holdingRows(book);
+  const rows = cardPositionRows(book);
   const section = el("section", "pos");
   const heading = el("h3");
   const panel = el("div", "pos-panel");
@@ -634,8 +635,8 @@ function renderPositions(book) {
   const table = el("table");
   const thead = el("thead");
   const headRow = el("tr");
-  for (const label of ["Ticker", "Value"]) {
-    const th = el("th", label === "Value" ? "num" : "", label);
+  for (const label of ["Ticker", "Qty", "Value"]) {
+    const th = el("th", label === "Ticker" ? "" : "num", label);
     th.scope = "col";
     headRow.append(th);
   }
@@ -643,7 +644,11 @@ function renderPositions(book) {
   const tbody = el("tbody");
   for (const row of rows) {
     const tr = el("tr");
-    tr.append(el("td", "ticker", row.ticker), el("td", "num", formatUsd(row.valueUsd)));
+    tr.append(
+      el("td", "ticker", row.ticker),
+      el("td", "num", row.qty == null ? "\u2014" : String(row.qty)),
+      el("td", "num", formatUsd(row.valueUsd))
+    );
     tbody.append(tr);
   }
   table.append(thead, tbody);

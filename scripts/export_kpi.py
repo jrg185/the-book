@@ -709,6 +709,95 @@ def load_open_positions(base_url: str, key: str | None, db_url: str | None, as_o
     return scrub_open_positions(fills, marks, as_of)
 
 
+def _signed_open_qty(qty: Decimal, side: object) -> Decimal:
+    magnitude = abs(qty)
+    return magnitude if str(side or "long").strip().lower() != "short" else -magnitude
+
+
+def _card_position_row(sleeve: str, ticker: str, qty: Decimal, avg: Decimal | None, mark: Decimal) -> dict:
+    """One open net. Value is qty times the mark. It is not a seed fraction."""
+    row = {
+        "sleeve": sleeve,
+        "ticker": ticker,
+        "qty": format(qty, "f"),
+        "mark": format(mark, "f"),
+        "value_usd": _cents_number(qty * mark),
+    }
+    if avg is not None:
+        row["avg_cost"] = format(avg, "f")
+        row["unrealized_pnl_usd"] = _cents_number(qty * (mark - avg))
+    return row
+
+
+def card_positions(fills: list, marks: dict) -> list:
+    """Net open qty from public.kpi_trades, marked like the sleeve snapshot.
+
+    Reads sleeve, ticker, side, qty, avg_price, pnl_trade_usd, and timestamp_et
+    through apply_books. The mark is the same quote that produces
+    unrealized_pnl_usd. A ticker with no mark is an error. A flat net is
+    omitted. USD and USDC stay cash lines, not a second open row.
+    """
+    import refresh_kpi_snapshots as refresh
+
+    try:
+        _realized, book = refresh.apply_books(fills)
+    except refresh.RefreshError as exc:
+        raise RuntimeError(str(exc)) from None
+    missing = [f"{sleeve} {ticker}" for sleeve, ticker in sorted(book) if (sleeve, ticker) not in marks]
+    if missing:
+        raise RuntimeError("open tickers have no mark: " + ", ".join(missing))
+    order = {"crypto": 0, "equities": 1}
+    rows = []
+    for (sleeve, ticker), pos in sorted(book.items(), key=lambda item: (order.get(item[0][0], 9), item[0][1])):
+        if ticker in {"USD", "USDC"}:
+            continue
+        qty = pos["qty"]
+        if abs(qty) <= refresh.DUST:
+            continue
+        mark = Decimal(str(marks[(sleeve, ticker)]))
+        rows.append(_card_position_row(sleeve, ticker, qty, pos.get("avg"), mark))
+    return rows
+
+
+def card_positions_from_scrubbed(payload) -> list:
+    """Card rows from the open-position read that already fetched the marks.
+
+    Uses qty, side, avg, and mark on that payload. A row with no mark is
+    skipped. unrealized_pnl_frac is not turned back into dollars.
+    """
+    rows_in = payload.get("positions") if isinstance(payload, dict) else payload
+    order = {"crypto": 0, "equities": 1}
+    rows = []
+    for row in rows_in or []:
+        if not isinstance(row, dict):
+            continue
+        sleeve = str(row.get("sleeve") or "").strip().lower()
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if sleeve not in {"crypto", "equities"} or not ticker or ticker in {"USD", "USDC"}:
+            continue
+        qty = _decimal_or_none(row.get("qty"))
+        mark = _decimal_or_none(row.get("mark"))
+        if qty is None or mark is None or abs(qty) <= Decimal("0.00000001"):
+            continue
+        signed = _signed_open_qty(qty, row.get("side"))
+        rows.append(_card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark))
+    rows.sort(key=lambda item: (order.get(item["sleeve"], 9), item["ticker"]))
+    return rows
+
+
+def apply_card_positions(book: dict, positions: list | None) -> dict:
+    """Write open nets onto the account file without touching cash or rails.
+
+    None leaves positions already on the file. A list, including an empty
+    one, is the read that just happened.
+    """
+    out = dict(book) if isinstance(book, dict) else {}
+    if not isinstance(positions, list):
+        return out
+    out["positions"] = [dict(row) for row in positions if isinstance(row, dict)]
+    return out
+
+
 def load_sleeve_curves(base_url: str, key: str | None, db_url: str | None, updated_at: str) -> dict:
     if key:
         try:
@@ -2098,8 +2187,9 @@ def merge_live_book(committed, signal) -> dict:
     Kill headroom is copied when the signal has it. Day P&L is copied from
     the signal when that file has a finite day_pnl_usd. A missing signal day
     leaves the day already on the account. Realized, unrealized, running P&L,
-    and running_balance_usd already on the account are kept. Candidates and a
-    signal holding list are not the account.
+    and running_balance_usd already on the account are kept. Open positions
+    already on the account are kept. Candidates, a signal holding list, and a
+    signal position list are not the account.
     """
     base = dict(committed) if isinstance(committed, dict) else {}
     holdings = [dict(row) for row in base.get("holdings") or [] if isinstance(row, dict)]
@@ -2136,6 +2226,8 @@ def merge_live_book(committed, signal) -> dict:
     for key in ("running_balance_usd", "realized_pnl_usd", "unrealized_pnl_usd", "running_pnl_usd"):
         if base.get(key) is not None:
             out[key] = base.get(key)
+    if isinstance(base.get("positions"), list):
+        out["positions"] = [dict(row) for row in base["positions"] if isinstance(row, dict)]
     if kill is not None:
         out["kill_remaining_usd"] = kill
     out["holdings"] = holdings
@@ -2165,6 +2257,7 @@ def refresh_live_book(
     *,
     fetch: bool = True,
     account_pnl: dict | None = None,
+    positions: list | None = None,
 ) -> dict | None:
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
@@ -2172,6 +2265,8 @@ def refresh_live_book(
     When account_pnl is the latest combined snapshot, running_balance_usd and
     the three P&L columns are written through. Day P&L stays the signal copy.
     A missing snapshot does not delete P&L or day P&L already on the file.
+    When positions is the open-net read, those rows replace the list. None
+    leaves open rows already on the file. Cash lines are not rebuilt from them.
     """
     path = target / "live_book.json"
     if not path.exists():
@@ -2185,6 +2280,8 @@ def refresh_live_book(
     if account_pnl:
         merged = apply_account_pnl(merged, account_pnl)
         merged = merge_live_book(merged, None)
+    if positions is not None:
+        merged = apply_card_positions(merged, positions)
     write_json(path, merged)
     return merged
 
@@ -2767,6 +2864,93 @@ def self_test() -> int:
         raise RuntimeError(f"a missing signal deleted account P&L: {stale_book}")
     if stale_book.get("day_pnl_usd") != 1.5 or stale_book.get("running_balance_usd") != 812.4:
         raise RuntimeError(f"a missing signal cleared day P&L or running balance: {stale_book}")
+    open_fills = [
+        {
+            "sleeve": "crypto",
+            "ticker": "zz",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-10-01T00:00:00Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "zz",
+            "side": "sell",
+            "qty": "1",
+            "avg_price": "12",
+            "pnl_trade_usd": "2",
+            "timestamp_et": "2026-10-02T00:00:00Z",
+        },
+        {
+            "sleeve": "equities",
+            "ticker": "qq",
+            "side": "buy",
+            "qty": "2",
+            "avg_price": "8",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-10-01T00:00:00Z",
+        },
+        {
+            "sleeve": "equities",
+            "ticker": "qq",
+            "side": "sell",
+            "qty": "2",
+            "avg_price": "9",
+            "pnl_trade_usd": "2",
+            "timestamp_et": "2026-10-02T00:00:00Z",
+        },
+    ]
+    open_marks = {("crypto", "ZZ"): Decimal("12.5")}
+    opened = card_positions(open_fills, open_marks)
+    if opened != [
+        {
+            "sleeve": "crypto",
+            "ticker": "ZZ",
+            "qty": "3",
+            "mark": "12.5",
+            "value_usd": 37.5,
+            "avg_cost": "10",
+            "unrealized_pnl_usd": 7.5,
+        }
+    ]:
+        raise RuntimeError(f"open net was not qty times the mark: {opened}")
+    if any(row["ticker"] == "QQ" for row in opened):
+        raise RuntimeError("a flat equity net was published")
+    if opened[0]["value_usd"] == opened[0]["unrealized_pnl_usd"]:
+        raise RuntimeError("open value collapsed to unrealized")
+    position_src = Path(__file__).read_text(encoding="utf-8").split("def card_positions(", 1)[1].split(
+        "def card_positions_from_scrubbed", 1
+    )[0]
+    for column in ("sleeve", "ticker", "side", "qty", "avg_price", "pnl_trade_usd", "timestamp_et"):
+        if column not in position_src:
+            raise RuntimeError(f"open read does not name kpi_trades.{column}")
+    if "unrealized_pnl_frac" in position_src or "* 300" in position_src or "* Decimal(\"300\")" in position_src:
+        raise RuntimeError("open value is rebuilt from a seed fraction")
+    scrubbed = scrub_open_positions(open_fills, open_marks, "2026-10-04T00:00:00Z")
+    if card_positions_from_scrubbed(scrubbed) != opened:
+        raise RuntimeError(f"scrubbed mark did not match the book: {scrubbed}")
+    if card_positions_from_scrubbed(
+        [{"sleeve": "crypto", "ticker": "ZZ", "qty": "3", "side": "long", "unrealized_pnl_frac": "0.025"}]
+    ):
+        raise RuntimeError("a fraction without a mark was turned into a position")
+    held = dict(account)
+    held["positions"] = [{"sleeve": "crypto", "ticker": "ZZ", "qty": "3", "value_usd": 37.5}]
+    kept_open = merge_live_book(held, {**copied, "positions": [{"ticker": "NOPE", "qty": "9", "value_usd": 1}]})
+    if [row.get("ticker") for row in kept_open.get("positions") or []] != ["ZZ"]:
+        raise RuntimeError(f"signal positions replaced the book: {kept_open}")
+    if kept_open["book_usd"] != expected_book or kept_open.get("kill_remaining_usd") != 77.5:
+        raise RuntimeError(f"open positions moved the book or the kill: {kept_open}")
+    if kept_open.get("day_pnl_usd") != copied["day_pnl_usd"]:
+        raise RuntimeError("open positions replaced the signal day")
+    published_open = apply_card_positions(kept_open, opened)
+    if published_open["positions"] != opened:
+        raise RuntimeError(f"writer dropped the open net: {published_open}")
+    if published_open["book_usd"] != expected_book or published_open.get("running_balance_usd") != 812.4:
+        raise RuntimeError("writer put the open mark on the running balance or the cash book")
+    if [row["ticker"] for row in published_open["holdings"]] != ["USD", "USDC"]:
+        raise RuntimeError("writer replaced the cash lines")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
     if card["kill"]["kill_headroom_usd"] != 3.75 or card["kill"]["day_kill_usd"] != -30.0:
@@ -2855,7 +3039,11 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"])
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        refresh_live_book(DATA, account_pnl=account_pnl)
+        refresh_live_book(
+            DATA,
+            account_pnl=account_pnl,
+            positions=card_positions_from_scrubbed(bundle.get("open_positions")),
+        )
     except Exception as exc:
         frozen = committed_as_of(DATA)
         status, message, warehouse_status = classify_failure(exc, frozen)
