@@ -1,17 +1,17 @@
 # The Book
 
-Read-only dashboard for The Book. The live page is **one crypto book**. The value is signal `book_usd`. Equities are $0 and are not a second book.
+Read-only dashboard for The Book. The live page is **one crypto book**. The value is the Agentic account (cash plus each holding). Equities are $0 and are not a second book.
 
-The page is static. It does not place orders, and it does not call Supabase from the browser. It reads `data/live_book.json` and refreshes `book_usd` from the public crypto signal file. That fetch does not use a secret.
+The page is static. It does not place orders, and it does not call Supabase from the browser. It reads `data/live_book.json` and refreshes signal `book_usd`, day P&L, and kill headroom from the public crypto signal file. That fetch does not replace account holdings. It does not use a secret.
 
 - Repo: https://github.com/jrg185/the-book
 - Pages: https://jrg185.github.io/the-book/
 
 ## What the board shows
 
-The account card is one crypto book. Running balance is signal `book_usd`, not the scrubbed $300 / $500 / $800 divisors. Holdings are the names on `data/live_book.json`. Tape coins that are not on that list are not open positions. Equities are not drawn as a book.
+The account card is one crypto book. Running balance is the sum of the account holdings on `data/live_book.json`, not signal `book_usd` and not the scrubbed $300 / $500 / $800 divisors. Holdings are the names and `value_usd` on that file. Tape coins that are not on that list are not open positions. Equities are not drawn as a book.
 
-The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `book_usd`, and kill headroom (`kill_remaining_usd`). Realized, unrealized, and running P&L on that same card are the Agentic account dollars on `data/live_book.json`, shown as a fraction of signal `book_usd`. The crypto row of `data/kpi_summary.json` stays on the old sleeve seed and is not this card. Holdings are the names and `value_usd` on the live book. A missing value stays blank. Names reconstructed from `kpi_trades` stay off the positions table.
+The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of signal `book_usd`, and kill headroom (`kill_remaining_usd`). Unrealized P&L is value minus `cost_basis_usd` on each non-cash holding. Realized and running P&L stay blank unless the account file has a funded-basis line for them. A closed-trade total is not that line. The crypto row of `data/kpi_summary.json` stays on the old sleeve seed and is not this card. A missing holding value stays blank. Names reconstructed from `kpi_trades` stay off the positions table.
 
 `SEEDS_USD` in `derive.js` ($300 crypto, $500 equities, $800 combined) is only the divisor that turns scrubbed fill fractions back into historical fill dollars. It is not the account book. The crypto curve is that old fraction history, not a second dollar book.
 
@@ -42,7 +42,7 @@ Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml)
 - Reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `SUPABASE_DB_URL` is optional
 - Crypto marks: public Coinbase ticker, then Yahoo `{SYMBOL}-USD`. Equities marks: Finnhub when `FINNHUB_API_KEY` is set, then Yahoo chart. CoinStats and Alpha Vantage are later fallbacks when those keys are set
 - Writes `data/kpi_summary.json`, `data/kpi_trades_scrubbed.json`, `data/models_oos.json`, `data/model_scorecard.json`, and `data/meta.json` when they changed. The commit step `git add`s `data/model_scorecard.json` with the other KPI files. `SUPABASE_DB_URL` is passed into the export step so fee and signal-linkage reads can fall back to SQL.
-- Does not rewrite `data/models.json`
+- Does not rewrite `data/models.json` or `data/live_book.json`
 - Does not deploy Pages and does not change the Pages source
 
 The board reads `meta.fetched_at` as **Last refreshed** in America/New_York, and each sleeve `as_of` the same way. A healthy export sets `meta.export_status` to `ok`. If the service role key is missing, the script leaves the KPI files alone, sets `export_status` to `stale`, and exits 0. If the refresh throws (read-only filesystem, disk full, or a failed REST read), it stamps `export_status` `error` on `meta.json` only and exits 1. The workflow then commits that meta file and stays red. The page shows an **Export failed** or **Stale snapshot** chip plus the error copy, and it does not invent new KPI numbers. If a crash cannot write `meta.json`, the chip turns stale once `fetched_at` is older than 3 hours.
@@ -84,7 +84,7 @@ The live `kpi_summary` view uses warehouse names. Export remaps them onto the pa
 | `day_target_pct` | Target as a fraction of book (`0.025` = +2.5%), or null |
 | `note` | Short scrubbed note. No names, emails, or account ids. |
 
-Optional divisor override on a scrubbed row: `start`, `seed`, `start_usd`, `seed_usd`, or `book_usd`. Fill dollars use that divisor, or `SEEDS_USD` when it is absent. The account card does not. It uses signal `book_usd`.
+Optional divisor override on a scrubbed row: `start`, `seed`, `start_usd`, `seed_usd`, or `book_usd`. Fill dollars use that divisor, or `SEEDS_USD` when it is absent. The account card does not. Its running balance is the sum of the live-book holdings.
 
 `kpi_trades_scrubbed` rows:
 
@@ -256,7 +256,7 @@ Apply [`scripts/migrations/20260928_kpi_trades_running_ledger.sql`](scripts/migr
 3. Actions → Export KPI → Run workflow.
 4. Hard-refresh https://jrg185.github.io/the-book/
 
-After that, the last crypto fill has non-null `running_pnl_frac` and `running_balance_frac`. On a fill row, Running P&L and Running balance recover dollars from that fraction. They are not the account card. The account card is signal `book_usd`. Why shows the full note (wraps, and the cell `title` is the same text).
+After that, the last crypto fill has non-null `running_pnl_frac` and `running_balance_frac`. On a fill row, Running P&L and Running balance recover dollars from that fraction. They are not the account card. The account card is the Agentic holdings total. Why shows the full note (wraps, and the cell `title` is the same text).
 
 Check:
 
