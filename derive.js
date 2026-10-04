@@ -77,6 +77,7 @@ export function money(seed, frac) {
 // combined snapshot dollars, not a signal field and not a seed fraction.
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
+// Open positions already on the account stay. A signal position list is not the book.
 export function mergeLiveBook(committed, signal) {
   const base = committed && typeof committed === "object" ? { ...committed } : {};
   delete base.candidates;
@@ -194,7 +195,7 @@ export function shownBooks(book) {
 
 // Names and values come from the live book holdings. A missing value stays
 // blank. The signal book is not painted onto a cash row. Tape tickers are
-// not added here.
+// not added here. Open nets live on book.positions and are not part of this sum.
 export function holdingRows(book) {
   const rows = Array.isArray(book?.holdings) ? book.holdings : [];
   const named = rows.filter((row) => {
@@ -207,6 +208,36 @@ export function holdingRows(book) {
     ticker: String(row.ticker).trim(),
     valueUsd: num(row.value_usd),
   }));
+}
+
+// Open size is the net the export wrote from kpi_trades. A zero net is flat
+// and stays off the list. USD and USDC stay on the cash lines, not here.
+// value_usd is qty times the snapshot mark. A missing mark stays blank.
+export function openPositionRows(book) {
+  const rows = Array.isArray(book?.positions) ? book.positions : [];
+  const opens = [];
+  for (const row of rows) {
+    if (!row || !String(row.ticker || "").trim()) continue;
+    const ticker = String(row.ticker).trim().toUpperCase();
+    if (ticker === "USD" || ticker === "USDC") continue;
+    const sleeve = String(row.sleeve || "crypto").trim().toLowerCase();
+    if (sleeve !== "crypto" && sleeve !== "equities") continue;
+    const qty = num(row.qty);
+    if (qty == null || qty === 0) continue;
+    opens.push({
+      sleeve,
+      ticker,
+      qty,
+      valueUsd: num(row.value_usd),
+    });
+  }
+  return opens;
+}
+
+// Cash lines first, then each open net. Position value is not the cash sum.
+export function cardPositionRows(book) {
+  const cash = holdingRows(book).map((row) => ({ ...row, qty: null }));
+  return cash.concat(openPositionRows(book));
 }
 
 function fractionFrom(row, fracKeys, dollarKeys, seed, { percentPoints = false } = {}) {
