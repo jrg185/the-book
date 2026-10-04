@@ -11,7 +11,7 @@ The page is static. It does not place orders, and it does not call Supabase from
 
 The account card is one crypto book. Running balance is signal `book_usd`, not the scrubbed $300 / $500 / $800 divisors. Holdings are the names on `data/live_book.json`. Tape coins that are not on that list are not open positions. Equities are not drawn as a book.
 
-The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `book_usd`, and kill headroom (`kill_remaining_usd`). Realized, unrealized, and running P&L on that same card are the crypto row of `data/kpi_summary.json` (seed × fraction). They are not a second book. A cash or USDC holding is listed at `book_usd`. Names reconstructed from `kpi_trades` stay off the positions table.
+The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `book_usd`, and kill headroom (`kill_remaining_usd`). Realized, unrealized, and running P&L on that same card are the Agentic account dollars on `data/live_book.json`, shown as a fraction of signal `book_usd`. The crypto row of `data/kpi_summary.json` stays on the old sleeve seed and is not this card. Holdings are the names and `value_usd` on the live book. A missing value stays blank. Names reconstructed from `kpi_trades` stay off the positions table.
 
 `SEEDS_USD` in `derive.js` ($300 crypto, $500 equities, $800 combined) is only the divisor that turns scrubbed fill fractions back into historical fill dollars. It is not the account book. The crypto curve is that old fraction history, not a second dollar book.
 
