@@ -71,17 +71,15 @@ export function money(seed, frac) {
 // Keep the committed account holdings, including each value and cost basis.
 // book_usd is the sum of those values. The signal book is stored beside it
 // for the kill and the target, and is not copied onto book_usd.
-// Day P&L and kill headroom still come from the signal when they are present.
+// Day P&L and kill headroom come from the signal when they are present.
+// A missing signal day leaves the day already on the file. Realized,
+// unrealized, running P&L, and running_balance_usd stay. They are the
+// combined snapshot dollars, not a signal field and not a seed fraction.
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
-// Realized and running P&L are not copied. A closed-trade total is not the account.
 export function mergeLiveBook(committed, signal) {
   const base = committed && typeof committed === "object" ? { ...committed } : {};
   delete base.candidates;
-  delete base.realized_pnl_usd;
-  delete base.realized_pnl;
-  delete base.running_pnl_usd;
-  delete base.running_pnl;
   const holdings = Array.isArray(committed?.holdings) ? committed.holdings.map((row) => ({ ...row })) : [];
   const next = { ...base, holdings };
   const live = signal && typeof signal === "object" ? signal : null;
@@ -111,8 +109,8 @@ function roundCents(value) {
 }
 
 // Account value is the sum of holdings that each carry their own value.
-// A missing value stays blank. Signal book_usd is not painted onto that row,
-// and it is not the running balance unless it is the same number as this sum.
+// A missing value stays blank. Signal book_usd is not painted onto that row.
+// The card running balance is running_balance_usd, not this sum.
 function accountValueUsd(rows) {
   if (!rows.length || rows.some((row) => row.valueUsd == null)) return null;
   return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
@@ -140,10 +138,14 @@ function accountUnrealizedUsd(book) {
 }
 
 // One crypto book. Equities are $0 and are not a second book.
-// The published book is the holdings sum. Day P&L stays the live signal dollar.
-// The −10% kill and the +2.5% target stay on signal_book_usd. They are not
-// recomputed from the holdings sum. realized and running P&L stay blank.
-// The crypto kpi_summary row is the old sleeve seed and is not this card.
+// book_usd stays the holdings sum. The card running balance is
+// running_balance_usd only. It is not that sum and not the signal book.
+// Day P&L is the signal dollar. The −10% kill and the +2.5% target stay on
+// signal_book_usd. They are not recomputed from the holdings sum. Realized,
+// unrealized, and running P&L are the dollar columns on this book. They are
+// not nulled, and they are not rebuilt as a fraction of the $300 sleeve seed.
+// The crypto kpi_summary row is that seed and is not this card. A missing
+// unrealized dollar falls back to holding value minus cost basis.
 export function cryptoBookView(book) {
   const account = accountValueUsd(holdingRows(book));
   const published = num(book?.book_usd);
@@ -154,14 +156,19 @@ export function cryptoBookView(book) {
   if (bookUsd == null && rail == null) return null;
   const dayPnl = num(book?.day_pnl_usd);
   const killHeadroom = num(book?.kill_remaining_usd);
-  const unrealizedPnl = accountUnrealizedUsd(book);
-  const realizedPnl = null;
-  const runningPnl = null;
+  const runningBalance = num(pick(book, ["running_balance_usd", "running_balance"]));
+  const realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
+  let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
+  if (unrealizedPnl == null) unrealizedPnl = accountUnrealizedUsd(book);
+  let runningPnl = num(pick(book, ["running_pnl_usd", "running_pnl"]));
+  if (runningPnl == null && realizedPnl != null && unrealizedPnl != null) {
+    runningPnl = roundCents(realizedPnl + unrealizedPnl);
+  }
   return {
     sleeve: "crypto",
     label: "Crypto",
     bookUsd,
-    runningBalance: account,
+    runningBalance,
     equitiesUsd: 0,
     asOf: book?.generated_at || null,
     dayPnl,
@@ -172,11 +179,11 @@ export function cryptoBookView(book) {
     killHeadroom,
     killHeadroomFrac: rail == null || rail === 0 || killHeadroom == null ? null : killHeadroom / rail,
     realizedPnl,
-    realizedPnlFrac: null,
+    realizedPnlFrac: bookFrac(realizedPnl, bookUsd),
     unrealizedPnl,
-    unrealizedPnlFrac: bookFrac(unrealizedPnl, account),
+    unrealizedPnlFrac: bookFrac(unrealizedPnl, bookUsd),
     runningPnl,
-    runningPnlFrac: null,
+    runningPnlFrac: bookFrac(runningPnl, bookUsd),
   };
 }
 
