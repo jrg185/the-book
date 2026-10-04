@@ -2,6 +2,7 @@ import { cardOpenKey, defaultCardOpen, modelCardId, rememberOpen, storedOpen } f
 import { buildChart, sampleAt } from "./curves.js";
 import {
   closedFillStats,
+  cryptoBookView,
   cryptoOosModels,
   deriveSleeve,
   feeDragFromTrades,
@@ -10,16 +11,18 @@ import {
   formatWinPct,
   formatWinRecord,
   headroomFill,
+  holdingRows,
   inferLiveBackend,
   labelFor,
-  money,
+  LIVE_SIGNAL_URL,
+  mergeLiveBook,
+  shownBooks,
   sleeveKey,
-  sortSleeves,
   tone,
   winStats,
   winTone,
 } from "./derive.js";
-import { posOpenKey, positionRows, positionsFor, sortPositions } from "./positions.js";
+import { posOpenKey } from "./positions.js";
 import {
   TAPE_MONTH_ALL,
   csvFilename,
@@ -239,53 +242,30 @@ function renderStatus(meta, sleeveAsOf) {
   statusEl.append(lines);
 }
 
-function splitPnl(label, dollars, frac, fine) {
-  const node = metric(label, "", tone(dollars));
-  const value = node.querySelector(".v");
-  value.replaceChildren(
-    pair(formatUsd(dollars, { signed: true }), formatPct(frac, { signed: true, digits: 2 }))
-  );
-  node.append(el("p", "fine", fine));
-  return node;
-}
-
-function renderSleeve(derived, { hero = false, trades = [] } = {}) {
-  const card = el("article", `sleeve ${derived.sleeve}${hero ? " hero" : ""}`);
+function renderLiveBook(view, trades) {
+  const card = el("article", "sleeve crypto hero");
   const head = el("header", "sleeve-head");
   const title = el("h2");
   head.append(title);
-  if (derived.asOf) {
-    const when = el("time", null, formatEt(derived.asOf));
-    when.dateTime = String(derived.asOf);
+  if (view.asOf) {
+    const when = el("time", null, formatEt(view.asOf));
+    when.dateTime = String(view.asOf);
     head.append(when);
   }
-  const status = sleeveStatus(derived.sleeve);
-  if (status) head.append(el("p", `chip ${status.className}`, status.label));
+  head.append(el("p", "chip live", "Live"));
   card.append(head);
 
   const panel = el("div", "card-panel");
-  panel.id = `card-panel-${derived.sleeve}`;
+  panel.id = "card-panel-crypto";
   const grid = el("div", "metrics");
-  const balance = metric(
-    "Running balance (book)",
-    formatUsd(derived.runningBalance),
-    tone(derived.runningBalance)
-  );
-  balance.append(el("p", "fine", "book = start + realized + unrealized"));
-  const start = metric("Start", formatUsd(derived.seed));
-  start.append(el("p", "fine", seedFine(derived.sleeve)));
-  grid.append(
-    splitPnl("Realized P&L", derived.realizedPnl, derived.realizedPnlFrac, "closed exits"),
-    splitPnl("Unrealized P&L", derived.unrealizedPnl, derived.unrealizedPnlFrac, "open MTM"),
-    balance,
-    start
-  );
-
-  grid.append(metric("Day P&L", formatUsd(derived.dayPnl, { signed: true }), tone(derived.dayPnl)));
+  const balance = metric("Running balance (book)", formatUsd(view.bookUsd), tone(view.bookUsd));
+  balance.append(el("p", "fine", "Full Agentic account. Signal book_usd. One crypto book."));
+  grid.append(balance);
+  grid.append(metric("Day P&L", formatUsd(view.dayPnl, { signed: true }), tone(view.dayPnl)));
 
   const kill = metric("Day kill rail");
   kill.querySelector(".v").replaceChildren(
-    pair(formatPct(derived.dayKillFrac), derived.dayKill == null ? "" : formatUsd(derived.dayKill))
+    pair(formatPct(view.dayKillFrac), view.dayKill == null ? "" : formatUsd(view.dayKill))
   );
   grid.append(kill);
 
@@ -293,17 +273,17 @@ function renderSleeve(derived, { hero = false, trades = [] } = {}) {
   const headroomValue = headroom.querySelector(".v");
   headroomValue.replaceChildren(
     pair(
-      derived.killHeadroomFrac == null ? "\u2014" : `${formatPct(derived.killHeadroomFrac)} of book`,
-      formatUsd(derived.killHeadroom)
+      view.killHeadroomFrac == null ? "\u2014" : `${formatPct(view.killHeadroomFrac)} of book`,
+      formatUsd(view.killHeadroom)
     )
   );
-  const fill = headroomFill(derived);
+  const fill = headroomFill(view);
   if (fill != null) {
     const meter = el("div", "meter");
     meter.setAttribute("role", "img");
     meter.setAttribute(
       "aria-label",
-      `Kill headroom ${formatPct(derived.killHeadroomFrac)} of book against a ${formatPct(derived.dayKillFrac)} rail`
+      `Kill headroom ${formatPct(view.killHeadroomFrac)} of book against a ${formatPct(view.dayKillFrac)} rail`
     );
     const bar = el("span");
     bar.style.width = `${fill}%`;
@@ -314,58 +294,29 @@ function renderSleeve(derived, { hero = false, trades = [] } = {}) {
   grid.append(headroom);
 
   const target = metric("Day target");
-  const bits = [formatPct(derived.dayTargetFrac, { signed: true })];
-  if (derived.dayTarget != null) bits.push(formatUsd(derived.dayTarget, { signed: true }));
+  const bits = [formatPct(view.dayTargetFrac, { signed: true })];
+  if (view.dayTarget != null) bits.push(formatUsd(view.dayTarget, { signed: true }));
   target.querySelector(".v").replaceChildren(pair(bits[0], bits[1] || ""));
-  if (derived.sleeve === "crypto") target.append(el("p", "fine", "Realized only"));
+  target.append(el("p", "fine", "Realized only"));
   grid.append(target);
 
-  const stats = winStats(trades, derived.sleeve);
+  const stats = winStats(trades, "crypto");
   const win = metric("Win %", formatWinPct(stats.rate), winTone(stats));
   win.append(el("p", "fine", formatWinRecord(stats)));
   grid.append(win);
 
   panel.append(grid);
-  if (derived.note) panel.append(el("p", "note", String(derived.note)));
-  const realign = sleeveRealignNote(derived.sleeve);
-  if (realign) panel.append(el("p", "note", realign));
+  panel.append(el("p", "note", "Equities are $0 and are not a second book."));
   card.append(panel);
   mountCollapse({
     heading: title,
-    label: derived.label,
+    label: view.label,
     panel,
-    storageKey: cardOpenKey(derived.sleeve),
-    defaultOpen: defaultCardOpen(derived.sleeve),
+    storageKey: cardOpenKey(view.sleeve),
+    defaultOpen: defaultCardOpen(view.sleeve),
     collapsedHost: card,
   });
   return card;
-}
-
-function sleeveStatus(sleeve) {
-  if (sleeve === "crypto") return { className: "live", label: "Live" };
-  if (sleeve === "equities") return { className: "paused", label: "Paused" };
-  if (sleeve === "combined") return { className: "paused", label: "Legacy sum" };
-  return null;
-}
-
-function seedFine(sleeve) {
-  if (sleeve === "crypto") return "Scrubbed seed on this row. Not a new full-book dollar amount.";
-  if (sleeve === "equities") return "Legacy scrubbed seed. The desk is paused.";
-  if (sleeve === "combined") return "Legacy sum of the scrubbed sleeve seeds.";
-  return "Scrubbed seed on this row.";
-}
-
-function sleeveRealignNote(sleeve) {
-  if (sleeve === "crypto") {
-    return "Crypto is the live sleeve. The \u221210% kill and +2.5% target stay the rails for the full Agentic book after the equity flatten. Dollars on this card use the scrubbed seed already in the snapshot. PBR, BA, and AIG are still queued for regular hours.";
-  }
-  if (sleeve === "equities") {
-    return "Paused. Equity modeling and place are not live. Crypto owns the Agentic book. Open names are an unwind, queued to flat.";
-  }
-  if (sleeve === "combined") {
-    return "Legacy sum while the equity flatten is still open. Crypto is the live sleeve. This row is not a second book in trade.";
-  }
-  return "";
 }
 
 function readFrac(row, key) {
@@ -560,7 +511,7 @@ function renderTape(sleeve, trades) {
       el(
         "p",
         "note",
-        "Paused tape. Equity place is not live. Crypto owns the Agentic book. PBR, BA, and AIG are still queued for regular hours."
+        "Historical fills. Equities are not an open book."
       )
     );
   }
@@ -573,7 +524,7 @@ function renderTape(sleeve, trades) {
 
   const wrap = el("div", "table-wrap");
   const table = el("table");
-  const captionText = `${labelFor(sleeve)} fills. Fee, trade P&L, running P&L, and running balance are the book seed times the fraction. Fee is fee_frac_of_book. Running balance is start plus realized P&L through that fill.`;
+  const captionText = `${labelFor(sleeve)} fills. Fee, trade P&L, running P&L, and running balance recover scrubbed fractions. They are not the live account book.`;
   const caption = el("caption", "sr-only", `${labelFor(sleeve)} fills`);
   const note = el("p", "tape-note", captionText);
   note.id = `tape-note-${sleeve}`;
@@ -611,20 +562,16 @@ function renderTape(sleeve, trades) {
   return section;
 }
 
-function render(summaryRows, tradeRows, meta) {
-  const sleeves = sortSleeves(Array.isArray(summaryRows) ? summaryRows : [], undefined);
+function render(tradeRows, meta, book) {
   const trades = Array.isArray(tradeRows) ? tradeRows : [];
-  renderStatus(meta || {}, latestStamp(sleeves.map((row) => row.asOf)));
+  const books = shownBooks(book);
+  const view = books[0] || null;
+  renderStatus(meta || {}, view?.asOf || null);
   boardEl.replaceChildren();
-  const combined = sleeves.find((row) => row.sleeve === "combined");
-  const rest = sleeves.filter((row) => row.sleeve !== "combined");
-  if (combined) boardEl.append(renderSleeve(combined, { hero: true, trades }));
-  const grid = el("div", "sleeve-grid");
-  for (const row of rest) grid.append(renderSleeve(row, { trades }));
-  if (!combined && !rest.length) {
-    boardEl.append(el("p", "empty", "kpi_summary has no sleeve rows."));
+  if (!view) {
+    boardEl.append(el("p", "empty", "Live book has no book_usd."));
   } else {
-    boardEl.append(grid);
+    boardEl.append(renderLiveBook(view, trades));
   }
 
   const grouped = new Map();
@@ -647,119 +594,49 @@ function render(summaryRows, tradeRows, meta) {
   }
 }
 
-function formatPrice(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "\u2014";
-  const abs = Math.abs(n);
-  const digits = abs >= 1000 ? 2 : abs >= 1 ? 4 : 8;
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: digits })}`;
-}
-
-function formatQty(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value ? String(value) : "\u2014";
-  return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
-}
-
-const RTH_UNWIND = new Set(["PBR", "BA", "AIG"]);
-
-function unwindLabel(ticker) {
-  return RTH_UNWIND.has(String(ticker || "").trim().toUpperCase()) ? "Queued RTH" : "Unwind";
-}
-
-function renderPositionTable(title, rows, { showSleeve, sleeve, unwind = false }) {
+function renderPositions(book) {
+  if (!positionsEl) return;
+  positionsEl.replaceChildren();
+  const rows = holdingRows(book);
   const section = el("section", "pos");
   const heading = el("h3");
   const panel = el("div", "pos-panel");
-  panel.id = `pos-panel-${sleeve}`;
+  panel.id = "pos-panel-crypto";
   mountCollapse({
     heading,
-    label: title,
+    label: "Crypto",
     panel,
-    storageKey: posOpenKey(sleeve),
+    storageKey: posOpenKey("crypto"),
     defaultOpen: true,
   });
   section.append(heading);
   if (!rows.length) {
-    panel.append(el("p", "empty", "No open positions."));
+    panel.append(el("p", "empty", "The live book has no holdings."));
     section.append(panel);
-    return section;
+    positionsEl.append(section);
+    return;
   }
   const wrap = el("div", "table-wrap");
   const table = el("table");
   const thead = el("thead");
   const headRow = el("tr");
-  const labels = showSleeve
-    ? ["Sleeve", "Ticker", "Side", "Qty", "Avg", "Mark", "Unrealized"]
-    : ["Ticker", "Side", "Qty", "Avg", "Mark", "Unrealized"];
-  if (unwind) labels.splice(showSleeve ? 2 : 1, 0, "Unwind");
-  const numeric = new Set(["Qty", "Avg", "Mark", "Unrealized"]);
-  for (const label of labels) {
-    const th = el("th", numeric.has(label) ? "num" : "", label);
+  for (const label of ["Ticker", "Value"]) {
+    const th = el("th", label === "Value" ? "num" : "", label);
     th.scope = "col";
     headRow.append(th);
   }
   thead.append(headRow);
   const tbody = el("tbody");
   for (const row of rows) {
-    const shaped = deriveSleeve({ sleeve: row.sleeve });
-    const frac = readFrac(row, "unrealized_pnl_frac");
-    const dollars = money(shaped.seed, frac);
     const tr = el("tr");
-    const sideName = String(row.side || "").toLowerCase();
-    const sideCell = el("td");
-    sideCell.append(el("span", `pill ${sideName}`, sideName || "\u2014"));
-    const unrealized = el(
-      "td",
-      `num ${tone(dollars)}`,
-      dollars == null ? "\u2014" : `${formatUsd(dollars, { signed: true })} (${formatPct(frac, { signed: true, digits: 2 })})`
-    );
-    const cells = [];
-    if (showSleeve) {
-      const sleeveLabel = shaped.sleeve === "equities" ? "Equities \u00b7 unwind" : labelFor(shaped.sleeve);
-      cells.push(el("td", null, sleeveLabel));
-    }
-    cells.push(el("td", "ticker", String(row.ticker)));
-    if (unwind) cells.push(el("td", null, unwindLabel(row.ticker)));
-    cells.push(
-      sideCell,
-      el("td", "num", formatQty(row.qty)),
-      el("td", "num", formatPrice(row.avg)),
-      el("td", "num", formatPrice(row.mark)),
-      unrealized
-    );
-    tr.append(...cells);
+    tr.append(el("td", "ticker", row.ticker), el("td", "num", formatUsd(row.valueUsd)));
     tbody.append(tr);
   }
   table.append(thead, tbody);
   wrap.append(table);
   panel.append(wrap);
   section.append(panel);
-  return section;
-}
-
-function renderPositions(payload) {
-  if (!positionsEl) return;
-  positionsEl.replaceChildren();
-  if (!payload || payload.missing) {
-    positionsEl.append(el("p", "empty", "Open positions are not in this snapshot yet."));
-    return;
-  }
-  const rows = sortPositions(positionRows(payload));
-  positionsEl.append(
-    el(
-      "p",
-      "note",
-      "Equities modeling and place are paused. Crypto owns the Agentic book. Open equity names are an unwind, queued to flat. PBR, BA, and AIG are still queued for regular hours. The export has no per-fill unwind flag, so this label is the desk state."
-    ),
-    renderPositionTable("Combined", positionsFor(rows, "combined"), { showSleeve: true, sleeve: "combined" }),
-    renderPositionTable("Crypto", positionsFor(rows, "crypto"), { showSleeve: false, sleeve: "crypto" }),
-    renderPositionTable("Equities", positionsFor(rows, "equities"), {
-      showSleeve: false,
-      sleeve: "equities",
-      unwind: true,
-    })
-  );
+  positionsEl.append(section);
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -773,19 +650,10 @@ function svgEl(name, attrs) {
 }
 
 function curveReadout(sample) {
-  if (!sample) return "No sleeve history in this snapshot.";
-  const bits = [];
-  for (const sleeve of ["combined", "crypto", "equities"]) {
-    if (sample.values[sleeve] == null) continue;
-    if (curveMode !== "all" && sleeve !== curveMode) continue;
-    const shaped = deriveSleeve({ sleeve });
-    const dollars = money(shaped.seed, sample.values[sleeve]);
-    bits.push(
-      `${labelFor(sleeve)} ${formatUsd(dollars)} (${formatPct(sample.values[sleeve] - 1, { signed: true, digits: 2 })})`
-    );
-  }
+  if (!sample || sample.values.crypto == null) return "No crypto history in this snapshot.";
   const when = formatEt(sample.asOf);
-  return [when, bits.join(" · ")].filter(Boolean).join(" · ");
+  const pct = formatPct(sample.values.crypto - 1, { signed: true, digits: 2 });
+  return `${when} · Crypto history ${pct}. The account book is the signal value on the card.`;
 }
 
 function paintCurves() {
@@ -795,7 +663,7 @@ function paintCurves() {
     curvesEl.append(el("p", "empty", "Sleeve history is not in this snapshot yet."));
     return;
   }
-  const chart = buildChart(curvePayload, curveMode);
+  const chart = buildChart(curvePayload, "crypto");
   if (chart.empty) {
     curvesEl.append(
       el("p", "empty", curveMode === "all" ? "No sleeve history in this snapshot." : "No points for this series.")
@@ -996,13 +864,7 @@ function backendView(scorecard, models, oosPayload) {
   return inferred;
 }
 
-function summaryRows(summary) {
-  if (Array.isArray(summary)) return summary;
-  if (summary && Array.isArray(summary.rows)) return summary.rows;
-  return [];
-}
-
-function renderCryptoScorecard(models, oosPayload, summary, trades, scorecard) {
+function renderCryptoScorecard(models, oosPayload, trades, scorecard, book) {
   const card = el("article", "sleeve crypto model-card model-scorecard");
   card.id = "crypto-scorecard";
   const head = el("header", "sleeve-head");
@@ -1033,7 +895,7 @@ function renderCryptoScorecard(models, oosPayload, summary, trades, scorecard) {
       fills.expectancyUsd == null ? "" : formatUsd(fills.expectancyUsd, { signed: true })
     )
   );
-  expectancy.append(el("p", "fine", `Mean P&L of decided crypto sells. Seed $${fills.seed}.`));
+  expectancy.append(el("p", "fine", "Mean P&L of decided crypto sells."));
   grid.append(expectancy);
 
   const fee = feeView(scorecard, trades);
@@ -1041,8 +903,7 @@ function renderCryptoScorecard(models, oosPayload, summary, trades, scorecard) {
   feeMetric.append(el("p", "fine", fee.note));
   grid.append(feeMetric);
 
-  const cryptoRow = summaryRows(summary).find((row) => sleeveKey(row) === "crypto") || null;
-  const derived = cryptoRow ? deriveSleeve(cryptoRow) : null;
+  const derived = cryptoBookView(book);
   const headroom = metric("Kill headroom");
   const headroomValue = headroom.querySelector(".v");
   if (!derived || derived.killHeadroomFrac == null) {
@@ -1175,7 +1036,7 @@ function renderSignalLinkage(scorecard) {
   );
 }
 
-function renderModels(payload, oosPayload, meta, summary, trades, scorecard) {
+function renderModels(payload, oosPayload, meta, summary, trades, scorecard, book) {
   modelsEl.replaceChildren();
   const models = payload && Array.isArray(payload.models) ? payload.models.slice() : [];
   const exported = oosRows(oosPayload);
@@ -1185,7 +1046,7 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard) {
   if (oosPayload?.updated_at) freshBits.push(`OOS updated ${formatEt(oosPayload.updated_at)}`);
   if (freshBits.length) modelsEl.append(el("p", "freshness", freshBits.join(" · ")));
   if (payload && payload.note) modelsEl.append(el("p", "note", String(payload.note)));
-  modelsEl.append(renderCryptoScorecard(payload, oosPayload, summary, trades, scorecard));
+  modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book));
   if (!models.length && exported.length) {
     for (const row of exported) {
       models.push({
@@ -1289,6 +1150,17 @@ function openFromHash() {
   }
 }
 
+async function loadLiveBook(token) {
+  const committed = await loadJson("data/live_book.json", token).catch(() => null);
+  try {
+    const response = await fetch(LIVE_SIGNAL_URL, { cache: "no-store" });
+    if (!response.ok) return committed;
+    return mergeLiveBook(committed, await response.json());
+  } catch {
+    return committed;
+  }
+}
+
 async function main() {
   tabSleeves.addEventListener("click", () => {
     showTab("sleeves");
@@ -1325,20 +1197,20 @@ async function main() {
   }
   const token = meta.fetched_at || meta.export_attempted_at || Date.now();
   try {
-    const [summary, trades, models, oos, positions, curves, scorecard] = await Promise.all([
+    const [summary, trades, models, oos, book, curves, scorecard] = await Promise.all([
       loadJson("data/kpi_summary.json", token),
       loadJson("data/kpi_trades_scrubbed.json", token),
       loadJson("data/models.json", token).catch(() => ({ models: [], note: "data/models.json is not in this snapshot." })),
       loadJson("data/models_oos.json", token).catch(() => ({ rows: [] })),
-      loadJson("data/open_positions.json", token).catch(() => ({ missing: true, positions: [] })),
+      loadLiveBook(token),
       loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
       loadJson("data/model_scorecard.json", token).catch(() => null),
     ]);
-    render(summary, trades, meta);
-    renderPositions(positions);
+    render(trades, meta, book);
+    renderPositions(book);
     curvePayload = curves;
     paintCurves();
-    renderModels(models, oos, meta, summary, trades, scorecard);
+    renderModels(models, oos, meta, summary, trades, scorecard, book);
     openFromHash();
   } catch (error) {
     renderStatus(meta);
