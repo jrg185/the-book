@@ -169,9 +169,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # data/live_book.json is the Agentic account snapshot. This export does not rewrite it.
-          # Pages serves that committed file from main.
-          git add -- data/kpi_summary.json data/kpi_trades_scrubbed.json data/open_positions.json data/sleeve_curves.json data/models_oos.json data/model_scorecard.json data/meta.json
+          # book_usd is the sum of holding values. The signal book stays on signal_book_usd.
+          # This commit publishes that file. It does not copy the signal book onto book_usd.
+          git add -- data/live_book.json data/kpi_summary.json data/kpi_trades_scrubbed.json data/open_positions.json data/sleeve_curves.json data/models_oos.json data/model_scorecard.json data/meta.json
           if [ -f data/rh_kpi_sync_cursor.json ]; then
             git add -- data/rh_kpi_sync_cursor.json
           fi
