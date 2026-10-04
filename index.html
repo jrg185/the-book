@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>The Book</title>
-  <meta name="description" content="The Book — read-only KPI board. Crypto is the live Agentic sleeve. Equities is paused. Dollars are the scrubbed seed times the fraction.">
+  <meta name="description" content="The Book — read-only KPI board. One crypto book. The value is the live signal book_usd. Equities are not a second book.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%2312110e' width='32' height='32'/%3E%3Crect fill='%23e3a15a' x='6' y='8' width='8' height='16'/%3E%3Crect fill='%237eb8c4' x='18' y='14' width='8' height='10'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
       <p class="eyebrow">The Book</p>
       <h1>KPI board</h1>
     </div>
-    <p class="lede">Crypto owns the Agentic book. Equities is paused while PBR, BA, and AIG flatten. Read-only. Dollars are the scrubbed seed times the fraction. After that flatten, the crypto rails (−10% kill, +2.5% target) apply to the full book.</p>
+    <p class="lede">One crypto book. The value is the live signal book. Equities are $0 and are not a second book. Read-only. The −10% kill and +2.5% target apply to that book.</p>
     <nav class="repo-links" aria-label="Board links">
       <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
       <a href="#model-crypto" data-tab="models">Crypto signals</a>
@@ -36,20 +36,14 @@
     <section class="book-block" id="positions-section" aria-labelledby="positions-heading">
       <div class="block-head">
         <h2 id="positions-heading">Open positions</h2>
-        <p>Net open quantity by ticker. Unrealized is the book seed times the fraction. Equity names are an unwind, queued to flat. Account numbers stay off this page.</p>
+        <p>Names and value from the live book. The value is signal book_usd. Tape coins that are not on that list stay off this table.</p>
       </div>
       <div id="positions"></div>
     </section>
     <section class="book-block" id="curves-section" aria-labelledby="curves-heading">
       <div class="block-head">
         <h2 id="curves-heading">Book history</h2>
-        <p>Book over time from sleeve snapshots. The line is book divided by the scrubbed seed. Crypto is the live sleeve. The equities line is the paused desk. Readout dollars are that fraction times the seed.</p>
-      </div>
-      <div class="curve-controls" role="group" aria-label="Curve series">
-        <button type="button" data-curve="all" aria-pressed="true">All</button>
-        <button type="button" data-curve="combined" aria-pressed="false">Combined</button>
-        <button type="button" data-curve="crypto" aria-pressed="false">Crypto</button>
-        <button type="button" data-curve="equities" aria-pressed="false">Equities</button>
+        <p>Crypto sleeve history as a fraction of its old divisor. The line is not the live account. The live book is the signal value on the card above.</p>
       </div>
       <div id="curves"></div>
     </section>
