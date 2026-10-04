@@ -258,14 +258,13 @@ function renderLiveBook(view, trades) {
   const panel = el("div", "card-panel");
   panel.id = "card-panel-crypto";
   const grid = el("div", "metrics");
-  const balance = metric("Running balance (book)", formatUsd(view.bookUsd), tone(view.bookUsd));
-  balance.append(el("p", "fine", "Full Agentic account. Signal book_usd. One crypto book."));
+  const balance = metric("Running balance (book)", formatUsd(view.runningBalance), tone(view.runningBalance));
+  balance.append(el("p", "fine", "Agentic account value. Each holding keeps its own value."));
   grid.append(balance);
   grid.append(metric("Day P&L", formatUsd(view.dayPnl, { signed: true }), tone(view.dayPnl)));
   grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));
   grid.append(pnlMetric("Unrealized P&L", view.unrealizedPnl, view.unrealizedPnlFrac));
   const running = pnlMetric("Running P&L", view.runningPnl, view.runningPnlFrac);
-  running.append(el("p", "fine", "Of this account."));
   grid.append(running);
 
   const kill = metric("Day kill rail");
@@ -668,7 +667,7 @@ function curveReadout(sample) {
   if (!sample || sample.values.crypto == null) return "No crypto history in this snapshot.";
   const when = formatEt(sample.asOf);
   const pct = formatPct(sample.values.crypto - 1, { signed: true, digits: 2 });
-  return `${when} · Crypto history ${pct}. The account book is the signal value on the card.`;
+  return `${when} · Crypto history ${pct}. This line is not the live account.`;
 }
 
 function paintCurves() {

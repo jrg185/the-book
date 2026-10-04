@@ -1,5 +1,6 @@
 // Tape fill dollars are still a scrubbed fraction times SEEDS_USD.
-// The live account book is signal book_usd. This file never talks to Supabase.
+// The live account is the holdings on data/live_book.json. Signal book_usd is not that value.
+// This file never talks to Supabase.
 
 export const SEEDS_USD = {
   crypto: 300,
@@ -7,7 +8,7 @@ export const SEEDS_USD = {
   combined: 800,
 };
 
-// Public signal file. book_usd is the full Agentic account. No secret.
+// Public signal file. book_usd is the signal book. No secret.
 export const LIVE_SIGNAL_URL =
   "https://raw.githubusercontent.com/jrg185/agentic-crypto-signals/main/signals/latest.json";
 
@@ -66,12 +67,14 @@ export function money(seed, frac) {
   return Math.round((seed * frac + Number.EPSILON) * 100) / 100;
 }
 
-// Keep the committed holding names. Take book_usd from the signal when it is present.
+// Keep the committed account holdings, including each value and cost basis.
+// Take book_usd, day P&L, and kill headroom from the signal when they are present.
 // Candidates are scores, not broker holdings, so they are never copied in.
+// A signal holding list is not the account. It cannot replace cash and USDC.
 export function mergeLiveBook(committed, signal) {
   const base = committed && typeof committed === "object" ? { ...committed } : {};
   delete base.candidates;
-  const holdings = Array.isArray(committed?.holdings) ? committed.holdings : [];
+  const holdings = Array.isArray(committed?.holdings) ? committed.holdings.map((row) => ({ ...row })) : [];
   const next = { ...base, holdings };
   if (!signal || typeof signal !== "object") return next;
   const book = num(signal.book_usd);
@@ -82,6 +85,8 @@ export function mergeLiveBook(committed, signal) {
   if (day != null) next.day_pnl_usd = day;
   const kill = num(signal.kill_remaining_usd);
   if (kill != null) next.kill_remaining_usd = kill;
+  next.holdings = holdings;
+  delete next.candidates;
   return next;
 }
 
@@ -90,25 +95,58 @@ function bookFrac(dollars, bookUsd) {
   return dollars / bookUsd;
 }
 
+function roundCents(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Account value is the sum of holdings that each carry their own value.
+// A missing value stays blank. Signal book_usd is not painted onto that row,
+// and it is not the running balance unless it is the same number as this sum.
+function accountValueUsd(rows) {
+  if (!rows.length || rows.some((row) => row.valueUsd == null)) return null;
+  return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
+}
+
+// Unrealized P&L comes from each holding's value minus its cost basis.
+// USD cash has no mark. A holding without a cost basis leaves the total unknown.
+function accountUnrealizedUsd(book) {
+  const rows = Array.isArray(book?.holdings) ? book.holdings : [];
+  const crypto = rows.filter((row) => {
+    if (!row || !String(row.ticker || "").trim()) return false;
+    return String(row.sleeve || "crypto").trim().toLowerCase() === "crypto";
+  });
+  if (!crypto.length) return null;
+  let sum = 0;
+  for (const row of crypto) {
+    const ticker = String(row.ticker).trim().toUpperCase();
+    if (ticker === "USD") continue;
+    const value = num(row.value_usd);
+    const cost = num(pick(row, ["cost_basis_usd", "cost_basis"]));
+    if (value == null || cost == null) return null;
+    sum += value - cost;
+  }
+  return roundCents(sum);
+}
+
 // One crypto book. Equities are $0 and are not a second book.
-// Day P&L stays the live signal dollar. Realized, unrealized, and running
-// P&L are the account dollars on the live book, as a fraction of book_usd.
+// Running balance is the account value. Day P&L stays the live signal dollar.
+// realized_pnl_usd and running_pnl_usd are not read: the previous snapshot
+// stored a closed-trade total there, not the account versus a funded basis.
 // The crypto kpi_summary row is the old sleeve seed and is not this card.
 export function cryptoBookView(book) {
   const bookUsd = num(book?.book_usd);
-  if (bookUsd == null) return null;
+  const runningBalance = accountValueUsd(holdingRows(book));
+  if (bookUsd == null && runningBalance == null) return null;
   const dayPnl = num(book?.day_pnl_usd);
   const killHeadroom = num(book?.kill_remaining_usd);
-  const realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
-  const unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
-  let runningPnl = num(pick(book, ["running_pnl_usd", "running_pnl"]));
-  if (runningPnl == null && realizedPnl != null && unrealizedPnl != null) {
-    runningPnl = Math.round((realizedPnl + unrealizedPnl + Number.EPSILON) * 100) / 100;
-  }
+  const unrealizedPnl = accountUnrealizedUsd(book);
+  const realizedPnl = null;
+  const runningPnl = null;
   return {
     sleeve: "crypto",
     label: "Crypto",
     bookUsd,
+    runningBalance,
     equitiesUsd: 0,
     asOf: book?.generated_at || null,
     dayPnl,
@@ -117,13 +155,13 @@ export function cryptoBookView(book) {
     dayTargetFrac: LIVE_RAILS.dayTargetFrac,
     dayTarget: money(bookUsd, LIVE_RAILS.dayTargetFrac),
     killHeadroom,
-    killHeadroomFrac: bookUsd === 0 || killHeadroom == null ? null : killHeadroom / bookUsd,
+    killHeadroomFrac: bookUsd == null || bookUsd === 0 || killHeadroom == null ? null : killHeadroom / bookUsd,
     realizedPnl,
-    realizedPnlFrac: bookFrac(realizedPnl, bookUsd),
+    realizedPnlFrac: null,
     unrealizedPnl,
-    unrealizedPnlFrac: bookFrac(unrealizedPnl, bookUsd),
+    unrealizedPnlFrac: bookFrac(unrealizedPnl, runningBalance),
     runningPnl,
-    runningPnlFrac: bookFrac(runningPnl, bookUsd),
+    runningPnlFrac: null,
   };
 }
 
