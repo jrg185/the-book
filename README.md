@@ -1,41 +1,19 @@
 # The Book
 
-Read-only dashboard for The Book. **Crypto** is the live Agentic sleeve. **Equities** is paused. The combined row is the legacy sum while that flatten is still open.
+Read-only dashboard for The Book. The live page is **one crypto book**. The value is signal `book_usd`. Equities are $0 and are not a second book.
 
-The page is static. It does not place orders, and it does not call Supabase from the browser.
+The page is static. It does not place orders, and it does not call Supabase from the browser. It reads `data/live_book.json` and refreshes `book_usd` from the public crypto signal file. That fetch does not use a secret.
 
 - Repo: https://github.com/jrg185/the-book
 - Pages: https://jrg185.github.io/the-book/
 
 ## What the board shows
 
-Crypto is the live sleeve. Equities modeling and place are paused. Open equity names (PBR, BA, AIG) are an unwind, queued for regular hours. Combined is that legacy sum, not a second live book.
+The account card is one crypto book. Running balance is signal `book_usd`, not the scrubbed $300 / $500 / $800 divisors. Holdings are the names on `data/live_book.json`. Tape coins that are not on that list are not open positions. Equities are not drawn as a book.
 
-For each row:
+The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `book_usd`, and kill headroom (`kill_remaining_usd`).
 
-- Start (the book seed)
-- Running balance (book): cash + mark-to-market of open positions. Until true MTM, book = start + running P&L, so the fraction is `(start + running_pnl) / start`. It is not cash left after a fill.
-- P&L in dollars and percent
-- Day P&L
-- Day kill rail (percent of book, and the dollar size of that rail)
-- Kill headroom (percent of book still inside the rail, and dollars)
-- Crypto day target, marked realized-only
-
-Dollar figures are **seed × fraction**. The scrubbed JSON does not need raw book dollars.
-
-| Desk | Seed used when the row has no start/seed |
-| --- | --- |
-| Crypto | $300, the scrubbed divisor already on the page. Not a newly invented full-book dollar amount. |
-| Equities | $500, the legacy divisor for the paused desk. Not an active seed. |
-| Combined | $800, the legacy sum of those two divisors. Not a second live book. |
-
-After PBR, BA, and AIG flatten, crypto keeps the −10% day kill and +2.5% day target, and those percents apply to the full Agentic book (crypto cash and USDC). This page does not invent the post-flatten seed. Dollars stay seed × fraction from the scrubbed row.
-
-Rails on the current snapshot (fractions of the scrubbed seed):
-
-- Crypto day kill `-0.10` (−10%) and day target `0.025` (+2.5%, realized only)
-- Equities day kill `-0.25` stays on the paused sleeve until the flatten clears
-- Combined has no kill percent of its own. The kill percent stays on the sleeve row.
+`SEEDS_USD` in `derive.js` ($300 crypto, $500 equities, $800 combined) is only the divisor that turns scrubbed fill fractions back into historical fill dollars. It is not the account book. The crypto curve is that old fraction history, not a second dollar book.
 
 ## Data path
 
@@ -106,7 +84,7 @@ The live `kpi_summary` view uses warehouse names. Export remaps them onto the pa
 | `day_target_pct` | Target as a fraction of book (`0.025` = +2.5%), or null |
 | `note` | Short scrubbed note. No names, emails, or account ids. |
 
-Optional seed override on a row: `start`, `seed`, `start_usd`, `seed_usd`, or `book_usd`. If none of those are present, the page uses the seeds above.
+Optional divisor override on a scrubbed row: `start`, `seed`, `start_usd`, `seed_usd`, or `book_usd`. Fill dollars use that divisor, or `SEEDS_USD` when it is absent. The account card does not. It uses signal `book_usd`.
 
 `kpi_trades_scrubbed` rows:
 
@@ -278,7 +256,7 @@ Apply [`scripts/migrations/20260928_kpi_trades_running_ledger.sql`](scripts/migr
 3. Actions → Export KPI → Run workflow.
 4. Hard-refresh https://jrg185.github.io/the-book/
 
-After that, the last crypto fill has non-null `running_pnl_frac` and `running_balance_frac`. On the page, Running P&L and Running balance (book) are dollars (seed × fraction), and Why shows the full note (wraps, and the cell `title` is the same text).
+After that, the last crypto fill has non-null `running_pnl_frac` and `running_balance_frac`. On a fill row, Running P&L and Running balance recover dollars from that fraction. They are not the account card. The account card is signal `book_usd`. Why shows the full note (wraps, and the cell `title` is the same text).
 
 Check:
 

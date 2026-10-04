@@ -147,9 +147,9 @@ test("models tab markup loads the scorecard instead of a second page", () => {
   assert.equal(app.includes("T24b will improve joined-fill metrics."), true);
   assert.equal(app.includes("signal_artifacts"), true);
   assert.equal(app.includes("signal_trade_outcomes"), true);
-  assert.equal(app.includes("Equity modeling and place are not live."), true);
-  assert.equal(app.includes("Queued RTH"), true);
-  assert.equal(html.includes("Crypto owns the Agentic book."), true);
+  assert.equal(models.models.find((row) => row.sleeve === "equities").used.includes("Equity modeling and place are not live."), true);
+  assert.equal(app.includes("Queued RTH"), false);
+  assert.equal(html.includes("One crypto book."), true);
   assert.equal(html.includes("Equity research"), true);
   assert.equal(models.models.find((row) => row.sleeve === "equities").used.includes("Paused."), true);
   assert.equal(app.includes("--backend rules"), true);

@@ -1,9 +1,20 @@
-// Dollar display is seed × fraction. This file never talks to Supabase.
+// Tape fill dollars are still a scrubbed fraction times SEEDS_USD.
+// The live account book is signal book_usd. This file never talks to Supabase.
 
 export const SEEDS_USD = {
   crypto: 300,
   equities: 500,
   combined: 800,
+};
+
+// Public signal file. book_usd is the full Agentic account. No secret.
+export const LIVE_SIGNAL_URL =
+  "https://raw.githubusercontent.com/jrg185/agentic-crypto-signals/main/signals/latest.json";
+
+// Same rails the crypto sleeve already uses. Dollars are these fractions of book_usd.
+export const LIVE_RAILS = {
+  dayKillFrac: -0.1,
+  dayTargetFrac: 0.025,
 };
 
 const SLEEVE_ORDER = ["combined", "crypto", "equities"];
@@ -53,6 +64,72 @@ export function seedFor(row, seeds = SEEDS_USD) {
 export function money(seed, frac) {
   if (seed == null || frac == null) return null;
   return Math.round((seed * frac + Number.EPSILON) * 100) / 100;
+}
+
+// Keep the committed holding names. Take book_usd from the signal when it is present.
+// Candidates are scores, not broker holdings, so they are never copied in.
+export function mergeLiveBook(committed, signal) {
+  const base = committed && typeof committed === "object" ? { ...committed } : {};
+  delete base.candidates;
+  const holdings = Array.isArray(committed?.holdings) ? committed.holdings : [];
+  const next = { ...base, holdings };
+  if (!signal || typeof signal !== "object") return next;
+  const book = num(signal.book_usd);
+  if (book == null) return next;
+  next.book_usd = book;
+  if (signal.generated_at) next.generated_at = signal.generated_at;
+  const day = num(signal.day_pnl_usd);
+  if (day != null) next.day_pnl_usd = day;
+  const kill = num(signal.kill_remaining_usd);
+  if (kill != null) next.kill_remaining_usd = kill;
+  return next;
+}
+
+// One crypto book. Equities are $0 and are not a second book.
+export function cryptoBookView(book) {
+  const bookUsd = num(book?.book_usd);
+  if (bookUsd == null) return null;
+  const dayPnl = num(book?.day_pnl_usd);
+  const killHeadroom = num(book?.kill_remaining_usd);
+  return {
+    sleeve: "crypto",
+    label: "Crypto",
+    bookUsd,
+    equitiesUsd: 0,
+    asOf: book?.generated_at || null,
+    dayPnl,
+    dayKillFrac: LIVE_RAILS.dayKillFrac,
+    dayKill: money(bookUsd, LIVE_RAILS.dayKillFrac),
+    dayTargetFrac: LIVE_RAILS.dayTargetFrac,
+    dayTarget: money(bookUsd, LIVE_RAILS.dayTargetFrac),
+    killHeadroom,
+    killHeadroomFrac: bookUsd === 0 || killHeadroom == null ? null : killHeadroom / bookUsd,
+  };
+}
+
+export function shownBooks(book) {
+  const crypto = cryptoBookView(book);
+  return crypto ? [crypto] : [];
+}
+
+// Names come from the live book holdings. A single unnamed-value holding
+// takes the signal book. Extra tickers are not invented from the tape.
+export function holdingRows(book) {
+  const rows = Array.isArray(book?.holdings) ? book.holdings : [];
+  const bookUsd = num(book?.book_usd);
+  const named = rows.filter((row) => {
+    if (!row || !String(row.ticker || "").trim()) return false;
+    const sleeve = String(row.sleeve || "crypto").trim().toLowerCase();
+    return sleeve === "crypto";
+  });
+  return named.map((row) => {
+    const explicit = num(row.value_usd);
+    return {
+      sleeve: "crypto",
+      ticker: String(row.ticker).trim(),
+      valueUsd: explicit != null ? explicit : named.length === 1 ? bookUsd : null,
+    };
+  });
 }
 
 function fractionFrom(row, fracKeys, dollarKeys, seed, { percentPoints = false } = {}) {
