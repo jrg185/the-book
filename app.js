@@ -265,7 +265,7 @@ function renderLiveBook(view, trades) {
   grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));
   grid.append(pnlMetric("Unrealized P&L", view.unrealizedPnl, view.unrealizedPnlFrac));
   const running = pnlMetric("Running P&L", view.runningPnl, view.runningPnlFrac);
-  running.append(el("p", "fine", "Crypto sleeve snapshot. Seed \u00d7 fraction."));
+  running.append(el("p", "fine", "Of this account."));
   grid.append(running);
 
   const kill = metric("Day kill rail");
@@ -577,9 +577,9 @@ function pnlMetric(label, dollars, frac) {
   return node;
 }
 
-function render(tradeRows, meta, book, summary) {
+function render(tradeRows, meta, book) {
   const trades = Array.isArray(tradeRows) ? tradeRows : [];
-  const books = shownBooks(book, summary);
+  const books = shownBooks(book);
   const view = books[0] || null;
   renderStatus(meta || {}, view?.asOf || null);
   boardEl.replaceChildren();
@@ -1221,7 +1221,7 @@ async function main() {
       loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
       loadJson("data/model_scorecard.json", token).catch(() => null),
     ]);
-    render(trades, meta, book, summary);
+    render(trades, meta, book);
     renderPositions(book);
     curvePayload = curves;
     paintCurves();
