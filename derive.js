@@ -85,27 +85,26 @@ export function mergeLiveBook(committed, signal) {
   return next;
 }
 
-function summaryRows(summary) {
-  if (Array.isArray(summary)) return summary;
-  if (Array.isArray(summary?.rows)) return summary.rows;
-  return [];
-}
-
-// Crypto sleeve row from kpi_summary. Equities and combined stay off the live card.
-export function cryptoSnapshot(summary) {
-  const row = summaryRows(summary).find((item) => sleeveKey(item) === "crypto");
-  return row ? deriveSleeve(row) : null;
+function bookFrac(dollars, bookUsd) {
+  if (dollars == null || bookUsd == null || bookUsd === 0) return null;
+  return dollars / bookUsd;
 }
 
 // One crypto book. Equities are $0 and are not a second book.
 // Day P&L stays the live signal dollar. Realized, unrealized, and running
-// P&L are the crypto sleeve snapshot (seed × fraction), not a second book.
-export function cryptoBookView(book, summary) {
+// P&L are the account dollars on the live book, as a fraction of book_usd.
+// The crypto kpi_summary row is the old sleeve seed and is not this card.
+export function cryptoBookView(book) {
   const bookUsd = num(book?.book_usd);
   if (bookUsd == null) return null;
   const dayPnl = num(book?.day_pnl_usd);
   const killHeadroom = num(book?.kill_remaining_usd);
-  const snap = cryptoSnapshot(summary);
+  const realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
+  const unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
+  let runningPnl = num(pick(book, ["running_pnl_usd", "running_pnl"]));
+  if (runningPnl == null && realizedPnl != null && unrealizedPnl != null) {
+    runningPnl = Math.round((realizedPnl + unrealizedPnl + Number.EPSILON) * 100) / 100;
+  }
   return {
     sleeve: "crypto",
     label: "Crypto",
@@ -119,38 +118,35 @@ export function cryptoBookView(book, summary) {
     dayTarget: money(bookUsd, LIVE_RAILS.dayTargetFrac),
     killHeadroom,
     killHeadroomFrac: bookUsd === 0 || killHeadroom == null ? null : killHeadroom / bookUsd,
-    realizedPnl: snap?.realizedPnl ?? null,
-    realizedPnlFrac: snap?.realizedPnlFrac ?? null,
-    unrealizedPnl: snap?.unrealizedPnl ?? null,
-    unrealizedPnlFrac: snap?.unrealizedPnlFrac ?? null,
-    runningPnl: snap?.runningPnl ?? null,
-    runningPnlFrac: snap?.runningPnlFrac ?? null,
+    realizedPnl,
+    realizedPnlFrac: bookFrac(realizedPnl, bookUsd),
+    unrealizedPnl,
+    unrealizedPnlFrac: bookFrac(unrealizedPnl, bookUsd),
+    runningPnl,
+    runningPnlFrac: bookFrac(runningPnl, bookUsd),
   };
 }
 
-export function shownBooks(book, summary) {
-  const crypto = cryptoBookView(book, summary);
+export function shownBooks(book) {
+  const crypto = cryptoBookView(book);
   return crypto ? [crypto] : [];
 }
 
-// Names come from the live book holdings. A single unnamed-value holding
-// takes the signal book. Extra tickers are not invented from the tape.
+// Names and values come from the live book holdings. A missing value stays
+// blank. The signal book is not painted onto a cash row. Tape tickers are
+// not added here.
 export function holdingRows(book) {
   const rows = Array.isArray(book?.holdings) ? book.holdings : [];
-  const bookUsd = num(book?.book_usd);
   const named = rows.filter((row) => {
     if (!row || !String(row.ticker || "").trim()) return false;
     const sleeve = String(row.sleeve || "crypto").trim().toLowerCase();
     return sleeve === "crypto";
   });
-  return named.map((row) => {
-    const explicit = num(row.value_usd);
-    return {
-      sleeve: "crypto",
-      ticker: String(row.ticker).trim(),
-      valueUsd: explicit != null ? explicit : named.length === 1 ? bookUsd : null,
-    };
-  });
+  return named.map((row) => ({
+    sleeve: "crypto",
+    ticker: String(row.ticker).trim(),
+    valueUsd: num(row.value_usd),
+  }));
 }
 
 function fractionFrom(row, fracKeys, dollarKeys, seed, { percentPoints = false } = {}) {

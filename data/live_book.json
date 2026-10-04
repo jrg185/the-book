@@ -4,10 +4,19 @@
   "book_usd": 775.0,
   "day_pnl_usd": 0.0,
   "kill_remaining_usd": 77.5,
+  "realized_pnl_usd": 3.73,
+  "unrealized_pnl_usd": 0.0,
+  "running_pnl_usd": 3.73,
   "holdings": [
     {
+      "ticker": "USD",
+      "sleeve": "crypto",
+      "value_usd": 760.64
+    },
+    {
       "ticker": "USDC",
-      "sleeve": "crypto"
+      "sleeve": "crypto",
+      "value_usd": 14.07
     }
   ]
 }

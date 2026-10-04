@@ -1,4 +1,4 @@
-// Open-position grouping. Dollars stay seed × fraction in the page, not in this file.
+// Open-position grouping. The live card prices the account book in derive.js.
 
 export function normalizeSleeve(value) {
   const key = String(value || "").trim().toLowerCase();
