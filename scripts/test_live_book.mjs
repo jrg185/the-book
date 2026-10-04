@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   cryptoBookView,
+  deriveSleeve,
   holdingRows,
   mergeLiveBook,
   SEEDS_USD,
@@ -69,6 +70,47 @@ test("open names are the live book holdings, not tape coins", () => {
     holdingRows(merged).map((row) => row.ticker),
     ["USDC"]
   );
+});
+
+test("a funded cash book shows snapshot P&L and USDC, not tape coins", () => {
+  const crypto = summary.find((row) => row.sleeve === "crypto");
+  const equities = summary.find((row) => row.sleeve === "equities");
+  const snap = deriveSleeve(crypto);
+  const view = cryptoBookView(live, summary);
+  assert.equal(view.sleeve, "crypto");
+  assert.equal(view.bookUsd, live.book_usd);
+  assert.equal(view.equitiesUsd, 0);
+  assert.equal(view.dayPnl, live.day_pnl_usd);
+  assert.equal(view.realizedPnl, snap.realizedPnl);
+  assert.equal(view.unrealizedPnl, snap.unrealizedPnl);
+  assert.equal(view.runningPnl, snap.runningPnl);
+  assert.notEqual(view.realizedPnl, null);
+  assert.notEqual(view.unrealizedPnl, null);
+  assert.notEqual(view.runningPnl, null);
+  assert.notEqual(view.bookUsd, snap.runningBalance);
+  assert.notEqual(view.realizedPnl, deriveSleeve(equities).realizedPnl);
+  const books = shownBooks(live, summary);
+  assert.equal(books.length, 1);
+  assert.equal(books[0].realizedPnl, snap.realizedPnl);
+  assert.equal(books[0].unrealizedPnl, snap.unrealizedPnl);
+  assert.equal(books[0].runningPnl, snap.runningPnl);
+  const rows = holdingRows(live);
+  assert.deepEqual(
+    rows.map((row) => row.ticker),
+    ["USDC"]
+  );
+  assert.equal(rows[0].valueUsd, live.book_usd);
+  const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
+  assert.ok(tapeNames.length > 1);
+  for (const name of tapeNames) {
+    assert.equal(rows.some((row) => row.ticker === name), false, name);
+  }
+  assert.equal(/shownBooks\(book,\s*summary\)/.test(app), true);
+  assert.equal(app.includes("Realized P&L"), true);
+  assert.equal(app.includes("Unrealized P&L"), true);
+  assert.equal(app.includes("Running P&L"), true);
+  assert.equal(app.includes("renderSleeve"), false);
+  assert.equal(app.includes("open_positions.json"), false);
 });
 
 test("the page does not hardcode a broker total in place of book_usd", () => {
