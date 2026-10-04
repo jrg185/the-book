@@ -2,7 +2,7 @@
 
 Read-only dashboard for The Book. The live page is **one crypto book**. The value is the Agentic account (cash plus each holding). Equities are $0 and are not a second book.
 
-The page is static. It does not place orders, and it does not call Supabase from the browser. It reads `data/live_book.json`. `book_usd` there is the sum of the holding values. The page also reads the public crypto signal file for day P&L, kill headroom, and `signal_book_usd`. That fetch does not replace account holdings and does not copy the signal book onto `book_usd`. It does not use a secret.
+The page is static. It does not place orders, and it does not call Supabase from the browser. It reads `data/live_book.json`. `book_usd` there is the sum of the holding values. Realized, unrealized, running, and day P&L on that file are the latest combined snapshot dollars. The page also reads the public crypto signal file for kill headroom and `signal_book_usd`. That fetch does not replace account holdings, does not replace those P&L fields, and does not copy the signal book onto `book_usd`. It does not use a secret.
 
 - Repo: https://github.com/jrg185/the-book
 - Pages: https://jrg185.github.io/the-book/
@@ -11,7 +11,7 @@ The page is static. It does not place orders, and it does not call Supabase from
 
 The account card is one crypto book. Running balance is `book_usd` on `data/live_book.json`, the sum of the holding values, not the signal book and not the scrubbed $300 / $500 / $800 divisors. Holdings are the names and `value_usd` on that file. Tape coins that are not on that list are not open positions. Equities are not drawn as a book.
 
-The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `signal_book_usd`, and kill headroom (`kill_remaining_usd`). Those rails are not recomputed from the holdings sum. Unrealized P&L is value minus `cost_basis_usd` on each non-cash holding. Realized and running P&L stay blank. A closed-trade total is not that line. The crypto row of `data/kpi_summary.json` stays on the old sleeve seed and is not this card. A missing holding value stays blank. Names reconstructed from `kpi_trades` stay off the positions table.
+The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day target as dollars of `signal_book_usd`, and kill headroom (`kill_remaining_usd`). Those rails are not recomputed from the holdings sum. Realized, unrealized, and running P&L are the latest `combined` row of `public.kpi_sleeve_snapshots` (`realized_pnl_usd`, `unrealized_pnl_usd`, `running_pnl_usd`), and day P&L is `day_pnl_usd` on that row when the column exists. Export writes those dollars onto `data/live_book.json`. It does not divide them by the sleeve seed, and it does not substitute the crypto sleeve row. The crypto row of `data/kpi_summary.json` stays on the old sleeve seed and is not this card. A missing holding value stays blank. Names reconstructed from `kpi_trades` stay off the positions table.
 
 `SEEDS_USD` in `derive.js` ($300 crypto, $500 equities, $800 combined) is only the divisor that turns scrubbed fill fractions back into historical fill dollars. It is not the account book. The crypto curve is that old fraction history, not a second dollar book.
 
@@ -41,7 +41,7 @@ Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml)
 - A fill payload, or a secrets-backed hourly poll, upserts `public.kpi_trades`, then the same run refreshes `kpi_sleeve_snapshots` and exports. A bad requested payload, or a failed refresh, does not commit KPI JSON
 - Reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `SUPABASE_DB_URL` is optional
 - Crypto marks: public Coinbase ticker, then Yahoo `{SYMBOL}-USD`. Equities marks: Finnhub when `FINNHUB_API_KEY` is set, then Yahoo chart. CoinStats and Alpha Vantage are later fallbacks when those keys are set
-- Writes `data/kpi_summary.json`, `data/kpi_trades_scrubbed.json`, `data/models_oos.json`, `data/model_scorecard.json`, and `data/meta.json` when they changed. The same run rewrites `data/live_book.json` so `book_usd` is the sum of the holding values. It keeps `signal_book_usd`, day P&L, and kill headroom from the signal file when that file is readable, and it does not copy the signal book onto `book_usd`. The commit step `git add`s `data/live_book.json` and `data/model_scorecard.json` with the other KPI files. `SUPABASE_DB_URL` is passed into the export step so fee and signal-linkage reads can fall back to SQL.
+- Writes `data/kpi_summary.json`, `data/kpi_trades_scrubbed.json`, `data/models_oos.json`, `data/model_scorecard.json`, and `data/meta.json` when they changed. The same run rewrites `data/live_book.json` so `book_usd` is the sum of the holding values, and copies realized, unrealized, running, and day P&L from the latest combined `public.kpi_sleeve_snapshots` row. It keeps `signal_book_usd` and kill headroom from the signal file when that file is readable, and it does not copy the signal book onto `book_usd`. The commit step `git add`s `data/live_book.json` and `data/model_scorecard.json` with the other KPI files. `SUPABASE_DB_URL` is passed into the export step so fee and signal-linkage reads can fall back to SQL.
 - Does not rewrite `data/models.json`
 - Does not deploy Pages and does not change the Pages source
 
