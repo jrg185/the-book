@@ -11,6 +11,7 @@ import {
   openPositionRows,
   SEEDS_USD,
   shownBooks,
+  warehouseSleeveAsOf,
 } from "../derive.js";
 
 const live = JSON.parse(readFileSync(new URL("../data/live_book.json", import.meta.url), "utf8"));
@@ -368,3 +369,56 @@ test("the page does not hardcode the holdings sum in place of the writer", () =>
 function deriveSourceHasSeedRebuild(published) {
   return published.includes("realized_pnl_frac") || published.includes("running_pnl_frac");
 }
+
+test("the book card clock is the warehouse sleeve as_of, not the signal generated_at", () => {
+  const signalTime = "2026-10-04T16:34:23Z";
+  const warehouseTime = "2026-10-05T08:41:26+00:00";
+  const combined = summary.find((row) => row.sleeve === "combined");
+  assert.equal(live.sleeve_as_of, combined.as_of);
+  assert.equal(warehouseSleeveAsOf(live, summary), live.sleeve_as_of);
+  assert.equal(cryptoBookView(live).asOf, live.sleeve_as_of);
+  assert.notEqual(cryptoBookView(live).asOf, live.generated_at);
+  assert.equal(cryptoBookView(live).signalGeneratedAt, live.generated_at);
+
+  const merged = mergeLiveBook(
+    { ...live, generated_at: signalTime, sleeve_as_of: warehouseTime },
+    { ...publicSignal, generated_at: "2026-10-04T20:41:10Z", sleeve_as_of: "1999-01-01T00:00:00Z" }
+  );
+  assert.equal(merged.generated_at, "2026-10-04T20:41:10Z");
+  assert.equal(merged.sleeve_as_of, warehouseTime);
+  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  const view = cryptoBookView(merged);
+  assert.equal(view.asOf, warehouseTime);
+  assert.notEqual(view.asOf, merged.generated_at);
+  assert.equal(view.signalGeneratedAt, merged.generated_at);
+  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
+
+  const unstamped = {
+    book_usd: 100,
+    signal_book_usd: 100,
+    generated_at: signalTime,
+    holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: 100 }],
+  };
+  const fromSummary = cryptoBookView(unstamped, [
+    { sleeve: "crypto", as_of: "2026-10-05T01:00:00Z" },
+    { sleeve: "combined", as_of: "2026-10-04T00:00:00Z" },
+    { sleeve: "combined", as_of: warehouseTime },
+  ]);
+  assert.equal(fromSummary.asOf, warehouseTime);
+  assert.equal(fromSummary.signalGeneratedAt, signalTime);
+  assert.notEqual(fromSummary.asOf, signalTime);
+  assert.equal(warehouseSleeveAsOf(unstamped), null);
+
+  const derive = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
+  const exporter = readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8");
+  assert.equal(derive.includes("asOf: book?.generated_at"), false);
+  assert.equal(derive.includes("warehouseSleeveAsOf"), true);
+  assert.equal(app.includes("shownBooks(book, summary)"), true);
+  assert.equal(app.includes("render(trades, meta, book, summary)"), true);
+  assert.equal(app.includes("warehouseSleeveAsOf(book, summary)"), true);
+  assert.equal(app.includes("does not refresh kpi_sleeve_snapshots"), false);
+  assert.equal(app.includes("Export only re-reads kpi_summary"), false);
+  assert.match(app, /The sleeve clock is kpi_sleeve_snapshots as_of/);
+  assert.equal(exporter.includes('out["sleeve_as_of"] = sleeve_as_of'), true);
+  assert.equal(exporter.includes('out["sleeve_as_of"] = jsonable(as_of)'), true);
+});

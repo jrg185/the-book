@@ -78,9 +78,12 @@ export function money(seed, frac) {
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
 // Open positions already on the account stay. A signal position list is not the book.
+// generated_at is the signal file time. sleeve_as_of is the warehouse MTM clock
+// and is not replaced by the signal.
 export function mergeLiveBook(committed, signal) {
   const base = committed && typeof committed === "object" ? { ...committed } : {};
   delete base.candidates;
+  const sleeveAsOf = pick(committed, ["sleeve_as_of"]);
   const holdings = Array.isArray(committed?.holdings) ? committed.holdings.map((row) => ({ ...row })) : [];
   const next = { ...base, holdings };
   const live = signal && typeof signal === "object" ? signal : null;
@@ -93,6 +96,8 @@ export function mergeLiveBook(committed, signal) {
     const kill = num(live.kill_remaining_usd);
     if (kill != null) next.kill_remaining_usd = kill;
   }
+  if (sleeveAsOf) next.sleeve_as_of = sleeveAsOf;
+  else delete next.sleeve_as_of;
   next.holdings = holdings;
   delete next.candidates;
   const account = accountValueUsd(holdingRows(next));
@@ -147,7 +152,29 @@ function accountUnrealizedUsd(book) {
 // not nulled, and they are not rebuilt as a fraction of the $300 sleeve seed.
 // The crypto kpi_summary row is that seed and is not this card. A missing
 // unrealized dollar falls back to holding value minus cost basis.
-export function cryptoBookView(book) {
+// asOf is the warehouse sleeve clock: sleeve_as_of on the book, or the
+// combined kpi_summary as_of when the export has not stamped the book yet.
+// generated_at stays signal context and is not this clock.
+export function warehouseSleeveAsOf(book, summary) {
+  const stamped = pick(book, ["sleeve_as_of"]);
+  if (stamped) return stamped;
+  const rows = Array.isArray(summary) ? summary : [];
+  for (const sleeve of ["combined", "crypto", "equities"]) {
+    let best = null;
+    let bestMs = -Infinity;
+    for (const row of rows) {
+      if (sleeveKey(row) !== sleeve || !row?.as_of) continue;
+      const ms = Date.parse(row.as_of);
+      if (Number.isNaN(ms) || ms < bestMs) continue;
+      best = row.as_of;
+      bestMs = ms;
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+export function cryptoBookView(book, summary) {
   const account = accountValueUsd(holdingRows(book));
   const published = num(book?.book_usd);
   const bookUsd = account != null ? account : published;
@@ -171,7 +198,8 @@ export function cryptoBookView(book) {
     bookUsd,
     runningBalance,
     equitiesUsd: 0,
-    asOf: book?.generated_at || null,
+    asOf: warehouseSleeveAsOf(book, summary),
+    signalGeneratedAt: book?.generated_at || null,
     dayPnl,
     dayKillFrac: LIVE_RAILS.dayKillFrac,
     dayKill: money(rail, LIVE_RAILS.dayKillFrac),
@@ -188,8 +216,8 @@ export function cryptoBookView(book) {
   };
 }
 
-export function shownBooks(book) {
-  const crypto = cryptoBookView(book);
+export function shownBooks(book, summary) {
+  const crypto = cryptoBookView(book, summary);
   return crypto ? [crypto] : [];
 }
 

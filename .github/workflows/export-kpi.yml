@@ -172,6 +172,7 @@ jobs:
           # book_usd is the sum of holding values. The signal book stays on signal_book_usd.
           # This commit publishes that file. It does not copy the signal book onto book_usd.
           # Running balance, realized, unrealized, and running P&L stay on the file from the combined snapshot.
+          # sleeve_as_of is that snapshot as_of. generated_at stays the signal file time and is not the MTM clock.
           # Day P&L stays the signal day_pnl_usd. A snapshot with no day column does not clear it.
           # Open positions on that file are net qty from kpi_trades with the snapshot mark. Cash lines stay.
           # Each open row's running P&L is that ticker's close pnl_trade_usd plus the same mark.

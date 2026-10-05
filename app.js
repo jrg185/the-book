@@ -18,6 +18,7 @@ import {
   LIVE_SIGNAL_URL,
   mergeLiveBook,
   shownBooks,
+  warehouseSleeveAsOf,
   sleeveKey,
   tone,
   winStats,
@@ -97,7 +98,9 @@ function pair(primary, secondary) {
 }
 
 const STALE_AFTER_MS = 3 * 60 * 60 * 1000;
-// Sleeve as_of is the warehouse MTM clock. Export can rewrite JSON without moving it.
+// Sleeve as_of is the warehouse MTM clock: live_book.sleeve_as_of, else kpi_summary.
+// Signal generated_at is not this clock. A fresh export stamps sleeve_as_of from
+// the kpi_sleeve_snapshots row that refresh just inserted.
 const SNAPSHOT_STALE_MS = 60 * 60 * 1000;
 
 function parseTime(value) {
@@ -222,7 +225,7 @@ function renderStatus(meta, sleeveAsOf) {
       el(
         "p",
         "status-copy status-warn",
-        `Warehouse MTM is ${agePhrase(snapshotAge)} old. Export only re-reads kpi_summary. This repo does not refresh kpi_sleeve_snapshots.`
+        `Warehouse MTM is ${agePhrase(snapshotAge)} old. The sleeve clock is kpi_sleeve_snapshots as_of. Export KPI inserts a fresh snapshot before it re-reads kpi_summary.`
       )
     );
   } else if (meta?.source === "supabase" && !asOf) {
@@ -577,11 +580,11 @@ function pnlMetric(label, dollars, frac) {
   return node;
 }
 
-function render(tradeRows, meta, book) {
+function render(tradeRows, meta, book, summary) {
   const trades = Array.isArray(tradeRows) ? tradeRows : [];
-  const books = shownBooks(book);
+  const books = shownBooks(book, summary);
   const view = books[0] || null;
-  renderStatus(meta || {}, view?.asOf || null);
+  renderStatus(meta || {}, warehouseSleeveAsOf(book, summary));
   boardEl.replaceChildren();
   if (!view) {
     boardEl.append(el("p", "empty", "Live book has no book_usd."));
@@ -1230,7 +1233,7 @@ async function main() {
       loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
       loadJson("data/model_scorecard.json", token).catch(() => null),
     ]);
-    render(trades, meta, book);
+    render(trades, meta, book, summary);
     renderPositions(book);
     curvePayload = curves;
     paintCurves();
