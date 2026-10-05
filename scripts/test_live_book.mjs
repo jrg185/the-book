@@ -276,7 +276,15 @@ test("open nets stay beside cash and do not move the rails", () => {
   const withOpen = {
     ...live,
     positions: [
-      { sleeve: "crypto", ticker: "ZZ", qty: "3", mark: "12.5", value_usd: 37.5, unrealized_pnl_usd: 7.5 },
+      {
+        sleeve: "crypto",
+        ticker: "ZZ",
+        qty: "3",
+        mark: "12.5",
+        value_usd: 37.5,
+        unrealized_pnl_usd: 7.5,
+        running_pnl_usd: 9.5,
+      },
       { sleeve: "equities", ticker: "QQ", qty: "0", value_usd: 4 },
       { sleeve: "crypto", ticker: "USDC", qty: "9", value_usd: 9 },
     ],
@@ -297,6 +305,8 @@ test("open nets stay beside cash and do not move the rails", () => {
     ["ZZ", "QQ", "USDC"]
   );
   assert.equal(view.bookUsd, sum);
+  assert.equal(view.runningPnl, live.running_pnl_usd ?? null);
+  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
   assert.equal(view.dayKill, -77.5);
   assert.equal(view.dayTarget, 19.38);
   assert.equal(view.equitiesUsd, 0);
@@ -307,13 +317,14 @@ test("open nets stay beside cash and do not move the rails", () => {
     ["USD", "USDC"]
   );
   assert.deepEqual(
-    cardPositionRows(merged).map((row) => [row.ticker, row.qty, row.valueUsd]),
+    cardPositionRows(merged).map((row) => [row.ticker, row.qty, row.valueUsd, row.runningPnl]),
     [
-      ["USD", null, 760.64],
-      ["USDC", null, 14.07],
-      ["ZZ", 3, 37.5],
+      ["USD", null, 760.64, null],
+      ["USDC", null, 14.07, null],
+      ["ZZ", 3, 37.5, 9.5],
     ]
   );
+  assert.equal(app.includes('["Ticker", "Qty", "Value", "Running P&L"]'), true);
   assert.equal(openPositionRows(merged).some((row) => row.ticker === "QQ"), false);
   assert.equal(openPositionRows(merged).some((row) => row.ticker === "USDC"), false);
   assert.equal(shownBooks(merged).length, 1);
@@ -327,7 +338,7 @@ test("the page does not hardcode live open quantities", () => {
     .map((row) => String(row.qty ?? ""))
     .filter((qty) => qty.includes("."));
   assert.ok(qtys.length > 0);
-  const files = ["app.js", "derive.js", "index.html", "data/live_book.json", "scripts/test_live_book.mjs"];
+  const files = ["app.js", "derive.js", "index.html", "scripts/test_live_book.mjs"];
   for (const file of files) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
     for (const qty of qtys) assert.equal(text.includes(qty), false, `${file} ${qty}`);

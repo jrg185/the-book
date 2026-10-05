@@ -298,8 +298,14 @@ def mark_for(sleeve: str, ticker: str, env: dict[str, str]) -> tuple[Decimal, st
 
 
 def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
-    """Replay buys and sells. Realized is pnl_trade_usd on closes only."""
+    """Replay buys and sells. Realized is pnl_trade_usd on closes only.
+
+    Sleeve realized is the sum of those close dollars. Each open position
+    also keeps that ticker's own close dollars, including closes from before
+    a later reopen. Opening fills do not add realized.
+    """
     realized = {sleeve: Decimal("0") for sleeve in TRADE_SLEEVES}
+    realized_by_ticker: dict[tuple[str, str], Decimal] = {}
     book: dict[tuple[str, str], dict] = {}
     ordered = sorted(enumerate(fills), key=lambda item: (parse_ts(item[1]["timestamp_et"]), item[0]))
     for _, fill in ordered:
@@ -341,6 +347,7 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
                 f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}"
             )
         realized[sleeve] += pnl
+        realized_by_ticker[key] = realized_by_ticker.get(key, Decimal("0")) + pnl
         remain = abs(open_qty) - close_qty
         if remain <= DUST:
             book.pop(key, None)
@@ -348,6 +355,8 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
             sign = Decimal("1") if open_qty > 0 else Decimal("-1")
             book[key] = {"qty": sign * remain, "avg": pos["avg"]}
     open_book = {key: pos for key, pos in book.items() if abs(pos["qty"]) > DUST}
+    for key, pos in open_book.items():
+        pos["realized"] = realized_by_ticker.get(key, Decimal("0"))
     return realized, open_book
 
 
