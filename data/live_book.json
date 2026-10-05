@@ -1,174 +1,174 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-05T17:29:46+00:00",
+  "sleeve_as_of": "2026-10-05T17:44:20+00:00",
   "book_usd": 774.71,
   "signal_book_usd": 775.0,
   "day_pnl_usd": 0.0,
-  "running_balance_usd": 786.59,
+  "running_balance_usd": 787.04,
   "realized_pnl_usd": -1.17,
-  "unrealized_pnl_usd": -12.24,
-  "running_pnl_usd": -13.41,
+  "unrealized_pnl_usd": -11.79,
+  "running_pnl_usd": -12.96,
   "positions": [
     {
       "sleeve": "crypto",
       "ticker": "AVAX",
       "qty": "2.005",
-      "mark": "10.915",
-      "value_usd": 21.88,
+      "mark": "10.881",
+      "value_usd": 21.82,
       "avg_cost": "11.1328",
-      "unrealized_pnl_usd": -0.44,
-      "running_pnl_usd": -1.89
+      "unrealized_pnl_usd": -0.5,
+      "running_pnl_usd": -1.95
     },
     {
       "sleeve": "crypto",
       "ticker": "COMP",
       "qty": "0.97101",
-      "mark": "24.89",
-      "value_usd": 24.17,
+      "mark": "24.91",
+      "value_usd": 24.19,
       "avg_cost": "24.83061338194251346536080988",
-      "unrealized_pnl_usd": 0.06,
-      "running_pnl_usd": -1.39
+      "unrealized_pnl_usd": 0.08,
+      "running_pnl_usd": -1.37
     },
     {
       "sleeve": "crypto",
       "ticker": "CRV",
       "qty": "63.89",
-      "mark": "0.3703",
-      "value_usd": 23.66,
+      "mark": "0.3724",
+      "value_usd": 23.79,
       "avg_cost": "0.35013",
-      "unrealized_pnl_usd": 1.29,
-      "running_pnl_usd": 0.38
+      "unrealized_pnl_usd": 1.42,
+      "running_pnl_usd": 0.52
     },
     {
       "sleeve": "crypto",
       "ticker": "DOT",
       "qty": "14.081",
-      "mark": "1.192",
+      "mark": "1.1915",
       "value_usd": 16.78,
       "avg_cost": "1.2623",
-      "unrealized_pnl_usd": -0.99,
-      "running_pnl_usd": -2.15
+      "unrealized_pnl_usd": -1.0,
+      "running_pnl_usd": -2.16
     },
     {
       "sleeve": "crypto",
       "ticker": "GRT",
       "qty": "443.1",
-      "mark": "0.029145",
-      "value_usd": 12.91,
+      "mark": "0.02904",
+      "value_usd": 12.87,
       "avg_cost": "0.03265715232579119625350618089",
-      "unrealized_pnl_usd": -1.56,
-      "running_pnl_usd": 0.41
+      "unrealized_pnl_usd": -1.6,
+      "running_pnl_usd": 0.37
     },
     {
       "sleeve": "crypto",
       "ticker": "IMX",
       "qty": "149.5",
-      "mark": "0.18087",
-      "value_usd": 27.04,
+      "mark": "0.18145",
+      "value_usd": 27.13,
       "avg_cost": "0.1808699708611375913568477915",
-      "unrealized_pnl_usd": 0.0,
-      "running_pnl_usd": -0.77
+      "unrealized_pnl_usd": 0.09,
+      "running_pnl_usd": -0.68
     },
     {
       "sleeve": "crypto",
       "ticker": "NEAR",
       "qty": "4.93",
-      "mark": "5.0242",
-      "value_usd": 24.77,
+      "mark": "5.02",
+      "value_usd": 24.75,
       "avg_cost": "5.49365",
-      "unrealized_pnl_usd": -2.31,
-      "running_pnl_usd": -5.19
+      "unrealized_pnl_usd": -2.34,
+      "running_pnl_usd": -5.22
     },
     {
       "sleeve": "crypto",
       "ticker": "PYTH",
       "qty": "355.2",
-      "mark": "0.07615",
-      "value_usd": 27.05,
+      "mark": "0.07595",
+      "value_usd": 26.98,
       "avg_cost": "0.083497",
-      "unrealized_pnl_usd": -2.61,
-      "running_pnl_usd": -4.18
+      "unrealized_pnl_usd": -2.68,
+      "running_pnl_usd": -4.25
     },
     {
       "sleeve": "crypto",
       "ticker": "QNT",
       "qty": "0.1031",
-      "mark": "252.62",
-      "value_usd": 26.05,
+      "mark": "254.79",
+      "value_usd": 26.27,
       "avg_cost": "165.5018272235910692827353604",
-      "unrealized_pnl_usd": 8.98,
-      "running_pnl_usd": 38.97
+      "unrealized_pnl_usd": 9.21,
+      "running_pnl_usd": 39.19
     },
     {
       "sleeve": "crypto",
       "ticker": "RENDER",
       "qty": "9.484",
-      "mark": "1.979",
-      "value_usd": 18.77,
+      "mark": "1.9867",
+      "value_usd": 18.84,
       "avg_cost": "2.09152",
-      "unrealized_pnl_usd": -1.07,
-      "running_pnl_usd": -2.71
+      "unrealized_pnl_usd": -0.99,
+      "running_pnl_usd": -2.64
     },
     {
       "sleeve": "crypto",
       "ticker": "SEI",
       "qty": "354.11",
-      "mark": "0.072",
-      "value_usd": 25.5,
+      "mark": "0.07206",
+      "value_usd": 25.52,
       "avg_cost": "0.07892353744522402372803524244",
-      "unrealized_pnl_usd": -2.45,
-      "running_pnl_usd": -2.27
+      "unrealized_pnl_usd": -2.43,
+      "running_pnl_usd": -2.25
     },
     {
       "sleeve": "crypto",
       "ticker": "SUI",
       "qty": "17.581",
-      "mark": "1.1929",
-      "value_usd": 20.97,
+      "mark": "1.1901",
+      "value_usd": 20.92,
       "avg_cost": "1.255736766590510599861856437",
-      "unrealized_pnl_usd": -1.1,
-      "running_pnl_usd": -2.37
+      "unrealized_pnl_usd": -1.15,
+      "running_pnl_usd": -2.42
     },
     {
       "sleeve": "crypto",
       "ticker": "UNI",
       "qty": "1.9159",
-      "mark": "8.9495",
-      "value_usd": 17.15,
+      "mark": "8.9575",
+      "value_usd": 17.16,
       "avg_cost": "10.076955",
-      "unrealized_pnl_usd": -2.16,
-      "running_pnl_usd": -4.67
+      "unrealized_pnl_usd": -2.14,
+      "running_pnl_usd": -4.66
     },
     {
       "sleeve": "crypto",
       "ticker": "W",
       "qty": "1058.0",
-      "mark": "0.014101",
-      "value_usd": 14.92,
+      "mark": "0.014175",
+      "value_usd": 15.0,
       "avg_cost": "0.01329727599243856332703213610",
-      "unrealized_pnl_usd": 0.85,
-      "running_pnl_usd": 7.13
+      "unrealized_pnl_usd": 0.93,
+      "running_pnl_usd": 7.21
     },
     {
       "sleeve": "crypto",
       "ticker": "XCN",
       "qty": "5171.0",
-      "mark": "0.004743",
-      "value_usd": 24.53,
+      "mark": "0.004746",
+      "value_usd": 24.54,
       "avg_cost": "0.00524921",
-      "unrealized_pnl_usd": -2.62,
-      "running_pnl_usd": -6.5
+      "unrealized_pnl_usd": -2.6,
+      "running_pnl_usd": -6.48
     },
     {
       "sleeve": "crypto",
       "ticker": "ZEC",
       "qty": "0.01632",
-      "mark": "1308.44",
-      "value_usd": 21.35,
+      "mark": "1313.52",
+      "value_usd": 21.44,
       "avg_cost": "1683.01",
-      "unrealized_pnl_usd": -6.11,
-      "running_pnl_usd": -8.5
+      "unrealized_pnl_usd": -6.03,
+      "running_pnl_usd": -8.42
     }
   ],
   "kill_remaining_usd": 77.5,
