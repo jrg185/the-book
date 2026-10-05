@@ -2433,7 +2433,7 @@ def self_test() -> int:
             "ticker": "AVAX",
             "side": "buy",
             "pnl_trade_usd": "0",
-            "why": "RH Agentic backfill order 6ab7f4a2-5444-4593-84ea-e78f57dc0cf6",
+            "why": "RH Agentic backfill order 6ab70000-0000-4000-8000-000000000001",
             "notes": "backfill from RH",
         },
         {

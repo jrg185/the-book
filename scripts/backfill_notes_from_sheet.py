@@ -9,8 +9,8 @@ nothing. `--dry-run` does the same thing when it is passed with `--apply`.
 `--apply` writes, and only when SUPABASE_SERVICE_ROLE_KEY or SUPABASE_DB_URL
 is set. Without those credentials the script exits 2 and writes nothing.
 
-Sheet (human notes only):
-  https://docs.google.com/spreadsheets/d/14o00TKyylOQYFHecAQ5RMlhYCDEOkxaJXrj1lGrtceo
+Sheet (human notes only; private, not committed):
+  https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID
   Tabs: Crypto, Equities. Columns include timestamp_ET, ticker, side, qty,
   why, order_id, notes.
 
@@ -549,12 +549,12 @@ def self_test() -> int:
     text_time = parse_sheet_time("2026-09-27 21:03 ET")
     if text_time != dt.datetime(2026, 9, 28, 1, 3, tzinfo=dt.timezone.utc):
         raise BackfillError(f"ET text parsed {text_time}")
-    if human_note("RH Agentic backfill order 6ab7f4a2-5444-4593-84ea-e78f57dc0cf6"):
+    if human_note("RH Agentic backfill order 6ab70000-0000-4000-8000-000000000001"):
         raise BackfillError("machine why counted as human")
     if human_note("backfill from RH") != "backfill from RH":
         raise BackfillError("sheet placeholder was dropped")
 
-    machine = "RH Agentic backfill order 6ab7f4a2-5444-4593-84ea-e78f57dc0cf6"
+    machine = "RH Agentic backfill order 6ab70000-0000-4000-8000-000000000001"
     trades = [
         {
             "id": "1",
@@ -573,7 +573,7 @@ def self_test() -> int:
             "ticker": "QNT",
             "side": "buy",
             "qty": "0.2066",
-            "why": "RH Agentic sync order 6ab82f87-8b24-43ab-bd35-dc0099973cf4",
+            "why": "RH Agentic sync order 6ab80000-0000-4000-8000-000000000002",
         },
         {
             "id": "3",
@@ -582,7 +582,7 @@ def self_test() -> int:
             "ticker": "QNT",
             "side": "buy",
             "qty": "0.2062",
-            "why": "RH Agentic sync order 6ab82fa5-063c-4170-81fe-063f93004a78",
+            "why": "RH Agentic sync order 6ab80000-0000-4000-8000-000000000003",
         },
         {
             "sleeve": "equities",
@@ -623,7 +623,7 @@ def self_test() -> int:
             "side": "buy",
             "qty": Decimal("2.2528"),
             "timestamp": avax_sheet_time,
-            "order_id": "6ab7f4a2-5444-4593-84ea-e78f57dc0cf6",
+            "order_id": "6ab70000-0000-4000-8000-000000000001",
             "why": "backfill from RH",
             "notes": "backfill from RH",
         },
@@ -653,7 +653,7 @@ def self_test() -> int:
             "side": "buy",
             "qty": Decimal("0.743509"),
             "timestamp": parse_sheet_time("46290.65069444444"),
-            "order_id": "6ab6cd5e-c83f-4429-a7c0-cf8e6d2fa953",
+            "order_id": "6ab60000-0000-4000-8000-000000000001",
             "why": "SWING unlock Joe/Wags; soft tgt flexible",
             "notes": "First live fill.",
         },
@@ -663,7 +663,7 @@ def self_test() -> int:
             "side": "buy",
             "qty": Decimal("2.2528"),
             "timestamp": avax_sheet_time,
-            "order_id": "6ab7f4a2-5444-4593-84ea-e78f57dc0cf6",
+            "order_id": "6ab70000-0000-4000-8000-000000000001",
             "why": "backfill from RH",
             "notes": "backfill from RH",
         },
@@ -786,7 +786,7 @@ def self_test() -> int:
         path.write_text(
             "timestamp_ET,ticker,side,qty,why,order_id,notes\n"
             "46291.5255787037,AVAX,buy,2.2528,backfill from RH,"
-            "6ab7f4a2-5444-4593-84ea-e78f57dc0cf6,backfill from RH\n"
+            "6ab70000-0000-4000-8000-000000000001,backfill from RH\n"
             "OpenLots refresh,SEI,192.58,cost,ignore,,\n",
             encoding="utf-8",
         )
