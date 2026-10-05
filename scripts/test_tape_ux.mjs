@@ -23,8 +23,8 @@ import {
   tapeOpenKey,
 } from "../tape.js";
 
-const SYNC = "RH Agentic sync order 6ab7f4a2-5444-4593-84ea-e78f57dc0cf6";
-const BACKFILL = "RH Agentic backfill order 6ab7f4a2-5444-4593-84ea-e78f57dc0cf6";
+const SYNC = "RH Agentic sync order 6ab70000-0000-4000-8000-000000000001";
+const BACKFILL = "RH Agentic backfill order 6ab70000-0000-4000-8000-000000000001";
 
 test("notes win when they are a human sentence", () => {
   const pref = preferredWhy({
@@ -57,12 +57,12 @@ test("a bare sync or backfill order is a short label plus uuid", () => {
   const sync = preferredWhy({ why: SYNC });
   assert.equal(sync.kind, "machine");
   assert.equal(sync.text, "sync order");
-  assert.equal(sync.uuid, "6ab7f4a2-5444-4593-84ea-e78f57dc0cf6");
+  assert.equal(sync.uuid, "6ab70000-0000-4000-8000-000000000001");
   assert.notEqual(sync.text, SYNC);
 
   const backfill = preferredWhy({ why: BACKFILL });
   assert.equal(backfill.text, "backfill order");
-  assert.equal(backfill.uuid, "6ab7f4a2-5444-4593-84ea-e78f57dc0cf6");
+  assert.equal(backfill.uuid, "6ab70000-0000-4000-8000-000000000001");
 });
 
 test("a machine id with extra words stays human text", () => {

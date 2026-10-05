@@ -275,7 +275,7 @@ The migration does not write `kpi_trades` and does not place orders. It does not
 
 ## Notes backfill
 
-One shot, not a live feed. Sheet: [Agentic Trading Ledger](https://docs.google.com/spreadsheets/d/14o00TKyylOQYFHecAQ5RMlhYCDEOkxaJXrj1lGrtceo) tabs **Crypto** and **Equities**.
+One shot, not a live feed. Export the private Agentic Trading Ledger tabs **Crypto** and **Equities**. The sheet id is `YOUR_SHEET_ID` (do not commit the live link).
 
 Export each tab to CSV. Then, with the service role or `SUPABASE_DB_URL`:
 
