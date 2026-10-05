@@ -229,14 +229,16 @@ export function openPositionRows(book) {
       ticker,
       qty,
       valueUsd: num(row.value_usd),
+      runningPnl: num(row.running_pnl_usd),
     });
   }
   return opens;
 }
 
-// Cash lines first, then each open net. Position value is not the cash sum.
+// Cash lines first, then each open net. Cash has no running P&L.
+// Position value is not the cash sum, and it is not the sleeve running P&L.
 export function cardPositionRows(book) {
-  const cash = holdingRows(book).map((row) => ({ ...row, qty: null }));
+  const cash = holdingRows(book).map((row) => ({ ...row, qty: null, runningPnl: null }));
   return cash.concat(openPositionRows(book));
 }
 
