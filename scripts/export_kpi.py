@@ -2072,7 +2072,9 @@ def latest_account_pnl(rows: list) -> dict | None:
     Reads running_balance_usd, realized_pnl_usd, unrealized_pnl_usd, and
     running_pnl_usd. The snapshot table has no day_pnl_usd column, so this
     read does not supply day P&L. A fraction column is not multiplied by a
-    sleeve seed. A crypto-only row is not the account.
+    sleeve seed. A crypto-only row is not the account. as_of from that
+    combined row is the warehouse sleeve clock. The writer stores it as
+    sleeve_as_of. It is not a dollar column.
     """
     chosen = None
     chosen_at = None
@@ -2101,7 +2103,12 @@ def latest_account_pnl(rows: list) -> dict | None:
         if number is None:
             continue
         out[key] = number
-    return out or None
+    if not out:
+        return None
+    as_of = chosen.get("as_of")
+    if as_of:
+        out["as_of"] = jsonable(as_of)
+    return out
 
 
 def apply_account_pnl(book: dict, pnl: dict | None) -> dict:
@@ -2109,7 +2116,9 @@ def apply_account_pnl(book: dict, pnl: dict | None) -> dict:
 
     Does not invent a figure when the column was not on the row. Does not
     touch day_pnl_usd. The snapshot table has no day column, and a missing
-    key must not clear the signal day already on the file.
+    key must not clear the signal day already on the file. Copies as_of
+    onto sleeve_as_of when the snapshot has one. A missing as_of does not
+    clear a sleeve clock already on the file.
     """
     out = dict(book) if isinstance(book, dict) else {}
     if not isinstance(pnl, dict):
@@ -2121,6 +2130,9 @@ def apply_account_pnl(book: dict, pnl: dict | None) -> dict:
         if number is None:
             continue
         out[key] = number
+    as_of = pnl.get("as_of")
+    if as_of:
+        out["sleeve_as_of"] = jsonable(as_of)
     return out
 
 
@@ -2226,12 +2238,15 @@ def merge_live_book(committed, signal) -> dict:
     leaves the day already on the account. Realized, unrealized, running P&L,
     and running_balance_usd already on the account are kept. Open positions
     already on the account are kept. Candidates, a signal holding list, and a
-    signal position list are not the account.
+    signal position list are not the account. generated_at stays the signal
+    file time. sleeve_as_of is the warehouse snapshot clock already on the
+    account. The signal cannot replace it.
     """
     base = dict(committed) if isinstance(committed, dict) else {}
     holdings = [dict(row) for row in base.get("holdings") or [] if isinstance(row, dict)]
     live = signal if isinstance(signal, dict) else None
     generated = base.get("generated_at")
+    sleeve_as_of = base.get("sleeve_as_of")
     day = base.get("day_pnl_usd")
     kill = base.get("kill_remaining_usd")
     signal_book = _finite_number(base.get("signal_book_usd"))
@@ -2254,6 +2269,8 @@ def merge_live_book(committed, signal) -> dict:
         out["source"] = base.get("source")
     if generated:
         out["generated_at"] = generated
+    if sleeve_as_of:
+        out["sleeve_as_of"] = sleeve_as_of
     if book is not None:
         out["book_usd"] = book
     if signal_book is not None:
@@ -2300,7 +2317,8 @@ def refresh_live_book(
 
     Does nothing when the account file is absent. Does not invent holdings.
     When account_pnl is the latest combined snapshot, running_balance_usd and
-    the three P&L columns are written through. Day P&L stays the signal copy.
+    the three P&L columns are written through, and sleeve_as_of is that row's
+    as_of. Day P&L stays the signal copy. generated_at stays the signal time.
     A missing snapshot does not delete P&L or day P&L already on the file.
     When positions is the open-net read, those rows replace the list. None
     leaves open rows already on the file. Cash lines are not rebuilt from them.
@@ -2834,6 +2852,7 @@ def self_test() -> int:
         "realized_pnl_usd": 3.4,
         "unrealized_pnl_usd": 0.6,
         "running_pnl_usd": 4.0,
+        "as_of": "2026-10-04T21:40:15Z",
     }:
         raise RuntimeError(f"combined snapshot was not the account P&L: {account_pnl}")
     if "day_pnl_usd" in account_pnl:
@@ -2879,6 +2898,31 @@ def self_test() -> int:
         raise RuntimeError(f"writer dropped the signal day: {published}")
     if published["book_usd"] != expected_book or published.get("signal_book_usd") != 775:
         raise RuntimeError(f"writer moved the book off the holdings sum: {published}")
+    if published.get("sleeve_as_of") != "2026-10-04T21:40:15Z":
+        raise RuntimeError(f"writer dropped the warehouse sleeve clock: {published}")
+    if published.get("generated_at") != copied["generated_at"]:
+        raise RuntimeError(f"writer dropped the signal generated_at: {published}")
+    if published.get("sleeve_as_of") == published.get("generated_at"):
+        raise RuntimeError("signal generated_at became the sleeve MTM clock")
+    spoofed = dict(copied)
+    spoofed["sleeve_as_of"] = "1999-01-01T00:00:00Z"
+    spoofed["generated_at"] = "1999-01-01T00:00:00Z"
+    refused = merge_live_book(published, spoofed)
+    if refused.get("sleeve_as_of") != "2026-10-04T21:40:15Z":
+        raise RuntimeError(f"signal replaced the sleeve clock: {refused}")
+    if refused.get("generated_at") != "1999-01-01T00:00:00Z":
+        raise RuntimeError(f"signal generated_at was not kept as signal context: {refused}")
+    no_clock = apply_account_pnl(
+        published,
+        {
+            "realized_pnl_usd": 3.4,
+            "unrealized_pnl_usd": 0.6,
+            "running_pnl_usd": 4.0,
+            "running_balance_usd": 804.0,
+        },
+    )
+    if no_clock.get("sleeve_as_of") != published.get("sleeve_as_of"):
+        raise RuntimeError(f"a snapshot without as_of cleared the sleeve clock: {no_clock}")
     no_day = latest_account_pnl(
         [
             {
@@ -2901,6 +2945,10 @@ def self_test() -> int:
         raise RuntimeError(f"a missing signal deleted account P&L: {stale_book}")
     if stale_book.get("day_pnl_usd") != 1.5 or stale_book.get("running_balance_usd") != 812.4:
         raise RuntimeError(f"a missing signal cleared day P&L or running balance: {stale_book}")
+    if stale_book.get("sleeve_as_of"):
+        raise RuntimeError(f"a missing snapshot invented a sleeve clock: {stale_book}")
+    if stale_book.get("generated_at") != account["generated_at"]:
+        raise RuntimeError(f"a missing signal cleared signal generated_at: {stale_book}")
     open_fills = [
         {
             "sleeve": "crypto",
