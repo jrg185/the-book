@@ -174,6 +174,7 @@ jobs:
           # Running balance, realized, unrealized, and running P&L stay on the file from the combined snapshot.
           # Day P&L stays the signal day_pnl_usd. A snapshot with no day column does not clear it.
           # Open positions on that file are net qty from kpi_trades with the snapshot mark. Cash lines stay.
+          # Each open row's running P&L is that ticker's close pnl_trade_usd plus the same mark.
           git add -- data/live_book.json data/kpi_summary.json data/kpi_trades_scrubbed.json data/open_positions.json data/sleeve_curves.json data/models_oos.json data/model_scorecard.json data/meta.json
           if [ -f data/rh_kpi_sync_cursor.json ]; then
             git add -- data/rh_kpi_sync_cursor.json

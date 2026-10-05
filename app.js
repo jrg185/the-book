@@ -635,7 +635,7 @@ function renderPositions(book) {
   const table = el("table");
   const thead = el("thead");
   const headRow = el("tr");
-  for (const label of ["Ticker", "Qty", "Value"]) {
+  for (const label of ["Ticker", "Qty", "Value", "Running P&L"]) {
     const th = el("th", label === "Ticker" ? "" : "num", label);
     th.scope = "col";
     headRow.append(th);
@@ -647,7 +647,12 @@ function renderPositions(book) {
     tr.append(
       el("td", "ticker", row.ticker),
       el("td", "num", row.qty == null ? "\u2014" : String(row.qty)),
-      el("td", "num", formatUsd(row.valueUsd))
+      el("td", "num", formatUsd(row.valueUsd)),
+      el(
+        "td",
+        `num ${row.runningPnl == null ? "" : tone(row.runningPnl)}`.trim(),
+        row.runningPnl == null ? "\u2014" : formatUsd(row.runningPnl, { signed: true })
+      )
     );
     tbody.append(tr);
   }
