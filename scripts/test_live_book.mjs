@@ -373,8 +373,8 @@ function deriveSourceHasSeedRebuild(published) {
 test("the book card clock is the warehouse sleeve as_of, not the signal generated_at", () => {
   const signalTime = "2026-10-04T16:34:23Z";
   const warehouseTime = "2026-10-05T08:41:26+00:00";
-  const combined = summary.find((row) => row.sleeve === "combined");
-  assert.equal(live.sleeve_as_of, combined.as_of);
+  // sleeve_as_of and kpi_summary as_of are written by different commits.
+  // A stamp already on the book is the card clock even when the summary is newer.
   assert.equal(warehouseSleeveAsOf(live, summary), live.sleeve_as_of);
   assert.equal(cryptoBookView(live).asOf, live.sleeve_as_of);
   assert.notEqual(cryptoBookView(live).asOf, live.generated_at);
