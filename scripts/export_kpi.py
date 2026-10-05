@@ -686,7 +686,7 @@ def load_open_positions(base_url: str, key: str | None, db_url: str | None, as_o
     except refresh.RefreshError as exc:
         raise RuntimeError(refresh.redact(str(exc), [key or "", db_url or ""])) from None
     if not book:
-        return {"as_of": as_of, "positions": []}
+        return {"as_of": as_of, "positions": [], "card_positions": []}
     env = refresh.env_values()
     if base_url:
         env["SUPABASE_URL"] = base_url
@@ -706,7 +706,9 @@ def load_open_positions(base_url: str, key: str | None, db_url: str | None, as_o
     except refresh.RefreshError as exc:
         raise RuntimeError(refresh.redact(str(exc), secrets)) from None
     marks = {pair: price for pair, (price, _source) in quotes.items()}
-    return scrub_open_positions(fills, marks, as_of)
+    scrubbed = scrub_open_positions(fills, marks, as_of)
+    scrubbed["card_positions"] = card_positions(fills, marks)
+    return scrubbed
 
 
 def _signed_open_qty(qty: Decimal, side: object) -> Decimal:
@@ -714,8 +716,20 @@ def _signed_open_qty(qty: Decimal, side: object) -> Decimal:
     return magnitude if str(side or "long").strip().lower() != "short" else -magnitude
 
 
-def _card_position_row(sleeve: str, ticker: str, qty: Decimal, avg: Decimal | None, mark: Decimal) -> dict:
-    """One open net. Value is qty times the mark. It is not a seed fraction."""
+def _card_position_row(
+    sleeve: str,
+    ticker: str,
+    qty: Decimal,
+    avg: Decimal | None,
+    mark: Decimal,
+    realized: Decimal | None = None,
+) -> dict:
+    """One open net. Value is qty times the mark. It is not a seed fraction.
+
+    Running P&L is that ticker's close pnl_trade_usd plus qty * (mark - avg),
+    the same two terms the sleeve snapshot adds for realized_pnl_usd and
+    unrealized_pnl_usd.
+    """
     row = {
         "sleeve": sleeve,
         "ticker": ticker,
@@ -724,8 +738,11 @@ def _card_position_row(sleeve: str, ticker: str, qty: Decimal, avg: Decimal | No
         "value_usd": _cents_number(qty * mark),
     }
     if avg is not None:
+        unreal = qty * (mark - avg)
         row["avg_cost"] = format(avg, "f")
-        row["unrealized_pnl_usd"] = _cents_number(qty * (mark - avg))
+        row["unrealized_pnl_usd"] = _cents_number(unreal)
+        if realized is not None:
+            row["running_pnl_usd"] = _cents_number(realized + unreal)
     return row
 
 
@@ -734,7 +751,8 @@ def card_positions(fills: list, marks: dict) -> list:
 
     Reads sleeve, ticker, side, qty, avg_price, pnl_trade_usd, and timestamp_et
     through apply_books. The mark is the same quote that produces
-    unrealized_pnl_usd. A ticker with no mark is an error. A flat net is
+    unrealized_pnl_usd. Running P&L adds that ticker's close pnl_trade_usd
+    to qty * (mark - avg). A ticker with no mark is an error. A flat net is
     omitted. USD and USDC stay cash lines, not a second open row.
     """
     import refresh_kpi_snapshots as refresh
@@ -755,7 +773,16 @@ def card_positions(fills: list, marks: dict) -> list:
         if abs(qty) <= refresh.DUST:
             continue
         mark = Decimal(str(marks[(sleeve, ticker)]))
-        rows.append(_card_position_row(sleeve, ticker, qty, pos.get("avg"), mark))
+        rows.append(
+            _card_position_row(
+                sleeve,
+                ticker,
+                qty,
+                pos.get("avg"),
+                mark,
+                pos.get("realized") if pos.get("realized") is not None else Decimal("0"),
+            )
+        )
     return rows
 
 
@@ -780,7 +807,15 @@ def card_positions_from_scrubbed(payload) -> list:
         if qty is None or mark is None or abs(qty) <= Decimal("0.00000001"):
             continue
         signed = _signed_open_qty(qty, row.get("side"))
-        rows.append(_card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark))
+        realized = _decimal_or_none(row.get("running_pnl_usd"))
+        # A scrubbed fraction row has no close dollars. Copy a running figure
+        # only when the fill replay already stored it. Do not rebuild it here.
+        if realized is None:
+            rows.append(_card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark))
+        else:
+            built = _card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark)
+            built["running_pnl_usd"] = _cents_number(realized)
+            rows.append(built)
     rows.sort(key=lambda item: (order.get(item["sleeve"], 9), item["ticker"]))
     return rows
 
@@ -935,7 +970,9 @@ def export_live(base_url: str, key: str | None, db_url: str | None) -> dict:
         [reshape_trade_row(row) for row in rows["kpi_trades_scrubbed"]]
     )
     fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows["open_positions"] = load_open_positions(base_url, key, db_url, fetched_at)
+    opened = load_open_positions(base_url, key, db_url, fetched_at)
+    rows["card_positions"] = opened.pop("card_positions", [])
+    rows["open_positions"] = opened
     rows["sleeve_curves"] = load_sleeve_curves(base_url, key, db_url, fetched_at)
     missing = []
     for view in OPTIONAL_VIEWS:
@@ -2913,6 +2950,7 @@ def self_test() -> int:
             "value_usd": 37.5,
             "avg_cost": "10",
             "unrealized_pnl_usd": 7.5,
+            "running_pnl_usd": 9.5,
         }
     ]:
         raise RuntimeError(f"open net was not qty times the mark: {opened}")
@@ -2920,6 +2958,8 @@ def self_test() -> int:
         raise RuntimeError("a flat equity net was published")
     if opened[0]["value_usd"] == opened[0]["unrealized_pnl_usd"]:
         raise RuntimeError("open value collapsed to unrealized")
+    if opened[0]["running_pnl_usd"] == opened[0]["unrealized_pnl_usd"]:
+        raise RuntimeError("running P&L dropped the ticker's close")
     position_src = Path(__file__).read_text(encoding="utf-8").split("def card_positions(", 1)[1].split(
         "def card_positions_from_scrubbed", 1
     )[0]
@@ -2929,8 +2969,71 @@ def self_test() -> int:
     if "unrealized_pnl_frac" in position_src or "* 300" in position_src or "* Decimal(\"300\")" in position_src:
         raise RuntimeError("open value is rebuilt from a seed fraction")
     scrubbed = scrub_open_positions(open_fills, open_marks, "2026-10-04T00:00:00Z")
-    if card_positions_from_scrubbed(scrubbed) != opened:
-        raise RuntimeError(f"scrubbed mark did not match the book: {scrubbed}")
+    from_scrub = card_positions_from_scrubbed(scrubbed)
+    if from_scrub[0]["qty"] != opened[0]["qty"] or from_scrub[0]["value_usd"] != opened[0]["value_usd"]:
+        raise RuntimeError(f"scrubbed mark did not match the book: {from_scrub}")
+    if "running_pnl_usd" in from_scrub[0]:
+        raise RuntimeError("a scrubbed fraction row invented running P&L")
+    carried = card_positions_from_scrubbed(
+        [
+            {
+                "sleeve": "crypto",
+                "ticker": "ZZ",
+                "qty": "3",
+                "side": "long",
+                "avg": "10",
+                "mark": "12.5",
+                "running_pnl_usd": "9.5",
+            }
+        ]
+    )
+    if carried[0].get("running_pnl_usd") != 9.5:
+        raise RuntimeError(f"stored running P&L was dropped: {carried}")
+    reopened = card_positions(
+        [
+            {
+                "sleeve": "crypto",
+                "ticker": "yy",
+                "side": "buy",
+                "qty": "1",
+                "avg_price": "8",
+                "pnl_trade_usd": "0",
+                "timestamp_et": "2026-10-01T00:00:00Z",
+            },
+            {
+                "sleeve": "crypto",
+                "ticker": "yy",
+                "side": "sell",
+                "qty": "1",
+                "avg_price": "12",
+                "pnl_trade_usd": "4",
+                "timestamp_et": "2026-10-02T00:00:00Z",
+            },
+            {
+                "sleeve": "crypto",
+                "ticker": "yy",
+                "side": "buy",
+                "qty": "2",
+                "avg_price": "8",
+                "pnl_trade_usd": "0",
+                "timestamp_et": "2026-10-03T00:00:00Z",
+            },
+        ],
+        {("crypto", "YY"): Decimal("9")},
+    )
+    if reopened != [
+        {
+            "sleeve": "crypto",
+            "ticker": "YY",
+            "qty": "2",
+            "mark": "9",
+            "value_usd": 18.0,
+            "avg_cost": "8",
+            "unrealized_pnl_usd": 2.0,
+            "running_pnl_usd": 6.0,
+        }
+    ]:
+        raise RuntimeError(f"reopen dropped earlier close dollars: {reopened}")
     if card_positions_from_scrubbed(
         [{"sleeve": "crypto", "ticker": "ZZ", "qty": "3", "side": "long", "unrealized_pnl_frac": "0.025"}]
     ):
@@ -3042,7 +3145,7 @@ def main(argv: list[str] | None = None) -> int:
         refresh_live_book(
             DATA,
             account_pnl=account_pnl,
-            positions=card_positions_from_scrubbed(bundle.get("open_positions")),
+            positions=bundle.get("card_positions"),
         )
     except Exception as exc:
         frozen = committed_as_of(DATA)
