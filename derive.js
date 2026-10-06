@@ -75,7 +75,8 @@ export function money(seed, frac) {
 // A missing signal day leaves the day already on the file. Realized,
 // unrealized, running P&L, and running_balance_usd stay on the file. They are
 // snapshot dollars, not a signal field and not a seed fraction. The card
-// total is cash plus marked open lots, not that stored balance.
+// total is cash plus marked open lots. Its P&L is that total minus the
+// $800 combined seed, not the stored snapshot P&L.
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
 // Open positions already on the account stay. A signal position list is not the book.
@@ -151,10 +152,12 @@ function accountUnrealizedUsd(book) {
 // not that cash sum alone, and not the signal book. A book with no
 // position list still shows the stored running_balance_usd.
 // Day P&L is the signal dollar. The −10% kill and the +2.5% target stay on
-// signal_book_usd. They are not recomputed from the holdings sum. Realized,
-// unrealized, and running P&L are the dollar columns on this book. They are
-// not nulled, and they are not rebuilt as a fraction of the $300 sleeve seed.
-// The crypto kpi_summary row is that seed and is not this card. A missing
+// signal_book_usd. They are not recomputed from the holdings sum.
+// When the RH total is known, running P&L is that total minus the $800
+// combined seed. Unrealized is the open lots' mark versus cost. Realized
+// is running minus unrealized, so the three match the cash-and-lots book.
+// They are not the combined snapshot (~−$6) and not the $300 sleeve seed.
+// A book with no position list still shows the snapshot dollars. A missing
 // unrealized dollar falls back to holding value minus cost basis.
 // asOf is the warehouse sleeve clock: sleeve_as_of on the book, or the
 // combined kpi_summary as_of when the export has not stamped the book yet.
@@ -189,6 +192,55 @@ function agenticBookUsd(book) {
   return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
 }
 
+function lotUnrealized(row) {
+  const direct = num(row?.unrealized_pnl_usd);
+  if (direct != null) return direct;
+  const value = num(row?.value_usd);
+  const qty = num(row?.qty);
+  const avg = num(pick(row, ["avg_cost", "avg"]));
+  if (value == null || qty == null || avg == null) return null;
+  return value - qty * avg;
+}
+
+// Open crypto marks versus cost. USD and USDC are cash. A flat name is
+// skipped. An open lot with no unrealized figure and no cost leaves the
+// total unknown so the card does not invent a split.
+function openCryptoUnrealized(book) {
+  if (!book || !Array.isArray(book.positions)) return null;
+  let sum = 0;
+  for (const row of book.positions) {
+    if (!row || !String(row.ticker || "").trim()) continue;
+    const ticker = String(row.ticker).trim().toUpperCase();
+    if (ticker === "USD" || ticker === "USDC") continue;
+    const sleeve = String(row.sleeve || "crypto").trim().toLowerCase();
+    if (sleeve !== "crypto") continue;
+    const qty = num(row.qty);
+    if (qty == null || qty === 0) continue;
+    const unreal = lotUnrealized(row);
+    if (unreal == null) return null;
+    sum += unreal;
+  }
+  return roundCents(sum);
+}
+
+// RH book versus the combined seed. running = cash + lots − $800.
+// unrealized = open-lot mark versus cost. realized = running − unrealized.
+// Null when this file has not published a position list.
+export function reconciledPnl(book) {
+  const marked = agenticBookUsd(book);
+  const unrealized = openCryptoUnrealized(book);
+  const seed = SEEDS_USD.combined;
+  if (marked == null || unrealized == null || seed == null) return null;
+  const running = roundCents(marked - seed);
+  return {
+    seed,
+    marked,
+    unrealized,
+    running,
+    realized: roundCents(running - unrealized),
+  };
+}
+
 export function cryptoBookView(book, summary) {
   const account = accountValueUsd(holdingRows(book));
   const published = num(book?.book_usd);
@@ -201,13 +253,20 @@ export function cryptoBookView(book, summary) {
   const killHeadroom = num(book?.kill_remaining_usd);
   const marked = agenticBookUsd(book);
   const runningBalance = marked != null ? marked : num(pick(book, ["running_balance_usd", "running_balance"]));
-  const realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
+  const reconciled = reconciledPnl(book);
+  let realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
   if (unrealizedPnl == null) unrealizedPnl = accountUnrealizedUsd(book);
   let runningPnl = num(pick(book, ["running_pnl_usd", "running_pnl"]));
   if (runningPnl == null && realizedPnl != null && unrealizedPnl != null) {
     runningPnl = roundCents(realizedPnl + unrealizedPnl);
   }
+  if (reconciled) {
+    realizedPnl = reconciled.realized;
+    unrealizedPnl = reconciled.unrealized;
+    runningPnl = reconciled.running;
+  }
+  const pctBook = reconciled ? reconciled.marked : bookUsd;
   return {
     sleeve: "crypto",
     label: "Crypto",
@@ -224,11 +283,11 @@ export function cryptoBookView(book, summary) {
     killHeadroom,
     killHeadroomFrac: rail == null || rail === 0 || killHeadroom == null ? null : killHeadroom / rail,
     realizedPnl,
-    realizedPnlFrac: bookFrac(realizedPnl, bookUsd),
+    realizedPnlFrac: bookFrac(realizedPnl, pctBook),
     unrealizedPnl,
-    unrealizedPnlFrac: bookFrac(unrealizedPnl, bookUsd),
+    unrealizedPnlFrac: bookFrac(unrealizedPnl, pctBook),
     runningPnl,
-    runningPnlFrac: bookFrac(runningPnl, bookUsd),
+    runningPnlFrac: bookFrac(runningPnl, pctBook),
   };
 }
 
