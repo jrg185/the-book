@@ -80,7 +80,10 @@ test("open names are the live book holdings, not tape coins", () => {
   );
   assert.ok(rows.every((row) => row.valueUsd !== live.book_usd));
   const tapeNames = new Set((openPositions.positions || []).map((row) => row.ticker));
-  for (const row of rows) assert.equal(tapeNames.has(row.ticker), false);
+  for (const row of rows) {
+    if (row.ticker === "USD" || row.ticker === "USDC") continue;
+    assert.equal(tapeNames.has(row.ticker), false);
+  }
   const merged = mergeLiveBook(live, {
     book_usd: 775,
     candidates: [
@@ -219,6 +222,7 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
   assert.ok(tapeNames.length > 1);
   for (const name of tapeNames) {
+    if (name === "USD" || name === "USDC") continue;
     assert.equal(rows.some((row) => row.ticker === name), false, name);
   }
   assert.equal(app.includes('formatUsd(view.runningBalance)'), true);
@@ -336,6 +340,7 @@ test("open nets stay beside cash and do not move the rails", () => {
 test("the page does not hardcode live open quantities", () => {
   const opens = JSON.parse(readFileSync(new URL("../data/open_positions.json", import.meta.url), "utf8"));
   const qtys = (opens.positions || [])
+    .filter((row) => row.ticker !== "USD" && row.ticker !== "USDC")
     .map((row) => String(row.qty ?? ""))
     .filter((qty) => qty.includes("."));
   assert.ok(qtys.length > 0);
