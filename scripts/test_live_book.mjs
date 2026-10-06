@@ -9,6 +9,7 @@ import {
   holdingRows,
   mergeLiveBook,
   openPositionRows,
+  reconciledPnl,
   SEEDS_USD,
   shownBooks,
   warehouseSleeveAsOf,
@@ -69,6 +70,16 @@ test("the published book is the holdings sum, and the rails stay on the signal b
   }
   assert.equal(books.some((book) => book.sleeve === "equities"), false);
   assert.equal(books.some((book) => book.sleeve === "combined"), false);
+  const pnl = reconciledPnl(live);
+  assert.equal(pnl.marked, books[0].runningBalance);
+  assert.equal(books[0].runningPnl, pnl.running);
+  assert.equal(books[0].unrealizedPnl, pnl.unrealized);
+  assert.equal(books[0].realizedPnl, pnl.realized);
+  assert.equal(Math.round((pnl.realized + pnl.unrealized) * 100) / 100, pnl.running);
+  assert.equal(pnl.running, Math.round((pnl.marked - SEEDS_USD.combined) * 100) / 100);
+  assert.notEqual(books[0].runningPnl, live.running_pnl_usd);
+  assert.notEqual(books[0].realizedPnl, live.realized_pnl_usd);
+  assert.ok(Math.abs(books[0].runningPnl - (books[0].runningBalance - SEEDS_USD.combined)) < 0.001);
 });
 
 test("equities is not rendered as its own book", () => {
@@ -211,25 +222,30 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(view.killHeadroom, 77.5);
   assert.notEqual(view.dayKill, -77.47);
   assert.notEqual(view.dayTarget, 19.37);
-  assert.equal(view.realizedPnl, withPnl.realized_pnl_usd);
-  assert.equal(view.unrealizedPnl, withPnl.unrealized_pnl_usd);
-  assert.equal(view.runningPnl, withPnl.running_pnl_usd);
+  const card = reconciledPnl(merged);
+  assert.equal(view.realizedPnl, card.realized);
+  assert.equal(view.unrealizedPnl, card.unrealized);
+  assert.equal(view.runningPnl, card.running);
+  assert.notEqual(view.realizedPnl, withPnl.realized_pnl_usd);
+  assert.notEqual(view.runningPnl, withPnl.running_pnl_usd);
   assert.notEqual(view.realizedPnl, null);
   assert.notEqual(view.runningPnl, null);
   const seedDollars = Math.round((SEEDS_USD.crypto * crypto.realized_pnl_frac + Number.EPSILON) * 100) / 100;
   assert.notEqual(view.realizedPnl, seedDollars);
   assert.notEqual(view.runningPnl, Math.round((SEEDS_USD.crypto * crypto.running_pnl_frac + Number.EPSILON) * 100) / 100);
-  assert.ok(Math.abs(view.realizedPnlFrac - withPnl.realized_pnl_usd / sum) < 1e-12);
+  assert.ok(Math.abs(view.realizedPnlFrac - card.realized / card.marked) < 1e-12);
   assert.notEqual(view.realizedPnlFrac, withPnl.realized_pnl_usd / SEEDS_USD.crypto);
   assert.notEqual(view.runningBalance, snap.runningBalance);
   assert.notEqual(view.realizedPnl, snap.realizedPnl);
-  assert.notEqual(view.unrealizedPnl, snap.unrealizedPnl);
   assert.notEqual(view.runningPnl, snap.runningPnl);
   assert.notEqual(view.realizedPnl, deriveSleeve(equities).realizedPnl);
   const published = JSON.stringify(live);
-  for (const key of ["realized_pnl_usd", "unrealized_pnl_usd", "running_pnl_usd"]) {
-    if (live[key] != null) assert.equal(cryptoBookView(live)[key === "realized_pnl_usd" ? "realizedPnl" : key === "running_pnl_usd" ? "runningPnl" : "unrealizedPnl"], live[key]);
-  }
+  const liveCard = cryptoBookView(live);
+  const livePnl = reconciledPnl(live);
+  assert.equal(liveCard.realizedPnl, livePnl.realized);
+  assert.equal(liveCard.unrealizedPnl, livePnl.unrealized);
+  assert.equal(liveCard.runningPnl, livePnl.running);
+  assert.notEqual(liveCard.runningPnl, live.running_pnl_usd);
   assert.equal(published.includes("\"realized_pnl_usd\": null"), false);
   assert.equal(published.includes("\"running_pnl_usd\": null"), false);
   const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
@@ -323,13 +339,18 @@ test("open nets stay beside cash and do not move the rails", () => {
     ["ZZ", "QQ", "USDC"]
   );
   assert.equal(view.bookUsd, sum);
-  assert.equal(view.runningPnl, live.running_pnl_usd ?? null);
+  const openCard = reconciledPnl(merged);
+  assert.equal(view.runningPnl, openCard.running);
+  assert.equal(view.unrealizedPnl, 7.5);
+  assert.equal(view.realizedPnl, openCard.realized);
+  assert.equal(Math.round((view.realizedPnl + view.unrealizedPnl) * 100) / 100, view.runningPnl);
+  assert.notEqual(view.runningPnl, live.running_pnl_usd ?? null);
   assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
   assert.equal(view.dayKill, -77.5);
   assert.equal(view.dayTarget, 19.38);
   assert.equal(view.equitiesUsd, 0);
   assert.notEqual(view.bookUsd, sum + 37.5);
-  assert.notEqual(view.unrealizedPnl, 7.5);
+  assert.equal(view.runningBalance, sum + 37.5);
   assert.deepEqual(
     holdingRows(merged).map((row) => row.ticker),
     ["USD", "USDC"]
