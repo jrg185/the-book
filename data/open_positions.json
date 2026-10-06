@@ -1,14 +1,23 @@
 {
-  "as_of": "2026-10-06T22:23:28Z",
+  "as_of": "2026-10-06T23:10:55Z",
   "positions": [
+    {
+      "sleeve": "crypto",
+      "ticker": "CRV",
+      "side": "long",
+      "qty": "274.61",
+      "avg": "0.36056",
+      "mark": "0.3612",
+      "unrealized_pnl_frac": 0.000586
+    },
     {
       "sleeve": "crypto",
       "ticker": "VVV",
       "side": "long",
       "qty": "3.643",
       "avg": "27.1587",
-      "mark": "27.2078",
-      "unrealized_pnl_frac": 0.000596
+      "mark": "27.1266",
+      "unrealized_pnl_frac": -0.00039
     },
     {
       "sleeve": "crypto",
@@ -16,8 +25,8 @@
       "side": "long",
       "qty": "403.5644",
       "avg": "0.24542",
-      "mark": "0.24512",
-      "unrealized_pnl_frac": -0.000404
+      "mark": "0.24617",
+      "unrealized_pnl_frac": 0.001009
     }
   ]
 }

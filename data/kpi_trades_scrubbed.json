@@ -1428,6 +1428,18 @@
     "fee_frac_of_book": 0.003133
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-06T22:48:58.830194+00:00",
+    "ticker": "CRV",
+    "side": "buy",
+    "notional_frac_of_book": 0.330067,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact acb6e65b CRV P=0.50; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.049793,
+    "running_balance_frac": 1.049793,
+    "fee_frac_of_book": 0.003133
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
