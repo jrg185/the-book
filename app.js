@@ -263,7 +263,7 @@ function renderLiveBook(view, trades) {
   panel.id = "card-panel-crypto";
   const grid = el("div", "metrics");
   const balance = metric("Running balance (book)", formatUsd(view.runningBalance), tone(view.runningBalance));
-  balance.append(el("p", "fine", "Combined snapshot. One crypto book."));
+  balance.append(el("p", "fine", "RH cash plus open lots."));
   grid.append(balance);
   grid.append(metric("Day P&L", formatUsd(view.dayPnl, { signed: true }), tone(view.dayPnl)));
   grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));

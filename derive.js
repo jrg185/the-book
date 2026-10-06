@@ -73,8 +73,9 @@ export function money(seed, frac) {
 // for the kill and the target, and is not copied onto book_usd.
 // Day P&L and kill headroom come from the signal when they are present.
 // A missing signal day leaves the day already on the file. Realized,
-// unrealized, running P&L, and running_balance_usd stay. They are the
-// combined snapshot dollars, not a signal field and not a seed fraction.
+// unrealized, running P&L, and running_balance_usd stay on the file. They are
+// snapshot dollars, not a signal field and not a seed fraction. The card
+// total is cash plus marked open lots, not that stored balance.
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
 // Open positions already on the account stay. A signal position list is not the book.
@@ -116,7 +117,8 @@ function roundCents(value) {
 
 // Account value is the sum of holdings that each carry their own value.
 // A missing value stays blank. Signal book_usd is not painted onto that row.
-// The card running balance is running_balance_usd, not this sum.
+// The card total adds marked open lots on top of this cash. It is not the
+// stored running_balance_usd and not the signal book.
 function accountValueUsd(rows) {
   if (!rows.length || rows.some((row) => row.valueUsd == null)) return null;
   return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
@@ -144,8 +146,10 @@ function accountUnrealizedUsd(book) {
 }
 
 // One crypto book. Equities are $0 and are not a second book.
-// book_usd stays the holdings sum. The card running balance is
-// running_balance_usd only. It is not that sum and not the signal book.
+// book_usd stays the holdings sum. The card running balance is RH cash
+// plus each marked open lot. It is not the stored running_balance_usd,
+// not that cash sum alone, and not the signal book. A book with no
+// position list still shows the stored running_balance_usd.
 // Day P&L is the signal dollar. The −10% kill and the +2.5% target stay on
 // signal_book_usd. They are not recomputed from the holdings sum. Realized,
 // unrealized, and running P&L are the dollar columns on this book. They are
@@ -174,6 +178,17 @@ export function warehouseSleeveAsOf(book, summary) {
   return null;
 }
 
+// RH Agentic total: USD and USDC holdings plus each marked crypto open lot.
+// USDC stays a cash line, so it is not added again from positions.
+// A missing value leaves the total unknown. No position list means this
+// book has not published lots, and the stored running balance still shows.
+function agenticBookUsd(book) {
+  if (!book || !Array.isArray(book.positions)) return null;
+  const rows = holdingRows(book).concat(openPositionRows(book).filter((row) => row.sleeve === "crypto"));
+  if (!rows.length || rows.some((row) => row.valueUsd == null)) return null;
+  return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
+}
+
 export function cryptoBookView(book, summary) {
   const account = accountValueUsd(holdingRows(book));
   const published = num(book?.book_usd);
@@ -184,7 +199,8 @@ export function cryptoBookView(book, summary) {
   if (bookUsd == null && rail == null) return null;
   const dayPnl = num(book?.day_pnl_usd);
   const killHeadroom = num(book?.kill_remaining_usd);
-  const runningBalance = num(pick(book, ["running_balance_usd", "running_balance"]));
+  const marked = agenticBookUsd(book);
+  const runningBalance = marked != null ? marked : num(pick(book, ["running_balance_usd", "running_balance"]));
   const realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
   if (unrealizedPnl == null) unrealizedPnl = accountUnrealizedUsd(book);
