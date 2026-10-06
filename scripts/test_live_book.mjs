@@ -26,15 +26,27 @@ function seededBalance(sleeve) {
   return Math.round((seed * row.running_balance_frac + Number.EPSILON) * 100) / 100;
 }
 
+function agenticTotal(book) {
+  const cash = holdingRows(book).reduce((sum, row) => sum + row.valueUsd, 0);
+  const lots = openPositionRows(book)
+    .filter((row) => row.sleeve === "crypto")
+    .reduce((sum, row) => sum + row.valueUsd, 0);
+  return Math.round((cash + lots + Number.EPSILON) * 100) / 100;
+}
+
 test("the published book is the holdings sum, and the rails stay on the signal book", () => {
   const books = shownBooks(live);
-  const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
+  const sum = Math.round((560.77 + 14.07 + Number.EPSILON) * 100) / 100;
   assert.equal(books.length, 1);
   assert.equal(books[0].sleeve, "crypto");
   assert.equal(live.book_usd, sum);
   assert.equal(books[0].bookUsd, sum);
   assert.equal(books[0].bookUsd, live.book_usd);
-  assert.equal(books[0].runningBalance, live.running_balance_usd ?? null);
+  assert.equal(books[0].runningBalance, agenticTotal(live));
+  assert.deepEqual(
+    live.positions.map((row) => row.ticker),
+    ["VVV", "WIF"]
+  );
   assert.notEqual(books[0].runningBalance, sum);
   assert.notEqual(books[0].runningBalance, live.signal_book_usd);
   assert.equal(books[0].equitiesUsd, 0);
@@ -74,7 +86,7 @@ test("open names are the live book holdings, not tape coins", () => {
   assert.deepEqual(
     rows.map((row) => [row.ticker, row.valueUsd]),
     [
-      ["USD", 760.64],
+      ["USD", 560.77],
       ["USDC", 14.07],
     ]
   );
@@ -161,12 +173,12 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   const merged = mergeLiveBook(withPnl, publicSignal);
   const view = cryptoBookView(merged);
   const rows = holdingRows(merged);
-  const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
+  const sum = Math.round((560.77 + 14.07 + Number.EPSILON) * 100) / 100;
   assert.equal(merged.candidates, undefined);
   assert.deepEqual(
     rows.map((row) => [row.ticker, row.valueUsd]),
     [
-      ["USD", 760.64],
+      ["USD", 560.77],
       ["USDC", 14.07],
     ]
   );
@@ -187,7 +199,8 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(merged.running_balance_usd, 775);
   assert.equal(merged.candidates, undefined);
   assert.equal(view.bookUsd, sum);
-  assert.equal(view.runningBalance, withPnl.running_balance_usd);
+  assert.equal(view.runningBalance, agenticTotal(merged));
+  assert.notEqual(view.runningBalance, withPnl.running_balance_usd);
   assert.notEqual(view.runningBalance, sum);
   assert.notEqual(view.runningBalance, 775);
   assert.notEqual(view.bookUsd, 775);
@@ -300,7 +313,7 @@ test("open nets stay beside cash and do not move the rails", () => {
     holdings: [{ ticker: "USDC", sleeve: "crypto", value_usd: 775 }],
   });
   const view = cryptoBookView(merged);
-  const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
+  const sum = Math.round((560.77 + 14.07 + Number.EPSILON) * 100) / 100;
   assert.equal(merged.book_usd, sum);
   assert.equal(merged.kill_remaining_usd, 77.5);
   assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
@@ -324,7 +337,7 @@ test("open nets stay beside cash and do not move the rails", () => {
   assert.deepEqual(
     cardPositionRows(merged).map((row) => [row.ticker, row.qty, row.valueUsd, row.runningPnl]),
     [
-      ["USD", null, 760.64, null],
+      ["USD", null, 560.77, null],
       ["USDC", null, 14.07, null],
       ["ZZ", 3, 37.5, 9.5],
     ]
@@ -353,7 +366,7 @@ test("the page does not hardcode live open quantities", () => {
 
 test("the page does not hardcode the holdings sum in place of the writer", () => {
   const view = cryptoBookView(live);
-  const sum = Math.round((760.64 + 14.07 + Number.EPSILON) * 100) / 100;
+  const sum = Math.round((560.77 + 14.07 + Number.EPSILON) * 100) / 100;
   assert.equal(view.bookUsd, live.book_usd);
   assert.equal(view.bookUsd, sum);
   for (const file of ["derive.js", "app.js", "index.html"]) {
@@ -361,7 +374,7 @@ test("the page does not hardcode the holdings sum in place of the writer", () =>
     assert.equal(text.includes("774.71"), false, file);
   }
   const published = readFileSync(new URL("../data/live_book.json", import.meta.url), "utf8");
-  assert.equal(published.includes("774.71"), true);
+  assert.equal(published.includes("574.84"), true);
   assert.equal(deriveSourceHasSeedRebuild(published), false);
   for (const banned of ["789.60", "-1.17", "-9.23", "-10.40"]) {
     for (const file of ["derive.js", "app.js", "index.html"]) {
