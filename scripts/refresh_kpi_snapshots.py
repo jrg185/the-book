@@ -297,13 +297,160 @@ def mark_for(sleeve: str, ticker: str, env: dict[str, str]) -> tuple[Decimal, st
     raise RefreshError(f"{sleeve} {ticker}: no mark ({detail})")
 
 
-def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
-    """Replay buys and sells. Realized is pnl_trade_usd on closes only.
+def _order_id(fill: dict) -> str:
+    return str(fill.get("order_id") or "").strip()
 
-    Sleeve realized is the sum of those close dollars. Each open position
-    also keeps that ticker's own close dollars, including closes from before
-    a later reopen. Opening fills do not add realized.
+
+def _has_fraction(value) -> bool:
+    return bool(re.search(r"\d\.\d", str(value or "")))
+
+
+def _same_qty(left: Decimal | None, right: Decimal | None) -> bool:
+    if left is None or right is None:
+        return False
+    return abs(left - right) <= DUST
+
+
+def _same_price(left: Decimal | None, right: Decimal | None) -> bool:
+    if left is None and right is None:
+        return True
+    if left is None or right is None:
+        return False
+    diff = abs(left - right)
+    if diff <= DUST:
+        return True
+    scale = max(abs(left), abs(right))
+    return scale > 0 and diff / scale <= Decimal("0.000001")
+
+
+def _prefer_fill(left: dict, right: dict) -> dict:
+    """Keep one copy. The sub-second timestamp is the later, fuller ingest."""
+    left_frac = _has_fraction(left.get("timestamp_et"))
+    right_frac = _has_fraction(right.get("timestamp_et"))
+    if left_frac and not right_frac:
+        primary, secondary = left, right
+    elif right_frac and not left_frac:
+        primary, secondary = right, left
+    else:
+        left_pnl = dec(left.get("pnl_trade_usd")) or Decimal("0")
+        right_pnl = dec(right.get("pnl_trade_usd")) or Decimal("0")
+        if right_pnl != 0 and left_pnl == 0:
+            primary, secondary = right, left
+        elif _order_id(right) and not _order_id(left):
+            primary, secondary = right, left
+        else:
+            primary, secondary = left, right
+    row = dict(primary)
+    if not _order_id(row) and _order_id(secondary):
+        row["order_id"] = secondary.get("order_id")
+    kept_pnl = dec(row.get("pnl_trade_usd")) or Decimal("0")
+    other_pnl = dec(secondary.get("pnl_trade_usd")) or Decimal("0")
+    if kept_pnl == 0 and other_pnl != 0:
+        row["pnl_trade_usd"] = secondary.get("pnl_trade_usd")
+    return row
+
+
+def _bucket_key(fill: dict):
+    sleeve = str(fill.get("sleeve") or "").strip().lower()
+    ticker = str(fill.get("ticker") or "").strip().upper()
+    side = str(fill.get("side") or "").strip().lower()
+    qty = dec(fill.get("qty"))
+    price = dec(fill.get("avg_price"))
+    if qty is None or not sleeve or not ticker or side not in {"buy", "sell"}:
+        return None
+    try:
+        moment = parse_ts(fill["timestamp_et"]).replace(microsecond=0)
+    except (KeyError, TypeError, ValueError):
+        return None
+    quantum = Decimal("0.00000001")
+    price_key = "" if price is None else format(price.quantize(quantum), "f")
+    return (sleeve, ticker, side, format(qty.quantize(quantum), "f"), price_key, moment.isoformat())
+
+
+def collapse_duplicate_fills(fills: list[dict]) -> tuple[list[dict], int]:
+    """Drop a second copy of the same fill before the net is replayed.
+
+    Two warehouse shapes count as one fill:
+
+    - the same non-empty order_id
+    - one timestamp at a whole second and another in that same second with a
+      fraction, with the same sleeve, ticker, side, qty, and price
+
+    A later exit then closes the name. Two different fills that both carry a
+    fractional timestamp stay, including two buys of the same size 30 seconds
+    apart. This does not delete kpi_trades.
     """
+    rows = [fill for fill in fills if isinstance(fill, dict)]
+    dropped = 0
+    by_order: dict[str, int] = {}
+    stage: list[dict] = []
+    for fill in rows:
+        oid = _order_id(fill)
+        if oid and oid in by_order:
+            index = by_order[oid]
+            stage[index] = _prefer_fill(stage[index], fill)
+            dropped += 1
+            continue
+        if oid:
+            by_order[oid] = len(stage)
+        stage.append(fill)
+
+    chosen = [True] * len(stage)
+    buckets: dict[tuple, list[int]] = {}
+    for index, fill in enumerate(stage):
+        key = _bucket_key(fill)
+        if key is None:
+            continue
+        mates = buckets.setdefault(key, [])
+        fractional = _has_fraction(fill.get("timestamp_et"))
+        partner = None
+        for other in mates:
+            if not chosen[other]:
+                continue
+            other_fractional = _has_fraction(stage[other].get("timestamp_et"))
+            if fractional == other_fractional:
+                continue
+            if not _same_qty(dec(fill.get("qty")), dec(stage[other].get("qty"))):
+                continue
+            if not _same_price(dec(fill.get("avg_price")), dec(stage[other].get("avg_price"))):
+                continue
+            partner = other
+            break
+        if partner is None:
+            mates.append(index)
+            continue
+        if fractional:
+            stage[index] = _prefer_fill(fill, stage[partner])
+            chosen[partner] = False
+            mates.append(index)
+        else:
+            stage[partner] = _prefer_fill(stage[partner], fill)
+            chosen[index] = False
+        dropped += 1
+    return [fill for fill, keep in zip(stage, chosen) if keep], dropped
+
+
+def open_lots_note(collapsed: int, hidden: list[str], open_names: list[str]) -> str:
+    bits = []
+    if collapsed:
+        bits.append(
+            f"Collapsed {collapsed} duplicate kpi_trades rows "
+            "(same broker order, or a whole-second copy of the same qty and price)."
+        )
+    if hidden:
+        bits.append("Duplicate opens had hidden these exits: " + ", ".join(hidden) + ".")
+    if open_names:
+        bits.append(
+            "Still open in kpi_trades: "
+            + ", ".join(open_names)
+            + ". A name Robinhood has already sold is a missing exit in kpi_trades."
+        )
+    else:
+        bits.append("No open lots in kpi_trades.")
+    return " ".join(bits)
+
+
+def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
     realized = {sleeve: Decimal("0") for sleeve in TRADE_SLEEVES}
     realized_by_ticker: dict[tuple[str, str], Decimal] = {}
     book: dict[tuple[str, str], dict] = {}
@@ -358,6 +505,35 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
     for key, pos in open_book.items():
         pos["realized"] = realized_by_ticker.get(key, Decimal("0"))
     return realized, open_book
+
+
+def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
+    """Replay buys and sells. Realized is pnl_trade_usd on closes only.
+
+    Sleeve realized is the sum of those close dollars. Each open position
+    also keeps that ticker's own close dollars, including closes from before
+    a later reopen. Opening fills do not add realized.
+
+    Duplicate fills are collapsed first. Replaying both copies leaves the
+    later exit covering only one of them, so a closed name stays on the book.
+    """
+    collapsed, dropped = collapse_duplicate_fills(fills)
+    raw_keys: set[tuple[str, str]] = set()
+    if dropped:
+        try:
+            _raw_realized, raw_book = _replay_fills(fills)
+            raw_keys = set(raw_book)
+        except RefreshError:
+            raw_keys = set()
+    realized, book = _replay_fills(collapsed)
+    hidden = sorted(raw_keys - set(book))
+    apply_books.duplicates_collapsed = dropped
+    apply_books.exits_hidden_by_duplicates = [f"{sleeve} {ticker}" for sleeve, ticker in hidden]
+    return realized, book
+
+
+apply_books.duplicates_collapsed = 0
+apply_books.exits_hidden_by_duplicates = []
 
 
 def note_for(sleeve: str, realized: Decimal, unrealized: Decimal) -> str:
@@ -505,7 +681,7 @@ def fetch_trades_rest(base_url: str, key: str) -> list[dict]:
     for offset in range(0, page * 20, page):
         path = (
             "/rest/v1/kpi_trades"
-            "?select=sleeve,ticker,side,qty,avg_price,pnl_trade_usd,timestamp_et"
+            "?select=sleeve,ticker,side,qty,avg_price,pnl_trade_usd,timestamp_et,order_id"
             "&order=timestamp_et.asc"
             f"&limit={page}&offset={offset}"
         )
@@ -602,7 +778,7 @@ def db_error(exc, secrets: list[str]) -> RefreshError:
 
 def fetch_trades_db(db_url: str, secrets: list[str]) -> list[dict]:
     sql = """
-        select sleeve, ticker, side, qty, avg_price, pnl_trade_usd, timestamp_et
+        select sleeve, ticker, side, qty, avg_price, pnl_trade_usd, timestamp_et, order_id
         from public.kpi_trades
         order by timestamp_et asc
     """
@@ -776,6 +952,12 @@ def refresh(dry_run: bool) -> int:
     marks = {key: price for key, (price, _source) in quotes.items()}
     as_of = iso_z(dt.datetime.now(dt.timezone.utc))
     rows, opens = build_rows(trades, marks, priors, as_of)
+    collapsed = int(getattr(apply_books, "duplicates_collapsed", 0) or 0)
+    hidden = list(getattr(apply_books, "exits_hidden_by_duplicates", []) or [])
+    open_names = [f"{item['sleeve']} {item['ticker']} {item['qty']}" for item in opens]
+    print(open_lots_note(collapsed, hidden, [f"{item['sleeve']} {item['ticker']}" for item in opens]))
+    if open_names:
+        print("open lots: " + ", ".join(open_names))
     for item in opens:
         item["source"] = quotes[(item["sleeve"], item["ticker"])][1]
     plan = {
@@ -978,6 +1160,158 @@ def self_test() -> int:
         raise RefreshError(f"short unrealized {by_short['equities']['unrealized_pnl_usd']}")
     if by_short["equities"]["realized_pnl_usd"] != "0.000000":
         raise RefreshError("opening sell must not count pnl")
+    duplicated = [
+        {
+            "sleeve": "crypto",
+            "ticker": "AVAX",
+            "side": "buy",
+            "qty": "2.005",
+            "avg_price": "11.1328",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-27T07:50:18Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "AVAX",
+            "side": "buy",
+            "qty": "2.005",
+            "avg_price": "11.1328",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-27T07:50:18.526927Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "AVAX",
+            "side": "sell",
+            "qty": "2.005",
+            "avg_price": "11.2",
+            "pnl_trade_usd": "1",
+            "timestamp_et": "2026-10-01T01:50:15.242024Z",
+        },
+    ]
+    dup_rows, dup_opens = build_rows(duplicated, {}, {}, "2026-10-06T00:00:00Z")
+    if dup_opens:
+        raise RefreshError(f"duplicate open survived the exit: {dup_opens}")
+    if dup_rows[0]["realized_pnl_usd"] != "1.000000":
+        raise RefreshError(f"duplicate close double-counted pnl: {dup_rows[0]['realized_pnl_usd']}")
+    if apply_books.duplicates_collapsed != 1:
+        raise RefreshError(f"duplicate collapse count {apply_books.duplicates_collapsed}")
+    if apply_books.exits_hidden_by_duplicates != ["crypto AVAX"]:
+        raise RefreshError(f"hidden exits {apply_books.exits_hidden_by_duplicates}")
+    paired = [
+        {
+            "sleeve": "crypto",
+            "ticker": "W",
+            "side": "buy",
+            "qty": "3",
+            "avg_price": "1",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-26T16:36:50Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "W",
+            "side": "buy",
+            "qty": "3",
+            "avg_price": "1",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-26T16:36:50.714048Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "W",
+            "side": "sell",
+            "qty": "3",
+            "avg_price": "2",
+            "pnl_trade_usd": "1",
+            "timestamp_et": "2026-09-26T18:22:05Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "W",
+            "side": "sell",
+            "qty": "3",
+            "avg_price": "2",
+            "pnl_trade_usd": "3",
+            "timestamp_et": "2026-09-26T18:22:05.677327Z",
+        },
+    ]
+    pair_rows, pair_opens = build_rows(paired, {}, {}, "2026-10-06T00:00:00Z")
+    if pair_opens or pair_rows[0]["realized_pnl_usd"] != "3.000000":
+        raise RefreshError(f"paired duplicate sell {pair_rows[0]['realized_pnl_usd']} {pair_opens}")
+    if apply_books.duplicates_collapsed != 2:
+        raise RefreshError("paired fills were not both collapsed")
+    distinct = [
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "1",
+            "avg_price": "2",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-26T20:48:07.153603Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "1",
+            "avg_price": "2",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-09-26T20:48:37.025431Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "sell",
+            "qty": "1",
+            "avg_price": "3",
+            "pnl_trade_usd": "1",
+            "timestamp_et": "2026-09-26T20:49:44.595697Z",
+        },
+    ]
+    _distinct_rows, distinct_opens = build_rows(
+        distinct,
+        {("crypto", "QNT"): Decimal("3")},
+        {},
+        "2026-10-06T00:00:00Z",
+    )
+    if len(distinct_opens) != 1 or distinct_opens[0]["qty"] != "1":
+        raise RefreshError(f"two real buys were collapsed: {distinct_opens}")
+    if apply_books.duplicates_collapsed != 0:
+        raise RefreshError("distinct fills were marked duplicate")
+    same_order = [
+        {
+            "sleeve": "crypto",
+            "ticker": "ZZZ",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "0.245",
+            "pnl_trade_usd": "0",
+            "order_id": "6ab90000-0000-4000-8000-0000000000aa",
+            "timestamp_et": "2026-10-06T19:41:50Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "ZZZ",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "0.245",
+            "pnl_trade_usd": "0",
+            "order_id": "6ab90000-0000-4000-8000-0000000000aa",
+            "timestamp_et": "2026-10-06T19:46:50.169016Z",
+        },
+    ]
+    _order_rows, order_opens = build_rows(
+        same_order,
+        {("crypto", "ZZZ"): Decimal("0.25")},
+        {},
+        "2026-10-06T00:00:00Z",
+    )
+    if len(order_opens) != 1 or order_opens[0]["qty"] != "4":
+        raise RefreshError(f"same order_id was replayed twice: {order_opens}")
+    if apply_books.duplicates_collapsed != 1:
+        raise RefreshError("same order_id was not one fill")
     message = rest_error(
         "POST",
         "/rest/v1/kpi_sleeve_snapshots",
