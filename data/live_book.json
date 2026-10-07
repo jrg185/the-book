@@ -1,24 +1,24 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-07T19:09:54+00:00",
+  "sleeve_as_of": "2026-10-07T19:13:41+00:00",
   "book_usd": 72.3,
   "signal_book_usd": 775.0,
   "day_pnl_usd": 0.0,
-  "running_balance_usd": 809.42,
+  "running_balance_usd": 809.85,
   "realized_pnl_usd": -0.13,
-  "unrealized_pnl_usd": 9.55,
-  "running_pnl_usd": 9.42,
+  "unrealized_pnl_usd": 9.98,
+  "running_pnl_usd": 9.85,
   "positions": [
     {
       "sleeve": "crypto",
       "ticker": "AERO",
       "qty": "125.77",
-      "mark": "0.79217",
-      "value_usd": 99.63,
+      "mark": "0.79303",
+      "value_usd": 99.74,
       "avg_cost": "0.77972",
-      "unrealized_pnl_usd": 1.57,
-      "running_pnl_usd": 1.57
+      "unrealized_pnl_usd": 1.67,
+      "running_pnl_usd": 1.67
     },
     {
       "sleeve": "crypto",
@@ -54,31 +54,31 @@
       "sleeve": "crypto",
       "ticker": "FET",
       "qty": "431.4",
-      "mark": "0.22784",
-      "value_usd": 98.29,
+      "mark": "0.22842",
+      "value_usd": 98.54,
       "avg_cost": "0.22943856",
-      "unrealized_pnl_usd": -0.69,
-      "running_pnl_usd": -0.69
+      "unrealized_pnl_usd": -0.44,
+      "running_pnl_usd": -0.44
     },
     {
       "sleeve": "crypto",
       "ticker": "QNT",
       "qty": "0.2046",
-      "mark": "252.54",
-      "value_usd": 51.67,
+      "mark": "252.39",
+      "value_usd": 51.64,
       "avg_cost": "239.572",
-      "unrealized_pnl_usd": 2.65,
-      "running_pnl_usd": 38.16
+      "unrealized_pnl_usd": 2.62,
+      "running_pnl_usd": 38.13
     },
     {
       "sleeve": "crypto",
       "ticker": "RENDER",
       "qty": "49.396",
-      "mark": "2.0423",
-      "value_usd": 100.88,
+      "mark": "2.0462",
+      "value_usd": 101.07,
       "avg_cost": "2.00277123",
-      "unrealized_pnl_usd": 1.95,
-      "running_pnl_usd": 0.31
+      "unrealized_pnl_usd": 2.15,
+      "running_pnl_usd": 0.5
     },
     {
       "sleeve": "crypto",
