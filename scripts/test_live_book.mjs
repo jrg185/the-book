@@ -64,7 +64,9 @@ test("the published book is the holdings sum, and the rails stay on the signal b
   assert.equal(books[0].bookUsd, live.book_usd);
   assert.equal(books[0].runningBalance, agenticTotal(live));
   const openLots = openPositionRows(live);
-  assert.ok(openLots.some((row) => row.sleeve === "crypto"));
+  const cryptoOpen = openLots.some((row) => row.sleeve === "crypto");
+  // A flat book has no open lot. A book that still holds must include crypto.
+  if (openLots.length > 0) assert.ok(cryptoOpen);
   assert.deepEqual(tickers(live.positions), tickers(openLots));
   assert.deepEqual(tickers(openLots), tickers(openPositions.positions));
   assert.equal(live.positions.length, openLots.length);
@@ -74,7 +76,8 @@ test("the published book is the holdings sum, and the rails stay on the signal b
     const name = String(row.ticker || "").trim().toUpperCase();
     assert.ok(name !== "USD" && name !== "USDC");
   }
-  assert.notEqual(books[0].runningBalance, sum);
+  // Open lots sit on top of cash. With none, the agentic total is the cash sum.
+  if (cryptoOpen) assert.notEqual(books[0].runningBalance, sum);
   assert.notEqual(books[0].runningBalance, live.signal_book_usd);
   assert.equal(books[0].equitiesUsd, 0);
   assert.equal(live.signal_book_usd, 775);
@@ -232,7 +235,9 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(view.bookUsd, sum);
   assert.equal(view.runningBalance, agenticTotal(merged));
   assert.notEqual(view.runningBalance, withPnl.running_balance_usd);
-  assert.notEqual(view.runningBalance, sum);
+  if (openPositionRows(merged).some((row) => row.sleeve === "crypto")) {
+    assert.notEqual(view.runningBalance, sum);
+  }
   assert.notEqual(view.runningBalance, 775);
   assert.notEqual(view.bookUsd, 775);
   assert.notEqual(view.bookUsd, publicSignal.book_usd);
@@ -391,11 +396,10 @@ test("open nets stay beside cash and do not move the rails", () => {
 
 test("the page does not hardcode live open quantities", () => {
   const opens = JSON.parse(readFileSync(new URL("../data/open_positions.json", import.meta.url), "utf8"));
-  const qtys = (opens.positions || [])
-    .filter((row) => row.ticker !== "USD" && row.ticker !== "USDC")
-    .map((row) => String(row.qty ?? ""))
-    .filter((qty) => qty.includes("."));
-  assert.ok(qtys.length > 0);
+  const named = (opens.positions || []).filter((row) => row.ticker !== "USD" && row.ticker !== "USDC");
+  const qtys = named.map((row) => String(row.qty ?? "")).filter((qty) => qty.includes("."));
+  // No live decimal qty to guard when the book is flat.
+  if (named.length > 0) assert.ok(qtys.length > 0);
   const files = ["app.js", "derive.js", "index.html", "scripts/test_live_book.mjs"];
   for (const file of files) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
