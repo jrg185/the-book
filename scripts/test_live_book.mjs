@@ -7,6 +7,7 @@ import {
   cryptoBookView,
   deriveSleeve,
   holdingRows,
+  killRemainingUsd,
   LIVE_RAILS,
   mergeLiveBook,
   openPositionRows,
@@ -77,13 +78,8 @@ function assertLiveRails(view, book) {
       assert.notEqual(view.dayTarget, signalTarget);
     }
   }
-  const stored = book.kill_remaining_usd;
-  if (stored != null && signal != null && signal !== 0) {
-    const headroom = railDollars(base, stored / signal);
-    assert.equal(view.killHeadroom, headroom);
-    assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / base) < 1e-12);
-    if (headroom !== stored) assert.notEqual(view.killHeadroom, stored);
-  }
+  assert.equal(view.killHeadroom, killRemainingUsd(base, book.day_pnl_usd));
+  assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / base) < 1e-12);
 }
 
 test("rails that round to the same cents still follow the running balance", () => {
@@ -238,7 +234,8 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(oldView.realizedPnl, null);
   assert.notEqual(oldView.runningPnl, null);
   assert.equal(oldView.equitiesUsd, 0);
-  assert.equal(mergedOld.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.equal(mergedOld.day_pnl_usd, old.day_pnl_usd);
+  assert.notEqual(mergedOld.day_pnl_usd, publicSignal.day_pnl_usd);
   const keptDay = mergeLiveBook(old, { book_usd: 775, kill_remaining_usd: 77.5 });
   assert.equal(keptDay.day_pnl_usd, old.day_pnl_usd);
   assert.equal(keptDay.realized_pnl_usd, old.realized_pnl_usd);
@@ -270,8 +267,8 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(merged.book_usd, sum);
   assert.equal(merged.signal_book_usd, 775);
   assert.notEqual(merged.book_usd, publicSignal.book_usd);
-  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
-  assert.notEqual(merged.day_pnl_usd, withPnl.day_pnl_usd);
+  assert.equal(merged.day_pnl_usd, withPnl.day_pnl_usd);
+  assert.notEqual(merged.day_pnl_usd, publicSignal.day_pnl_usd);
   assert.equal(merged.kill_remaining_usd, 77.5);
   assert.equal(merged.realized_pnl_usd, withPnl.realized_pnl_usd);
   assert.equal(merged.unrealized_pnl_usd, withPnl.unrealized_pnl_usd);
@@ -289,7 +286,7 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(view.runningBalance, 775);
   assert.notEqual(view.bookUsd, 775);
   assert.notEqual(view.bookUsd, publicSignal.book_usd);
-  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
+  assert.equal(view.dayPnl, withPnl.day_pnl_usd);
   assertLiveRails(view, merged);
   const card = reconciledPnl(merged);
   assert.equal(view.realizedPnl, card.realized);
@@ -396,6 +393,7 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
     assert.equal(typeof drop.as_of, "string");
     assert.equal(Number.isNaN(Date.parse(drop.as_of)), false);
   }
+  assert.equal(Object.hasOwn(drop, "day_realized_usd"), false);
   const applied = {
     ...live,
     holdings: (live.holdings || []).map((row) => {
@@ -425,6 +423,13 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   assert.equal(main.includes("Export KPI expected live Robinhood cash"), false);
   assert.equal(main.includes("cash=cash"), true);
   assert.equal(exporter.includes(String(drop.USD)), false);
+  assert.equal(exporter.includes("day_realized_usd"), true);
+  assert.equal(exporter.includes("day_realized_gross_usd"), true);
+  assert.equal(exporter.includes("day_sell_fees_usd"), true);
+  assert.equal(exporter.includes("differs from day_realized_usd"), true);
+  const killSrc = exporter.split("def kill_remaining_usd")[1].split("\ndef ")[0];
+  assert.equal(killSrc.includes("0.10"), false);
+  assert.equal(killSrc.includes("0.1"), false);
   for (const file of ["derive.js", "app.js", "index.html"]) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
     assert.equal(text.includes(String(drop.USD)), false, file);
@@ -465,8 +470,8 @@ test("open nets stay beside cash and the rails follow the running balance", () =
   const view = cryptoBookView(merged);
   const sum = holdingsSum(live);
   assert.equal(merged.book_usd, sum);
-  assert.equal(merged.kill_remaining_usd, 77.5);
-  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.equal(merged.kill_remaining_usd, live.kill_remaining_usd);
+  assert.equal(merged.day_pnl_usd, live.day_pnl_usd);
   assert.equal(merged.signal_book_usd, 775);
   assert.deepEqual(
     merged.positions.map((row) => row.ticker),
@@ -479,7 +484,7 @@ test("open nets stay beside cash and the rails follow the running balance", () =
   assert.equal(view.realizedPnl, openCard.realized);
   assert.equal(Math.round((view.realizedPnl + view.unrealizedPnl) * 100) / 100, view.runningPnl);
   assert.notEqual(view.runningPnl, live.running_pnl_usd ?? null);
-  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
+  assert.equal(view.dayPnl, live.day_pnl_usd);
   assertLiveRails(view, merged);
   assert.equal(view.runningBalance, sum + 37.5);
   assert.notEqual(view.dayKill, railDollars(sum, LIVE_RAILS.dayKillFrac));
@@ -503,6 +508,56 @@ test("open nets stay beside cash and the rails follow the running balance", () =
   assert.equal(shownBooks(merged).length, 1);
   assert.equal(app.includes("cardPositionRows"), true);
   assert.equal(app.includes("open_positions.json"), false);
+});
+
+test("running balance is cash plus lots, and kill headroom follows the day rail", () => {
+  const book = {
+    book_usd: 30,
+    signal_book_usd: 1000,
+    day_pnl_usd: -5,
+    kill_remaining_usd: 100,
+    running_balance_usd: 9999,
+    running_pnl_usd: 1,
+    holdings: [
+      { ticker: "USD", sleeve: "crypto", value_usd: 20 },
+      { ticker: "USDC", sleeve: "crypto", value_usd: 10, cost_basis_usd: 10 },
+    ],
+    positions: [{ sleeve: "crypto", ticker: "ZZ", qty: "4", value_usd: 170, unrealized_pnl_usd: 8 }],
+  };
+  const view = cryptoBookView(book);
+  assert.equal(view.bookUsd, 30);
+  assert.equal(view.runningBalance, 200);
+  assert.notEqual(view.runningBalance, book.running_balance_usd);
+  assert.notEqual(view.bookUsd, view.runningBalance);
+  const budget = railDollars(200, Math.abs(LIVE_RAILS.dayKillFrac));
+  assert.equal(view.killHeadroom, killRemainingUsd(200, -5));
+  assert.equal(view.killHeadroom, railDollars(1, budget - 5));
+  assert.notEqual(view.killHeadroom, railDollars(200, book.kill_remaining_usd / book.signal_book_usd));
+  assert.equal(view.runningPnl, railDollars(1, 200 - SEEDS_USD.combined));
+  assert.equal(view.dayPnl, -5);
+
+  const profit = cryptoBookView({ ...book, day_pnl_usd: 6 });
+  assert.equal(profit.killHeadroom, killRemainingUsd(200, 6));
+  assert.equal(profit.killHeadroom, killRemainingUsd(200, 0));
+  assert.equal(profit.dayPnl, 6);
+
+  const stopped = cryptoBookView({ ...book, day_pnl_usd: -80 });
+  assert.equal(stopped.killHeadroom, 0);
+
+  const kept = mergeLiveBook(book, { ...publicSignal, day_pnl_usd: 9, kill_remaining_usd: 3 });
+  assert.equal(kept.day_pnl_usd, -5);
+  assert.equal(kept.kill_remaining_usd, 100);
+  assert.equal(kept.book_usd, 30);
+  assert.equal(kept.signal_book_usd, publicSignal.book_usd);
+
+  const blank = mergeLiveBook(
+    { holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: 12 }], book_usd: 12 },
+    { book_usd: 40, day_pnl_usd: 1.25, kill_remaining_usd: 4 }
+  );
+  assert.equal(blank.day_pnl_usd, 1.25);
+  assert.equal(blank.kill_remaining_usd, 4);
+  assert.equal(blank.book_usd, 12);
+  assert.equal(blank.signal_book_usd, 40);
 });
 
 test("the page does not hardcode live open quantities", () => {
@@ -558,12 +613,12 @@ test("the book card clock is the warehouse sleeve as_of, not the signal generate
   );
   assert.equal(merged.generated_at, "2026-10-04T20:41:10Z");
   assert.equal(merged.sleeve_as_of, warehouseTime);
-  assert.equal(merged.day_pnl_usd, publicSignal.day_pnl_usd);
+  assert.equal(merged.day_pnl_usd, live.day_pnl_usd);
   const view = cryptoBookView(merged);
   assert.equal(view.asOf, warehouseTime);
   assert.notEqual(view.asOf, merged.generated_at);
   assert.equal(view.signalGeneratedAt, merged.generated_at);
-  assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
+  assert.equal(view.dayPnl, live.day_pnl_usd);
 
   const unstamped = {
     book_usd: 100,

@@ -174,9 +174,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # book_usd is the sum of holding values. The signal book stays on signal_book_usd.
           # This commit publishes that file. It does not copy the signal book onto book_usd.
-          # Running balance, realized, unrealized, and running P&L stay on the file from the combined snapshot.
+          # When holdings and positions are present, running_balance_usd is that cash plus open lots
+          # and running_pnl_usd is that total minus the combined seed. Those two are not the warehouse row.
           # sleeve_as_of is that snapshot as_of. generated_at stays the signal file time and is not the MTM clock.
-          # Day P&L stays the signal day_pnl_usd. A snapshot with no day column does not clear it.
+          # Day P&L is day_realized_usd from data/rh_cash.json when the drop has it. A missing day leaves the signal day.
           # Open positions on that file are net qty from kpi_trades with the snapshot mark.
           # USD and USDC holdings are Robinhood cash: REST when RH keys are set, otherwise data/rh_cash.json.
           # Unset RH keys skip REST and do not fail this step. Live balances are not hardcoded here.
