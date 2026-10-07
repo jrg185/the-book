@@ -1440,6 +1440,18 @@
     "fee_frac_of_book": 0.003133
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T00:56:17.375272+00:00",
+    "ticker": "WIF",
+    "side": "sell",
+    "notional_frac_of_book": 0.329167,
+    "pnl_frac_of_book": -0.000955,
+    "why": "Artifact 4b689588 (ml, generated 2026-10-07T00:37:31Z) flipped WIF to sell, P(up 8h)=0.38; standing rule artifact sell forces full exit.",
+    "running_pnl_frac": 0.048838,
+    "running_balance_frac": 1.048838,
+    "fee_frac_of_book": 0.003133
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
