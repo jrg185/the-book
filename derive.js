@@ -1,6 +1,7 @@
 // Tape fill dollars are still a scrubbed fraction times SEEDS_USD.
-// The published book is the sum of the holdings on data/live_book.json.
-// Day kill and day target are fractions of the card running balance.
+// book_usd on data/live_book.json is the cash holdings sum.
+// running_balance_usd is the agentic total: that cash plus each marked open lot.
+// Day kill and day target are fractions of that running balance.
 // signal_book_usd is stored beside the account and is not that rail.
 // This file never talks to Supabase.
 
@@ -69,15 +70,28 @@ export function money(seed, frac) {
   return Math.round((seed * frac + Number.EPSILON) * 100) / 100;
 }
 
+// Headroom inside the day-kill rail. dayKillFrac is the signed LIVE_RAILS
+// fraction. The budget is that fraction's magnitude times the running balance.
+// A negative day P&L spends the budget. A positive day does not add to it.
+// The result is never below zero. Export writes the same dollars from the
+// same LIVE_RAILS fraction. There is no second copy of the fraction here.
+export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAILS.dayKillFrac) {
+  const balance = num(runningBalance);
+  const frac = num(dayKillFrac);
+  if (balance == null || frac == null) return null;
+  const day = num(dayPnl);
+  const spent = day == null ? 0 : Math.min(day, 0);
+  return Math.max(0, money(1, Math.abs(frac) * balance + spent));
+}
+
 // Keep the committed account holdings, including each value and cost basis.
 // book_usd is the sum of those values. The signal book is stored beside it
 // and is not copied onto book_usd. It is not the day-kill rail.
-// Day P&L and kill headroom come from the signal when they are present.
-// A missing signal day leaves the day already on the file. Realized,
-// unrealized, running P&L, and running_balance_usd stay on the file. They are
-// snapshot dollars, not a signal field and not a seed fraction. The card
-// total is cash plus marked open lots. Its P&L is that total minus the
-// $800 combined seed, not the stored snapshot P&L.
+// A day P&L or kill headroom already on the file stays. Export writes those
+// from the cash drop and the running-balance rail. A blank day still takes
+// the signal figure. Realized, unrealized, running P&L, and
+// running_balance_usd stay on the file. The card total is cash plus marked
+// open lots. Its P&L is that total minus the combined seed.
 // Candidates are scores, not broker holdings, so they are never copied in.
 // A signal holding list is not the account. It cannot replace cash and USDC.
 // Open positions already on the account stay. A signal position list is not the book.
@@ -95,9 +109,9 @@ export function mergeLiveBook(committed, signal) {
     if (signalBook != null) next.signal_book_usd = signalBook;
     if (live.generated_at) next.generated_at = live.generated_at;
     const day = num(live.day_pnl_usd);
-    if (day != null) next.day_pnl_usd = day;
+    if (day != null && num(next.day_pnl_usd) == null) next.day_pnl_usd = day;
     const kill = num(live.kill_remaining_usd);
-    if (kill != null) next.kill_remaining_usd = kill;
+    if (kill != null && num(next.kill_remaining_usd) == null) next.kill_remaining_usd = kill;
   }
   if (sleeveAsOf) next.sleeve_as_of = sleeveAsOf;
   else delete next.sleeve_as_of;
@@ -148,17 +162,17 @@ function accountUnrealizedUsd(book) {
 }
 
 // One crypto book. Equities are $0 and are not a second book.
-// book_usd stays the holdings sum. The card running balance is RH cash
-// plus each marked open lot. It is not the stored running_balance_usd,
-// not that cash sum alone, and not the signal book. A book with no
+// book_usd stays the holdings sum (cash). The card running balance is RH
+// cash plus each marked open lot, the same total export writes as
+// running_balance_usd when a position list is present. A book with no
 // position list still shows the stored running_balance_usd.
-// Day P&L is the signal dollar. The −10% kill and the +2.5% target are
-// fractions of the same total as RUNNING BALANCE. They are not fractions
-// of signal_book_usd and not of the holdings sum alone.
-// When the RH total is known, running P&L is that total minus the $800
-// combined seed. Unrealized is the open lots' mark versus cost. Realized
-// is running minus unrealized, so the three match the cash-and-lots book.
-// They are not the combined snapshot (~−$6) and not the $300 sleeve seed.
+// Day P&L is the dollar on the file. Export fills it from the cash drop
+// when that drop has day_realized_usd. The day kill and the day target are
+// fractions of the same total as RUNNING BALANCE. Kill headroom is
+// max(0, |dayKillFrac| × that total + min(day P&L, 0)), using LIVE_RAILS.
+// When the RH total is known, running P&L is that total minus the combined
+// seed. Unrealized is the open lots' mark versus cost. Realized is running
+// minus unrealized, so the three match the cash-and-lots book.
 // A book with no position list still shows the snapshot dollars. A missing
 // unrealized dollar falls back to holding value minus cost basis.
 // asOf is the warehouse sleeve clock: sleeve_as_of on the book, or the
@@ -263,12 +277,9 @@ export function cryptoBookView(book, summary) {
           ? published
           : null;
   if (bookUsd == null && rail == null) return null;
-  // Signal kill_remaining_usd is dollars of signal_book_usd. Show that
-  // fraction of the rail book so the headroom dollars match the kill rail.
-  const killFracBase = signalBook != null && signalBook !== 0 ? signalBook : rail;
-  const killFrac =
-    killStored == null || killFracBase == null || killFracBase === 0 ? null : killStored / killFracBase;
-  const killHeadroom = rail != null && killFrac != null ? money(rail, killFrac) : killStored;
+  // Same headroom export writes on kill_remaining_usd: the day-kill budget
+  // on the running balance, reduced by a negative day, floored at zero.
+  const killHeadroom = runningBalance != null ? killRemainingUsd(runningBalance, dayPnl) : killStored;
   const reconciled = reconciledPnl(book);
   let realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));

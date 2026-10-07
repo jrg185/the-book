@@ -49,7 +49,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import io
 import json
+import math
 import os
 import re
 import sys
@@ -2030,6 +2032,102 @@ LIVE_SIGNAL_URL = (
 )
 
 
+def js_round_cents(value) -> float:
+    """Cents, matching derive.js money() / Math.round (ties toward +infinity)."""
+    shifted = (float(value) + sys.float_info.epsilon) * 100
+    return math.floor(shifted + 0.5) / 100.0
+
+
+_LIVE_RAILS: dict[str, Decimal] | None = None
+
+
+def live_rails() -> dict[str, Decimal]:
+    """dayKillFrac and dayTargetFrac from derive.js LIVE_RAILS.
+
+    The card and this export share that object. This module does not keep
+    a second copy of the fractions.
+    """
+    global _LIVE_RAILS
+    if _LIVE_RAILS is not None:
+        return _LIVE_RAILS
+    text = (ROOT / "derive.js").read_text(encoding="utf-8")
+    match = re.search(r"export const LIVE_RAILS\s*=\s*\{([^}]+)\}", text)
+    if not match:
+        raise RuntimeError("derive.js LIVE_RAILS is missing")
+    body = match.group(1)
+    rails: dict[str, Decimal] = {}
+    for key in ("dayKillFrac", "dayTargetFrac"):
+        found = re.search(rf"{key}\s*:\s*(-?\d+(?:\.\d+)?)", body)
+        if not found:
+            raise RuntimeError(f"derive.js LIVE_RAILS has no {key}")
+        rails[key] = Decimal(found.group(1))
+    _LIVE_RAILS = rails
+    return rails
+
+
+def kill_remaining_usd(running_balance, day_pnl) -> float | None:
+    """max(0, |dayKillFrac| × running balance + min(day P&L, 0)).
+
+    dayKillFrac is the signed rail from derive.js LIVE_RAILS. The budget is
+    its magnitude. A positive day does not increase headroom. The net day
+    figure is used as-is. This does not apply a fee rate.
+    """
+    if running_balance is None:
+        return None
+    frac = float(live_rails()["dayKillFrac"])
+    balance = float(running_balance)
+    day = 0.0 if day_pnl is None else float(day_pnl)
+    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0))
+    return 0.0 if rounded < 0 else rounded
+
+
+def agentic_book_usd(book) -> float | None:
+    """Cash holdings plus marked crypto open lots, in cents.
+
+    Same rows as derive.js agenticBookUsd. A missing value leaves the total
+    unknown. No position list means the book has not published lots.
+    USD and USDC positions are cash and are not added again. Equities are
+    not added.
+    """
+    if not isinstance(book, dict) or not isinstance(book.get("positions"), list):
+        return None
+    total = Decimal("0")
+    rows = 0
+    for row in book.get("holdings") or []:
+        if not isinstance(row, dict):
+            continue
+        if not str(row.get("ticker") or "").strip():
+            continue
+        sleeve = str(row.get("sleeve") or "crypto").strip().lower()
+        if sleeve != "crypto":
+            continue
+        value = _decimal_or_none(row.get("value_usd"))
+        if value is None:
+            return None
+        total += value
+        rows += 1
+    for row in book.get("positions") or []:
+        if not isinstance(row, dict):
+            continue
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if not ticker or ticker in {"USD", "USDC"}:
+            continue
+        sleeve = str(row.get("sleeve") or "crypto").strip().lower()
+        if sleeve != "crypto":
+            continue
+        qty = _decimal_or_none(row.get("qty"))
+        if qty is None or qty == 0:
+            continue
+        value = _decimal_or_none(row.get("value_usd"))
+        if value is None:
+            return None
+        total += value
+        rows += 1
+    if rows == 0:
+        return None
+    return js_round_cents(total)
+
+
 def account_book_usd(holdings) -> float | None:
     """Sum of crypto holding values, in cents. A missing value leaves the book unknown.
 
@@ -2288,6 +2386,9 @@ def merge_live_book(committed, signal) -> dict:
     for key in ("running_balance_usd", "realized_pnl_usd", "unrealized_pnl_usd", "running_pnl_usd"):
         if base.get(key) is not None:
             out[key] = base.get(key)
+    for key in ("day_realized_gross_usd", "day_sell_fees_usd"):
+        if base.get(key) is not None:
+            out[key] = base.get(key)
     if isinstance(base.get("positions"), list):
         out["positions"] = [dict(row) for row in base["positions"] if isinstance(row, dict)]
     if kill is not None:
@@ -2468,13 +2569,23 @@ def _json_cash_number(value):
     return _cents_number(value)
 
 
+# Optional desk-drop day fields. day_realized_usd is already net of sell fees.
+# The gross and sell-fee keys are audit copies. Export does not recompute the net.
+_DAY_DROP_KEYS = ("day_realized_usd", "day_realized_gross_usd", "day_sell_fees_usd")
+
+
 def load_rh_cash_drop(data_dir: Path) -> dict | None:
     """USD and USDC from data/rh_cash.json.
 
     Shape is {"USD": number, "USDC": number, "as_of": "ISO8601 optional"}.
-    Unknown keys are ignored. A missing file, non-object, non-number cash
-    line, or a present as_of that is not ISO8601 returns None. This does
-    not call Robinhood and does not invent a balance.
+    Optional day_realized_usd is the net day P&L: Robinhood get_realized_pnl
+    span=day total_returns minus that day's sell-side fees. Optional
+    day_realized_gross_usd and day_sell_fees_usd are audit numbers. A present
+    numeric field is passed through. A non-number is ignored and does not
+    reject the cash lines. Unknown keys are ignored. A missing file,
+    non-object, non-number cash line, or a present as_of that is not
+    ISO8601 returns None. This does not call Robinhood and does not invent
+    a balance.
     """
     payload = _read_json(Path(data_dir) / "rh_cash.json", None)
     if not isinstance(payload, dict):
@@ -2489,6 +2600,13 @@ def load_rh_cash_drop(data_dir: Path) -> dict | None:
         if not _iso8601_stamp(as_of):
             return None
         out["as_of"] = str(as_of).strip()
+    for key in _DAY_DROP_KEYS:
+        if key not in payload or payload.get(key) in (None, ""):
+            continue
+        number = _json_cash_number(payload.get(key))
+        if number is None:
+            continue
+        out[key] = number
     return out
 
 
@@ -2531,6 +2649,59 @@ def apply_rh_cash(book: dict, cash: dict | None) -> dict:
     return out
 
 
+def _drop_number(cash, key: str):
+    if not isinstance(cash, dict) or key not in cash:
+        return None
+    return _json_cash_number(cash.get(key))
+
+
+def apply_published_book(book: dict, cash: dict | None) -> dict:
+    """Write the agentic total, the drop's day P&L, and kill headroom.
+
+    When holdings and a position list are present, running_balance_usd is
+    cash plus open crypto lots and running_pnl_usd is that total minus the
+    combined seed in BOOK_SEEDS. Those two replace the warehouse snapshot.
+    day_realized_usd, when present, is copied onto day_pnl_usd as-is. Gross
+    and sell-fee audit fields are copied when present. If all three are
+    present and gross minus fees differs from the net by more than one cent,
+    a warning is printed and the net is left unchanged. A missing
+    day_realized_usd leaves the day already on the file and logs that.
+    kill_remaining_usd uses the running balance and that day.
+    """
+    out = dict(book) if isinstance(book, dict) else {}
+    net = _drop_number(cash, "day_realized_usd")
+    gross = _drop_number(cash, "day_realized_gross_usd")
+    fees = _drop_number(cash, "day_sell_fees_usd")
+    if net is None:
+        print("day_realized_usd absent from the cash drop; day_pnl_usd left unchanged")
+    else:
+        out["day_pnl_usd"] = net
+        print(f"live book day_pnl_usd from day_realized_usd={net}")
+    if gross is not None:
+        out["day_realized_gross_usd"] = gross
+    if fees is not None:
+        out["day_sell_fees_usd"] = fees
+    if net is not None and gross is not None and fees is not None:
+        gap = abs(Decimal(str(gross)) - Decimal(str(fees)) - Decimal(str(net)))
+        if gap > Decimal("0.01"):
+            print(
+                "warning: day_realized_gross_usd minus day_sell_fees_usd "
+                f"differs from day_realized_usd by {gap}; "
+                "day_pnl_usd stays the net figure",
+                file=sys.stderr,
+            )
+    marked = agentic_book_usd(out)
+    if marked is None:
+        return out
+    out["running_balance_usd"] = marked
+    out["running_pnl_usd"] = js_round_cents(Decimal(str(marked)) - BOOK_SEEDS["combined"])
+    day = _finite_number(out.get("day_pnl_usd"))
+    kill = kill_remaining_usd(marked, day)
+    if kill is not None:
+        out["kill_remaining_usd"] = kill
+    return out
+
+
 def refresh_live_book(
     target: Path,
     signal: dict | None = None,
@@ -2543,15 +2714,19 @@ def refresh_live_book(
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
     Does nothing when the account file is absent. Does not invent holdings.
-    When account_pnl is the latest combined snapshot, running_balance_usd and
-    the three P&L columns are written through, and sleeve_as_of is that row's
-    as_of. Day P&L stays the signal copy. generated_at stays the signal time.
-    A missing snapshot does not delete P&L or day P&L already on the file.
-    When positions is the open-net read, those rows replace the list. None
-    leaves open rows already on the file. When cash is a Robinhood USD and
-    USDC read (REST, or data/rh_cash.json when REST keys are unset), those
-    holdings are that cash and book_usd is recomputed. None leaves the cash
-    lines already on the file.
+    When account_pnl is the latest combined snapshot, realized and unrealized
+    are written through, and sleeve_as_of is that row's as_of. When holdings
+    and a position list are present, running_balance_usd and running_pnl_usd
+    are the agentic total and that total minus the combined seed, not the
+    warehouse figures. Day P&L is day_realized_usd from the cash drop when
+    that number is present; otherwise the signal copy stays and the absence
+    is logged. kill_remaining_usd is the day-kill headroom on the running
+    balance. generated_at stays the signal time. A missing snapshot does not
+    delete P&L or day P&L already on the file. When positions is the open-net
+    read, those rows replace the list. None leaves open rows already on the
+    file. When cash is a Robinhood USD and USDC read (REST, or
+    data/rh_cash.json when REST keys are unset), those holdings are that cash
+    and book_usd is recomputed. None leaves the cash lines already on the file.
     """
     path = target / "live_book.json"
     if not path.exists():
@@ -2569,6 +2744,7 @@ def refresh_live_book(
         merged = apply_rh_cash(merged, cash)
     if positions is not None:
         merged = apply_card_positions(merged, positions)
+    merged = apply_published_book(merged, cash)
     write_json(path, merged)
     return merged
 
@@ -3364,8 +3540,10 @@ def self_test() -> int:
     seeded = load_rh_cash_drop(DATA)
     if not isinstance(seeded, dict) or "USD" not in seeded or "USDC" not in seeded:
         raise RuntimeError("data/rh_cash.json is not a cash drop")
-    if any(key not in {"USD", "USDC", "as_of"} for key in seeded):
+    if any(key not in {"USD", "USDC", "as_of", *_DAY_DROP_KEYS} for key in seeded):
         raise RuntimeError(f"cash drop kept an unknown key: {seeded}")
+    if "day_realized_usd" in json.loads((DATA / "rh_cash.json").read_text(encoding="utf-8")):
+        raise RuntimeError("export must not seed day_realized_usd into data/rh_cash.json")
     bare_env = {"KPI_REFRESH_EXPECTED": "1"}
     if load_rh_cash(bare_env) is not None:
         raise RuntimeError("unset RH keys did not skip REST")
@@ -3444,8 +3622,21 @@ def self_test() -> int:
             raise RuntimeError("drop apply did not recompute book_usd")
         if refreshed.get("positions") != prior["positions"]:
             raise RuntimeError("drop apply rewrote open lots")
-        if refreshed.get("kill_remaining_usd") != 77.5 or refreshed.get("signal_book_usd") != 775:
-            raise RuntimeError("drop apply moved the signal rail")
+        if refreshed.get("signal_book_usd") != 775:
+            raise RuntimeError("drop apply moved the signal book")
+        marked_cash = agentic_book_usd(refreshed)
+        if marked_cash is None or refreshed.get("running_balance_usd") != marked_cash:
+            raise RuntimeError(f"running balance was not cash plus lots: {refreshed}")
+        if refreshed["book_usd"] == refreshed["running_balance_usd"]:
+            raise RuntimeError("book_usd included open lots")
+        if refreshed.get("running_pnl_usd") != js_round_cents(
+            Decimal(str(marked_cash)) - BOOK_SEEDS["combined"]
+        ):
+            raise RuntimeError(f"running P&L was not the agentic total minus the combined seed: {refreshed}")
+        if refreshed.get("kill_remaining_usd") != kill_remaining_usd(marked_cash, refreshed.get("day_pnl_usd")):
+            raise RuntimeError(f"kill headroom was not the day rail: {refreshed}")
+        if refreshed.get("day_pnl_usd") is not None:
+            raise RuntimeError("a drop without day_realized invented a day")
         empty = folder / "empty"
         empty.mkdir()
         write_json(empty / "live_book.json", prior)
@@ -3457,6 +3648,218 @@ def self_test() -> int:
             raise RuntimeError(f"soft-skip rewrote holdings: {left['holdings']}")
         if left["book_usd"] != 100:
             raise RuntimeError(f"soft-skip recomputed the book: {left['book_usd']}")
+        (folder / "rh_cash.json").write_text(
+            json.dumps(
+                {
+                    "USD": 4,
+                    "USDC": 1,
+                    "day_realized_usd": "nope",
+                    "day_sell_fees_usd": True,
+                    "fee_bps": 30,
+                }
+            ),
+            encoding="utf-8",
+        )
+        rejected_day = load_rh_cash_drop(folder)
+        if rejected_day != {"USD": 4.0, "USDC": 1.0}:
+            raise RuntimeError(f"a non-number day figure changed the cash drop: {rejected_day}")
+        (folder / "rh_cash.json").write_text(
+            json.dumps(
+                {
+                    "USD": 4,
+                    "USDC": 1,
+                    "day_realized_usd": -1.25,
+                    "day_realized_gross_usd": -1,
+                    "day_sell_fees_usd": 0.25,
+                    "fee_bps": 30,
+                }
+            ),
+            encoding="utf-8",
+        )
+        passed_day = load_rh_cash_drop(folder)
+        if passed_day != {
+            "USD": 4.0,
+            "USDC": 1.0,
+            "day_realized_usd": -1.25,
+            "day_realized_gross_usd": -1.0,
+            "day_sell_fees_usd": 0.25,
+        }:
+            raise RuntimeError(f"day drop fields were not passed through: {passed_day}")
+        synthetic = {
+            "book_usd": 80,
+            "signal_book_usd": 400,
+            "day_pnl_usd": 1.5,
+            "kill_remaining_usd": 8,
+            "running_balance_usd": 804,
+            "running_pnl_usd": 4,
+            "realized_pnl_usd": 3.4,
+            "unrealized_pnl_usd": 0.6,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 70},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10, "cost_basis_usd": 10},
+            ],
+            "positions": [
+                {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 50, "unrealized_pnl_usd": 4},
+                {"sleeve": "equities", "ticker": "QQ", "qty": "3", "value_usd": 90},
+                {"sleeve": "crypto", "ticker": "USDC", "qty": "1", "value_usd": 9},
+            ],
+        }
+        write_json(folder / "live_book.json", synthetic)
+        day_cash = {
+            "USD": 40,
+            "USDC": 10,
+            "day_realized_usd": -2.5,
+            "day_realized_gross_usd": 1.0,
+            "day_sell_fees_usd": 0.25,
+        }
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = stdout, stderr
+        try:
+            published_day = refresh_live_book(
+                folder,
+                fetch=False,
+                cash=day_cash,
+                account_pnl={
+                    "running_balance_usd": 804.0,
+                    "running_pnl_usd": 4.0,
+                    "realized_pnl_usd": 3.4,
+                    "unrealized_pnl_usd": 0.6,
+                    "as_of": "2026-02-02T00:00:00Z",
+                },
+            )
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        if "differs from day_realized_usd" not in stderr.getvalue():
+            raise RuntimeError("gross minus fees did not warn when it missed the net")
+        if published_day["day_pnl_usd"] != -2.5:
+            raise RuntimeError(f"day P&L was not the drop net: {published_day}")
+        if published_day.get("day_realized_gross_usd") != 1.0 or published_day.get("day_sell_fees_usd") != 0.25:
+            raise RuntimeError(f"audit fields were not copied: {published_day}")
+        if published_day["book_usd"] != 50:
+            raise RuntimeError(f"book_usd was not the cash sum: {published_day}")
+        if published_day["running_balance_usd"] != 100:
+            raise RuntimeError(f"running balance was not cash plus the crypto lot: {published_day}")
+        if published_day["running_balance_usd"] == 804 or published_day["running_pnl_usd"] == 4:
+            raise RuntimeError("warehouse running figures replaced the agentic total")
+        if published_day["running_pnl_usd"] != js_round_cents(Decimal("100") - BOOK_SEEDS["combined"]):
+            raise RuntimeError(f"running P&L was not the combined seed gap: {published_day}")
+        if published_day["running_pnl_usd"] == js_round_cents(Decimal("100") - BOOK_SEEDS["crypto"]):
+            raise RuntimeError("running P&L used the crypto seed")
+        if published_day["kill_remaining_usd"] != kill_remaining_usd(100, -2.5):
+            raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
+        if published_day.get("realized_pnl_usd") != 3.4 or published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
+            raise RuntimeError(f"snapshot realized or sleeve clock was dropped: {published_day}")
+        if published_day.get("signal_book_usd") != 400:
+            raise RuntimeError("signal book moved")
+        matched_cash = {
+            "USD": 40,
+            "USDC": 10,
+            "day_realized_usd": -1.5,
+            "day_realized_gross_usd": -1.0,
+            "day_sell_fees_usd": 0.5,
+        }
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            matched = refresh_live_book(folder, fetch=False, cash=matched_cash)
+        finally:
+            sys.stderr = old_err
+        if "differs from day_realized_usd" in stderr.getvalue():
+            raise RuntimeError("a matching gross minus fees warned")
+        if matched["day_pnl_usd"] != -1.5 or matched["kill_remaining_usd"] != kill_remaining_usd(100, -1.5):
+            raise RuntimeError(f"matched net was recomputed: {matched}")
+        cent_cash = {
+            "USD": 40,
+            "USDC": 10,
+            "day_realized_usd": 1.0,
+            "day_realized_gross_usd": 1.01,
+            "day_sell_fees_usd": 0,
+        }
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            within = refresh_live_book(folder, fetch=False, cash=cent_cash)
+        finally:
+            sys.stderr = old_err
+        if "differs from day_realized_usd" in stderr.getvalue():
+            raise RuntimeError("a one-cent audit gap failed the export")
+        if within["day_pnl_usd"] != 1.0:
+            raise RuntimeError(f"a one-cent gap changed day P&L: {within}")
+        profit_cash = {"USD": 40, "USDC": 10, "day_realized_usd": 6}
+        profit = refresh_live_book(folder, fetch=False, cash=profit_cash)
+        if profit["day_pnl_usd"] != 6 or profit["kill_remaining_usd"] != kill_remaining_usd(100, 0):
+            raise RuntimeError(f"a positive day increased kill headroom: {profit}")
+        if profit["kill_remaining_usd"] != kill_remaining_usd(100, 6):
+            raise RuntimeError("positive day headroom did not match a flat day")
+        stopped_cash = {"USD": 40, "USDC": 10, "day_realized_usd": -40}
+        stopped = refresh_live_book(folder, fetch=False, cash=stopped_cash)
+        if stopped["day_pnl_usd"] != -40 or stopped["kill_remaining_usd"] != 0:
+            raise RuntimeError(f"a day loss past the rail left headroom: {stopped}")
+        kept_signal = {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "book_usd": 50,
+            "day_pnl_usd": 1.5,
+            "kill_remaining_usd": 8,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 40},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10, "cost_basis_usd": 10},
+            ],
+            "positions": [{"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 50}],
+        }
+        write_json(folder / "live_book.json", kept_signal)
+        stdout = io.StringIO()
+        old_out = sys.stdout
+        sys.stdout = stdout
+        try:
+            from_signal = refresh_live_book(
+                folder,
+                {
+                    "generated_at": "2026-01-02T00:00:00Z",
+                    "book_usd": 400,
+                    "day_pnl_usd": 3.25,
+                    "kill_remaining_usd": 40,
+                },
+                fetch=False,
+                cash={"USD": 40, "USDC": 10},
+            )
+        finally:
+            sys.stdout = old_out
+        if "day_realized_usd absent" not in stdout.getvalue():
+            raise RuntimeError("a missing day_realized_usd was not logged")
+        if from_signal["day_pnl_usd"] != 3.25:
+            raise RuntimeError(f"a missing day_realized_usd did not keep the signal day: {from_signal}")
+        if from_signal["running_balance_usd"] != 100:
+            raise RuntimeError(f"signal day path dropped the agentic total: {from_signal}")
+        if from_signal["kill_remaining_usd"] != kill_remaining_usd(100, 3.25):
+            raise RuntimeError(f"signal day path left the signal kill: {from_signal}")
+        unmarked = dict(synthetic)
+        unmarked["positions"] = [{"sleeve": "crypto", "ticker": "ZZ", "qty": "2"}]
+        unmarked["running_balance_usd"] = 804
+        unmarked["running_pnl_usd"] = 4
+        write_json(folder / "live_book.json", unmarked)
+        kept_warehouse = refresh_live_book(
+            folder,
+            fetch=False,
+            cash={"USD": 40, "USDC": 10},
+            account_pnl={
+                "running_balance_usd": 811,
+                "running_pnl_usd": 11,
+                "realized_pnl_usd": 3.4,
+                "unrealized_pnl_usd": 0.6,
+                "as_of": "2026-02-03T00:00:00Z",
+            },
+        )
+        if kept_warehouse.get("running_balance_usd") != 811 or kept_warehouse.get("running_pnl_usd") != 11:
+            raise RuntimeError(f"a lot without a mark invented an agentic total: {kept_warehouse}")
+        kill_src = Path(__file__).read_text(encoding="utf-8").split("def kill_remaining_usd", 1)[1].split(
+            "\ndef ", 1
+        )[0]
+        if "0.10" in kill_src or "0.1" in kill_src:
+            raise RuntimeError("kill headroom hardcoded a fraction")
     parsed_usd = usd_cash_from_accounts(
         {
             "results": [
