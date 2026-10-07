@@ -1572,6 +1572,18 @@
     "fee_frac_of_book": 0.0031
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T14:57:27+00:00",
+    "ticker": "AERO",
+    "side": "buy",
+    "notional_frac_of_book": 0.3269,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact db09ed70 AERO P=0.53; side flat, meta 0.58). Half-size override $100 max. Top conviction of AERO/ENA/INJ 0.53 tier, tight exchange spread. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
