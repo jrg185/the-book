@@ -2574,6 +2574,32 @@ def _json_cash_number(value):
 _DAY_DROP_KEYS = ("day_realized_usd", "day_realized_gross_usd", "day_sell_fees_usd")
 
 
+def day_drop_consistent(drop: dict) -> None:
+    """Optional day_realized_usd must be a finite number.
+
+    When day_realized_gross_usd and day_sell_fees_usd are present too, gross
+    minus fees matches the net within one cent. A missing net is not an error.
+    """
+    if not isinstance(drop, dict) or "day_realized_usd" not in drop:
+        return
+    net = drop.get("day_realized_usd")
+    if isinstance(net, bool) or not isinstance(net, (int, float)) or not math.isfinite(net):
+        raise RuntimeError("day_realized_usd must be a finite number")
+    if "day_realized_gross_usd" not in drop or "day_sell_fees_usd" not in drop:
+        return
+    gross = drop.get("day_realized_gross_usd")
+    fees = drop.get("day_sell_fees_usd")
+    for key, value in (("day_realized_gross_usd", gross), ("day_sell_fees_usd", fees)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise RuntimeError(f"{key} must be a finite number")
+    gap = abs(Decimal(str(gross)) - Decimal(str(fees)) - Decimal(str(net)))
+    if gap > Decimal("0.01"):
+        raise RuntimeError(
+            "day_realized_gross_usd minus day_sell_fees_usd "
+            f"differs from day_realized_usd by {gap}"
+        )
+
+
 def load_rh_cash_drop(data_dir: Path) -> dict | None:
     """USD and USDC from data/rh_cash.json.
 
@@ -3542,8 +3568,34 @@ def self_test() -> int:
         raise RuntimeError("data/rh_cash.json is not a cash drop")
     if any(key not in {"USD", "USDC", "as_of", *_DAY_DROP_KEYS} for key in seeded):
         raise RuntimeError(f"cash drop kept an unknown key: {seeded}")
-    if "day_realized_usd" in json.loads((DATA / "rh_cash.json").read_text(encoding="utf-8")):
-        raise RuntimeError("export must not seed day_realized_usd into data/rh_cash.json")
+    raw_drop = json.loads((DATA / "rh_cash.json").read_text(encoding="utf-8"))
+    day_drop_consistent(raw_drop)
+    desk_day = {
+        "USD": raw_drop["USD"],
+        "USDC": raw_drop["USDC"],
+        "day_realized_usd": -1.09,
+        "day_realized_gross_usd": 1.25,
+        "day_sell_fees_usd": 2.34,
+    }
+    day_drop_consistent(desk_day)
+    try:
+        day_drop_consistent(
+            {
+                "day_realized_usd": desk_day["day_realized_usd"] + 0.02,
+                "day_realized_gross_usd": desk_day["day_realized_gross_usd"],
+                "day_sell_fees_usd": desk_day["day_sell_fees_usd"],
+            }
+        )
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError("a day audit gap beyond one cent was accepted")
+    try:
+        day_drop_consistent({"day_realized_usd": float("nan")})
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError("a non-finite day_realized_usd was accepted")
     bare_env = {"KPI_REFRESH_EXPECTED": "1"}
     if load_rh_cash(bare_env) is not None:
         raise RuntimeError("unset RH keys did not skip REST")
