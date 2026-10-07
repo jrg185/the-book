@@ -1,44 +1,44 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-07T12:36:53+00:00",
-  "book_usd": 574.84,
+  "sleeve_as_of": "2026-10-07T13:15:36+00:00",
+  "book_usd": 467.08,
   "signal_book_usd": 775.0,
   "day_pnl_usd": 0.0,
-  "running_balance_usd": 797.35,
+  "running_balance_usd": 797.47,
   "realized_pnl_usd": -2.87,
-  "unrealized_pnl_usd": 0.22,
-  "running_pnl_usd": -2.65,
+  "unrealized_pnl_usd": 0.34,
+  "running_pnl_usd": -2.53,
   "positions": [
     {
       "sleeve": "crypto",
       "ticker": "AXS",
       "qty": "83.58",
-      "mark": "1.1765",
-      "value_usd": 98.33,
+      "mark": "1.1748",
+      "value_usd": 98.19,
       "avg_cost": "1.18339765",
-      "unrealized_pnl_usd": -0.58,
-      "running_pnl_usd": -0.58
+      "unrealized_pnl_usd": -0.72,
+      "running_pnl_usd": -0.72
     },
     {
       "sleeve": "crypto",
       "ticker": "BAT",
       "qty": "995.7",
-      "mark": "0.09935",
-      "value_usd": 98.92,
+      "mark": "0.09939",
+      "value_usd": 98.96,
       "avg_cost": "0.09940655",
-      "unrealized_pnl_usd": -0.06,
-      "running_pnl_usd": -0.06
+      "unrealized_pnl_usd": -0.02,
+      "running_pnl_usd": -0.02
     },
     {
       "sleeve": "crypto",
       "ticker": "RENDER",
       "qty": "49.396",
-      "mark": "2.02",
-      "value_usd": 99.78,
+      "mark": "2.0246",
+      "value_usd": 100.01,
       "avg_cost": "2.00277123",
-      "unrealized_pnl_usd": 0.85,
-      "running_pnl_usd": -0.8
+      "unrealized_pnl_usd": 1.08,
+      "running_pnl_usd": -0.57
     }
   ],
   "kill_remaining_usd": 77.5,
@@ -46,7 +46,7 @@
     {
       "ticker": "USD",
       "sleeve": "crypto",
-      "value_usd": 560.77
+      "value_usd": 453.01
     },
     {
       "ticker": "USDC",
