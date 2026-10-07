@@ -1476,6 +1476,18 @@
     "fee_frac_of_book": 0.0031
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T05:56:27+00:00",
+    "ticker": "VVV",
+    "side": "sell",
+    "notional_frac_of_book": 0.3276,
+    "pnl_frac_of_book": -0.002177,
+    "why": "Artifact 96f5ec81 VVV SELL (P=0.39). Full exit.",
+    "running_pnl_frac": 0.043245,
+    "running_balance_frac": 1.043245,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",

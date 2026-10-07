@@ -1,34 +1,24 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-07T05:26:18+00:00",
+  "sleeve_as_of": "2026-10-07T06:09:09+00:00",
   "book_usd": 574.84,
   "signal_book_usd": 775.0,
   "day_pnl_usd": 0.0,
-  "running_balance_usd": 788.55,
-  "realized_pnl_usd": -8.72,
-  "unrealized_pnl_usd": -2.73,
-  "running_pnl_usd": -11.45,
+  "running_balance_usd": 788.61,
+  "realized_pnl_usd": -9.37,
+  "unrealized_pnl_usd": -2.02,
+  "running_pnl_usd": -11.39,
   "positions": [
     {
       "sleeve": "crypto",
       "ticker": "QNT",
       "qty": "0.3842",
-      "mark": "251.05",
-      "value_usd": 96.45,
+      "mark": "249.98",
+      "value_usd": 96.04,
       "avg_cost": "255.23",
-      "unrealized_pnl_usd": -1.61,
-      "running_pnl_usd": 24.65
-    },
-    {
-      "sleeve": "crypto",
-      "ticker": "VVV",
-      "qty": "3.643",
-      "mark": "26.8543",
-      "value_usd": 97.83,
-      "avg_cost": "27.1587",
-      "unrealized_pnl_usd": -1.11,
-      "running_pnl_usd": -2.31
+      "unrealized_pnl_usd": -2.02,
+      "running_pnl_usd": 24.24
     }
   ],
   "kill_remaining_usd": 77.5,
