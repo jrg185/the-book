@@ -1608,6 +1608,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T19:53:22+00:00",
+    "ticker": "BAT",
+    "side": "sell",
+    "notional_frac_of_book": 0.330333,
+    "pnl_frac_of_book": 0.000436,
+    "why": "Artifact 3358df20 SELL on held name: BAT P(up)=0.37 -> full exit per desk rule (sell signal on held lot).",
+    "running_pnl_frac": 0.074506,
+    "running_balance_frac": 1.074506,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T19:53:43+00:00",
+    "ticker": "VVV",
+    "side": "buy",
+    "notional_frac_of_book": 0.326767,
+    "pnl_frac_of_book": 0.0,
+    "why": "Rotate BAT exit proceeds into top eligible not-held name: artifact 3358df20 VVV P=0.54 >= 0.50 temp gate; $99 under $100 half-normal cap; cash buffer ~$58 kept. Short-hold.",
+    "running_pnl_frac": 0.074506,
+    "running_balance_frac": 1.074506,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
