@@ -2230,9 +2230,10 @@ def load_account_pnl(base_url: str, key: str | None, db_url: str | None) -> dict
 def merge_live_book(committed, signal) -> dict:
     """Copy the signal file without putting its book_usd on the account.
 
-    Holdings, including each value and cost basis, stay. book_usd becomes the
-    sum of those values. The signal book is kept as signal_book_usd so the
-    −10% kill and the +2.5% target are not recomputed from the holdings sum.
+    Holdings, including each value and cost basis, stay unless a live cash
+    read replaces USD and USDC before this merge. book_usd becomes the sum
+    of those values. The signal book is kept as signal_book_usd. It is not
+    copied onto book_usd and it is not the card's day-kill rail.
     Kill headroom is copied when the signal has it. Day P&L is copied from
     the signal when that file has a finite day_pnl_usd. A missing signal day
     leaves the day already on the account. Realized, unrealized, running P&L,
@@ -2305,6 +2306,172 @@ def fetch_live_signal() -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def usd_cash_from_accounts(payload, account_number: str):
+    """USD cash for one Robinhood crypto account.
+
+    v2 returns a results list. v1 returns the account object. An explicit
+    cash field wins over buying_power. A non-USD buying-power currency is
+    not cash. Missing data stays unknown instead of inventing a balance.
+    """
+    if isinstance(payload, dict) and isinstance(payload.get("results"), list):
+        rows = [row for row in payload["results"] if isinstance(row, dict)]
+    elif isinstance(payload, dict) and (
+        payload.get("buying_power") not in (None, "") or payload.get("cash") not in (None, "")
+    ):
+        rows = [payload]
+    else:
+        return None
+    chosen = None
+    wanted = str(account_number or "").strip()
+    for row in rows:
+        number = str(row.get("account_number") or "").strip()
+        if wanted and number == wanted:
+            chosen = row
+            break
+    if chosen is None and len(rows) == 1 and not str(rows[0].get("account_number") or "").strip():
+        chosen = rows[0]
+    if chosen is None:
+        return None
+    currency = str(chosen.get("buying_power_currency") or "USD").strip().upper()
+    if currency != "USD":
+        return None
+    for key in ("cash", "cash_available", "buying_power"):
+        if key not in chosen or chosen.get(key) in (None, ""):
+            continue
+        number = _cents_number(chosen.get(key))
+        if number is not None:
+            return number
+    return None
+
+
+def usdc_usd_from_holdings(payload):
+    """USDC dollar line from holdings total_quantity.
+
+    A results list with no USDC row is a flat stablecoin line. A payload
+    that is not a holdings page stays unknown.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+        return None
+    total = Decimal("0")
+    seen = False
+    for row in payload["results"]:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("asset_code") or "").strip().upper()
+        if code != "USDC":
+            continue
+        qty = _decimal_or_none(row.get("total_quantity"))
+        if qty is None:
+            return None
+        total += qty
+        seen = True
+    if not seen:
+        return 0.0
+    return float(total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _rh_collect(api_key: str, private_key: str, path: str, rh_get, path_from_next):
+    """Follow a Robinhood GET until next is absent. GET only."""
+    rows = []
+    seen: set[str] = set()
+    for _ in range(10):
+        if path in seen:
+            break
+        seen.add(path)
+        payload = rh_get(api_key, private_key, path)
+        if not isinstance(payload, dict):
+            raise RuntimeError("Robinhood cash read returned an unexpected payload")
+        batch = payload.get("results")
+        if isinstance(batch, list):
+            rows.extend(item for item in batch if isinstance(item, dict))
+        elif payload.get("buying_power") not in (None, "") or payload.get("cash") not in (None, ""):
+            return payload
+        else:
+            raise RuntimeError("Robinhood cash read had no results")
+        nxt = payload.get("next")
+        if not nxt:
+            return {"results": rows}
+        path = path_from_next(str(nxt))
+    raise RuntimeError("Robinhood cash pagination did not finish")
+
+
+def load_rh_cash(env: dict | None = None) -> dict | None:
+    """Live USD buying power and USDC quantity for the agentic account.
+
+    None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. A signed GET
+    that fails, or a payload without both lines, raises so export does not
+    publish fresh lots on stale cash. This does not place an order.
+    """
+    from sync_rh_kpi_trades import SyncError, path_from_next, rh_credentials, rh_get
+
+    source = env if env is not None else os.environ
+    creds = rh_credentials(source)
+    if creds is None:
+        return None
+    api_key, private_key, account = creds
+    holdings_path = (
+        "/api/v2/crypto/trading/holdings/?account_number="
+        + urllib.parse.quote(account)
+        + "&asset_code=USDC"
+    )
+    try:
+        accounts = _rh_collect(
+            api_key, private_key, "/api/v2/crypto/trading/accounts/", rh_get, path_from_next
+        )
+        holdings = _rh_collect(api_key, private_key, holdings_path, rh_get, path_from_next)
+    except SyncError as exc:
+        raise RuntimeError(
+            "Robinhood cash read failed. Holdings were not refreshed. " + str(exc)
+        ) from None
+    usd = usd_cash_from_accounts(accounts, account)
+    usdc = usdc_usd_from_holdings(holdings)
+    if usd is None or usdc is None:
+        raise RuntimeError(
+            "Robinhood cash read did not include USD buying power and USDC quantity. "
+            "Holdings were not refreshed."
+        )
+    return {"USD": usd, "USDC": usdc}
+
+
+def apply_rh_cash(book: dict, cash: dict | None) -> dict:
+    """Replace USD and USDC holdings with a live Robinhood cash read.
+
+    book_usd is recomputed from the holdings. Open lots, the signal book,
+    and kill_remaining_usd stay. None leaves the cash lines already on the file.
+    USDC cost basis matches the quantity so the stablecoin line stays flat.
+    """
+    out = dict(book) if isinstance(book, dict) else {}
+    if not isinstance(cash, dict):
+        return out
+    holdings = [dict(row) for row in out.get("holdings") or [] if isinstance(row, dict)]
+    index = {}
+    for i, row in enumerate(holdings):
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if ticker in {"USD", "USDC"} and ticker not in index:
+            index[ticker] = i
+    for ticker in ("USD", "USDC"):
+        if ticker not in cash:
+            continue
+        cents = _cents_number(cash.get(ticker))
+        if cents is None:
+            continue
+        if ticker in index:
+            row = holdings[index[ticker]]
+            row["ticker"] = ticker
+            row["sleeve"] = str(row.get("sleeve") or "crypto").strip().lower() or "crypto"
+            row["value_usd"] = cents
+        else:
+            row = {"ticker": ticker, "sleeve": "crypto", "value_usd": cents}
+            holdings.append(row)
+        if ticker == "USDC":
+            row["cost_basis_usd"] = cents
+    out["holdings"] = holdings
+    account = account_book_usd(holdings)
+    if account is not None:
+        out["book_usd"] = account
+    return out
+
+
 def refresh_live_book(
     target: Path,
     signal: dict | None = None,
@@ -2312,6 +2479,7 @@ def refresh_live_book(
     fetch: bool = True,
     account_pnl: dict | None = None,
     positions: list | None = None,
+    cash: dict | None = None,
 ) -> dict | None:
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
@@ -2321,7 +2489,9 @@ def refresh_live_book(
     as_of. Day P&L stays the signal copy. generated_at stays the signal time.
     A missing snapshot does not delete P&L or day P&L already on the file.
     When positions is the open-net read, those rows replace the list. None
-    leaves open rows already on the file. Cash lines are not rebuilt from them.
+    leaves open rows already on the file. When cash is the live Robinhood
+    read, USD and USDC holdings are that cash and book_usd is recomputed.
+    None leaves the cash lines already on the file.
     """
     path = target / "live_book.json"
     if not path.exists():
@@ -2335,6 +2505,8 @@ def refresh_live_book(
     if account_pnl:
         merged = apply_account_pnl(merged, account_pnl)
         merged = merge_live_book(merged, None)
+    if cash is not None:
+        merged = apply_rh_cash(merged, cash)
     if positions is not None:
         merged = apply_card_positions(merged, positions)
     write_json(path, merged)
@@ -3102,6 +3274,73 @@ def self_test() -> int:
         raise RuntimeError("writer put the open mark on the running balance or the cash book")
     if [row["ticker"] for row in published_open["holdings"]] != ["USD", "USDC"]:
         raise RuntimeError("writer replaced the cash lines")
+    cashed = apply_rh_cash(published_open, {"USD": 120.5, "USDC": 3.25})
+    usd_row = next(row for row in cashed["holdings"] if row["ticker"] == "USD")
+    usdc_row = next(row for row in cashed["holdings"] if row["ticker"] == "USDC")
+    if usd_row["value_usd"] != 120.5 or usdc_row["value_usd"] != 3.25:
+        raise RuntimeError(f"cash lines were not the Robinhood read: {cashed['holdings']}")
+    if usdc_row.get("cost_basis_usd") != 3.25:
+        raise RuntimeError("USDC cost basis was left on the previous quantity")
+    if cashed["book_usd"] != account_book_usd(cashed["holdings"]):
+        raise RuntimeError("book_usd was not the refreshed holdings sum")
+    if cashed["book_usd"] == published_open["book_usd"]:
+        raise RuntimeError("stale cash stayed on the book")
+    if cashed.get("positions") != published_open.get("positions"):
+        raise RuntimeError("cash refresh rewrote open lots")
+    if cashed.get("kill_remaining_usd") != published_open.get("kill_remaining_usd"):
+        raise RuntimeError("cash refresh moved kill headroom")
+    if cashed.get("signal_book_usd") != published_open.get("signal_book_usd"):
+        raise RuntimeError("cash refresh copied onto the signal book")
+    parsed_usd = usd_cash_from_accounts(
+        {
+            "results": [
+                {"account_number": "other", "buying_power": "1", "buying_power_currency": "USD"},
+                {"account_number": "agent", "buying_power": "42.5", "buying_power_currency": "USD"},
+            ]
+        },
+        "agent",
+    )
+    if parsed_usd != 42.5:
+        raise RuntimeError(f"account cash was not the agentic buying power: {parsed_usd}")
+    preferred = usd_cash_from_accounts(
+        {
+            "results": [
+                {
+                    "account_number": "agent",
+                    "cash": "10",
+                    "buying_power": "4",
+                    "buying_power_currency": "USD",
+                }
+            ]
+        },
+        "agent",
+    )
+    if preferred != 10:
+        raise RuntimeError(f"explicit cash lost to buying power: {preferred}")
+    if (
+        usd_cash_from_accounts(
+            {"results": [{"account_number": "agent", "buying_power": "4", "buying_power_currency": "EUR"}]},
+            "agent",
+        )
+        is not None
+    ):
+        raise RuntimeError("non-USD buying power was treated as cash")
+    if usd_cash_from_accounts({"results": []}, "agent") is not None:
+        raise RuntimeError("a missing account invented cash")
+    parsed_usdc = usdc_usd_from_holdings(
+        {
+            "results": [
+                {"asset_code": "USDC", "total_quantity": "3.2"},
+                {"asset_code": "BTC", "total_quantity": "1"},
+            ]
+        }
+    )
+    if parsed_usdc != 3.2:
+        raise RuntimeError(f"USDC quantity was not read: {parsed_usdc}")
+    if usdc_usd_from_holdings({"results": []}) != 0:
+        raise RuntimeError("a flat USDC read invented a balance")
+    if usdc_usd_from_holdings({"error": "no"}) is not None:
+        raise RuntimeError("a bad holdings payload became a balance")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
     if card["kill"]["kill_headroom_usd"] != 3.75 or card["kill"]["day_kill_usd"] != -30.0:
@@ -3190,10 +3429,22 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"])
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
+        cash = load_rh_cash()
+        if cash is None and refresh_expected:
+            raise RuntimeError(
+                "Export KPI expected live Robinhood cash. "
+                "RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. Holdings were not refreshed."
+            )
+        if cash:
+            print(
+                "live book cash from Robinhood "
+                + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
+            )
         refresh_live_book(
             DATA,
             account_pnl=account_pnl,
             positions=bundle.get("card_positions"),
+            cash=cash,
         )
     except Exception as exc:
         frozen = committed_as_of(DATA)

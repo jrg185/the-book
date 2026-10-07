@@ -7,6 +7,7 @@ import {
   cryptoBookView,
   deriveSleeve,
   holdingRows,
+  LIVE_RAILS,
   mergeLiveBook,
   openPositionRows,
   reconciledPnl,
@@ -54,7 +55,29 @@ function holdingsSum(book) {
   return Math.round((total + Number.EPSILON) * 100) / 100;
 }
 
-test("the published book is the holdings sum, and the rails stay on the signal book", () => {
+function railDollars(bookUsd, frac) {
+  return Math.round((bookUsd * frac + Number.EPSILON) * 100) / 100;
+}
+
+function assertLiveRails(view, book) {
+  const base = view.runningBalance;
+  assert.ok(base != null && base !== 0);
+  assert.equal(view.dayKill, railDollars(base, LIVE_RAILS.dayKillFrac));
+  assert.equal(view.dayTarget, railDollars(base, LIVE_RAILS.dayTargetFrac));
+  const signal = book.signal_book_usd;
+  if (signal != null && signal !== base) {
+    assert.notEqual(view.dayKill, railDollars(signal, LIVE_RAILS.dayKillFrac));
+    assert.notEqual(view.dayTarget, railDollars(signal, LIVE_RAILS.dayTargetFrac));
+  }
+  const stored = book.kill_remaining_usd;
+  if (stored != null && signal != null && signal !== 0) {
+    assert.equal(view.killHeadroom, railDollars(base, stored / signal));
+    assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / base) < 1e-12);
+    if (base !== signal) assert.notEqual(view.killHeadroom, stored);
+  }
+}
+
+test("the published book is the holdings sum, and the rails use the running balance", () => {
   const books = shownBooks(live);
   const sum = holdingsSum(live);
   assert.equal(books.length, 1);
@@ -80,13 +103,8 @@ test("the published book is the holdings sum, and the rails stay on the signal b
   if (cryptoOpen) assert.notEqual(books[0].runningBalance, sum);
   assert.notEqual(books[0].runningBalance, live.signal_book_usd);
   assert.equal(books[0].equitiesUsd, 0);
-  assert.equal(live.signal_book_usd, 775);
   assert.equal(books[0].dayPnl, live.day_pnl_usd ?? null);
-  assert.equal(books[0].dayKill, -77.5);
-  assert.equal(books[0].dayTarget, 19.38);
-  assert.equal(books[0].killHeadroom, 77.5);
-  assert.notEqual(books[0].dayKill, -77.47);
-  assert.notEqual(books[0].dayTarget, 19.37);
+  assertLiveRails(books[0], live);
   assert.notEqual(books[0].bookUsd, live.signal_book_usd);
   for (const seed of [SEEDS_USD.crypto, SEEDS_USD.equities, SEEDS_USD.combined]) {
     assert.notEqual(books[0].bookUsd, seed);
@@ -242,11 +260,7 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(view.bookUsd, 775);
   assert.notEqual(view.bookUsd, publicSignal.book_usd);
   assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
-  assert.equal(view.dayKill, -77.5);
-  assert.equal(view.dayTarget, 19.38);
-  assert.equal(view.killHeadroom, 77.5);
-  assert.notEqual(view.dayKill, -77.47);
-  assert.notEqual(view.dayTarget, 19.37);
+  assertLiveRails(view, merged);
   const card = reconciledPnl(merged);
   assert.equal(view.realizedPnl, card.realized);
   assert.equal(view.unrealizedPnl, card.unrealized);
@@ -308,6 +322,17 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   const derive = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
   assert.equal(exporter.includes("def merge_live_book"), true);
   assert.equal(exporter.includes("def refresh_live_book"), true);
+  assert.equal(exporter.includes("def apply_rh_cash"), true);
+  assert.equal(exporter.includes("def load_rh_cash"), true);
+  assert.equal(exporter.includes("/api/v2/crypto/trading/accounts/"), true);
+  assert.equal(exporter.includes("/api/v2/crypto/trading/holdings/"), true);
+  assert.equal(exporter.includes("buying_power"), true);
+  for (const file of [".github/workflows/export-kpi.yml", "scripts/export-kpi.yml"]) {
+    const workflow = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    const exportStep = workflow.split("Export scrubbed Supabase views")[1].split("Commit refreshed JSON")[0];
+    assert.match(exportStep, /RH_API_KEY/, file);
+    assert.match(exportStep, /RH_BASE64_PRIVATE_KEY/, file);
+  }
   assert.equal(exporter.includes("def latest_account_pnl"), true);
   assert.equal(exporter.includes("public.kpi_sleeve_snapshots"), true);
   assert.equal(exporter.includes("realized_pnl_usd"), true);
@@ -330,7 +355,7 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(derive.includes("delete base.running_pnl"), false);
 });
 
-test("open nets stay beside cash and do not move the rails", () => {
+test("open nets stay beside cash and the rails follow the running balance", () => {
   const withOpen = {
     ...live,
     positions: [
@@ -370,8 +395,9 @@ test("open nets stay beside cash and do not move the rails", () => {
   assert.equal(Math.round((view.realizedPnl + view.unrealizedPnl) * 100) / 100, view.runningPnl);
   assert.notEqual(view.runningPnl, live.running_pnl_usd ?? null);
   assert.equal(view.dayPnl, publicSignal.day_pnl_usd);
-  assert.equal(view.dayKill, -77.5);
-  assert.equal(view.dayTarget, 19.38);
+  assertLiveRails(view, merged);
+  assert.equal(view.runningBalance, sum + 37.5);
+  assert.notEqual(view.dayKill, railDollars(sum, LIVE_RAILS.dayKillFrac));
   assert.equal(view.equitiesUsd, 0);
   assert.notEqual(view.bookUsd, sum + 37.5);
   assert.equal(view.runningBalance, sum + 37.5);
