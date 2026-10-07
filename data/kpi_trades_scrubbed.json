@@ -1632,6 +1632,18 @@
     "fee_frac_of_book": 0.0031
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T22:53:17+00:00",
+    "ticker": "AXS",
+    "side": "sell",
+    "notional_frac_of_book": 0.1718,
+    "pnl_frac_of_book": 0.00696,
+    "why": "+5% short-hold profit-take, half-scale (artifact 7a2a7ce0 AXS P=0.44 flat; mark 1.2464 vs avg 1.1834, +5.32%; trigger 1.2426; no profit_exits).",
+    "running_pnl_frac": 0.081466,
+    "running_balance_frac": 1.081466,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
