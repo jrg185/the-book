@@ -1452,6 +1452,30 @@
     "fee_frac_of_book": 0.003133
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T02:52:40+00:00",
+    "ticker": "CRV",
+    "side": "sell",
+    "notional_frac_of_book": 0.3248,
+    "pnl_frac_of_book": -0.003416,
+    "why": "Artifact e03ea484 CRV SELL (P=0.40). Full exit.",
+    "running_pnl_frac": 0.045422,
+    "running_balance_frac": 1.045422,
+    "fee_frac_of_book": 0.0031
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T02:52:44+00:00",
+    "ticker": "QNT",
+    "side": "buy",
+    "notional_frac_of_book": 0.326867,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact e03ea484 QNT P=0.54; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.045422,
+    "running_balance_frac": 1.045422,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
