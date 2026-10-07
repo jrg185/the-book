@@ -1500,6 +1500,42 @@
     "fee_frac_of_book": 0.003067
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T11:52:31+00:00",
+    "ticker": "RENDER",
+    "side": "buy",
+    "notional_frac_of_book": 0.329767,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact aca4dea6 RENDER P=0.52; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T11:52:33+00:00",
+    "ticker": "BAT",
+    "side": "buy",
+    "notional_frac_of_book": 0.329933,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact aca4dea6 BAT P=0.51; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T11:52:34+00:00",
+    "ticker": "AXS",
+    "side": "buy",
+    "notional_frac_of_book": 0.3297,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact aca4dea6 AXS P=0.51; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
