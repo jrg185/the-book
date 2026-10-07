@@ -1536,6 +1536,42 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T14:04:48+00:00",
+    "ticker": "QNT",
+    "side": "buy",
+    "notional_frac_of_book": 0.3268,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact 8d6a4a90 QNT P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0031
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T14:04:50+00:00",
+    "ticker": "FET",
+    "side": "buy",
+    "notional_frac_of_book": 0.329933,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact 8d6a4a90 FET P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-07T14:04:52+00:00",
+    "ticker": "BONK",
+    "side": "buy",
+    "notional_frac_of_book": 0.3269,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate 0.50 hit (artifact 8d6a4a90 BONK P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
+    "running_pnl_frac": 0.064915,
+    "running_balance_frac": 1.064915,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
