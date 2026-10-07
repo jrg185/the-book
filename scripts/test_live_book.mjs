@@ -65,17 +65,47 @@ function assertLiveRails(view, book) {
   assert.equal(view.dayKill, railDollars(base, LIVE_RAILS.dayKillFrac));
   assert.equal(view.dayTarget, railDollars(base, LIVE_RAILS.dayTargetFrac));
   const signal = book.signal_book_usd;
-  if (signal != null && signal !== base) {
-    assert.notEqual(view.dayKill, railDollars(signal, LIVE_RAILS.dayKillFrac));
-    assert.notEqual(view.dayTarget, railDollars(signal, LIVE_RAILS.dayTargetFrac));
+  // Cents can match a different raw book. Each rail is a mismatch only when
+  // its rounded dollars differ, not when signal !== base.
+  if (signal != null) {
+    const signalKill = railDollars(signal, LIVE_RAILS.dayKillFrac);
+    if (signalKill !== railDollars(base, LIVE_RAILS.dayKillFrac)) {
+      assert.notEqual(view.dayKill, signalKill);
+    }
+    const signalTarget = railDollars(signal, LIVE_RAILS.dayTargetFrac);
+    if (signalTarget !== railDollars(base, LIVE_RAILS.dayTargetFrac)) {
+      assert.notEqual(view.dayTarget, signalTarget);
+    }
   }
   const stored = book.kill_remaining_usd;
   if (stored != null && signal != null && signal !== 0) {
-    assert.equal(view.killHeadroom, railDollars(base, stored / signal));
+    const headroom = railDollars(base, stored / signal);
+    assert.equal(view.killHeadroom, headroom);
     assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / base) < 1e-12);
-    if (base !== signal) assert.notEqual(view.killHeadroom, stored);
+    if (headroom !== stored) assert.notEqual(view.killHeadroom, stored);
   }
 }
+
+test("rails that round to the same cents still follow the running balance", () => {
+  const signal = 400;
+  const base = 400.04;
+  const stored = 40;
+  assert.notEqual(base, signal);
+  assert.equal(railDollars(signal, LIVE_RAILS.dayKillFrac), railDollars(base, LIVE_RAILS.dayKillFrac));
+  assert.equal(railDollars(signal, LIVE_RAILS.dayTargetFrac), railDollars(base, LIVE_RAILS.dayTargetFrac));
+  assert.equal(railDollars(base, stored / signal), stored);
+  const book = {
+    signal_book_usd: signal,
+    running_balance_usd: base,
+    kill_remaining_usd: stored,
+  };
+  const view = cryptoBookView(book);
+  assert.equal(view.runningBalance, base);
+  assert.equal(view.dayTarget, railDollars(base, LIVE_RAILS.dayTargetFrac));
+  assert.equal(view.dayKill, railDollars(base, LIVE_RAILS.dayKillFrac));
+  assert.equal(view.killHeadroom, stored);
+  assertLiveRails(view, book);
+});
 
 test("the published book is the holdings sum, and the rails use the running balance", () => {
   const books = shownBooks(live);
