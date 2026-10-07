@@ -60,6 +60,34 @@ function railDollars(bookUsd, frac) {
   return Math.round((bookUsd * frac + Number.EPSILON) * 100) / 100;
 }
 
+function roundCents(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Combined seed the export subtracts from cash + lots. Read from the writer,
+// not a second copy of the dollar figure.
+function exportCombinedSeed() {
+  const text = readFileSync(new URL("./export_kpi.py", import.meta.url), "utf8");
+  const body = text.split("BOOK_SEEDS = {")[1]?.split("}")[0] ?? "";
+  const match = body.match(/"combined"\s*:\s*Decimal\("(-?\d+(?:\.\d+)?)"\)/);
+  assert.ok(match, "export BOOK_SEEDS combined");
+  return Number(match[1]);
+}
+
+const combinedSeed = exportCombinedSeed();
+
+// day_realized_usd is optional. When the gross and sell-fee audit fields are
+// present, gross - fees matches the net within one cent.
+function assertOptionalDayRealized(drop) {
+  if (!drop || !Object.hasOwn(drop, "day_realized_usd")) return;
+  assert.equal(Number.isFinite(drop.day_realized_usd), true);
+  if (!Object.hasOwn(drop, "day_realized_gross_usd") || !Object.hasOwn(drop, "day_sell_fees_usd")) return;
+  assert.equal(Number.isFinite(drop.day_realized_gross_usd), true);
+  assert.equal(Number.isFinite(drop.day_sell_fees_usd), true);
+  const gap = drop.day_realized_gross_usd - drop.day_sell_fees_usd - drop.day_realized_usd;
+  assert.ok(Math.abs(gap) <= 0.01);
+}
+
 function assertLiveRails(view, book) {
   const base = view.runningBalance;
   assert.ok(base != null && base !== 0);
@@ -149,10 +177,15 @@ test("the published book is the holdings sum, and the rails use the running bala
   assert.equal(books[0].unrealizedPnl, pnl.unrealized);
   assert.equal(books[0].realizedPnl, pnl.realized);
   assert.equal(Math.round((pnl.realized + pnl.unrealized) * 100) / 100, pnl.running);
-  assert.equal(pnl.running, Math.round((pnl.marked - SEEDS_USD.combined) * 100) / 100);
-  assert.notEqual(books[0].runningPnl, live.running_pnl_usd);
+  const expectedRunning = roundCents(books[0].runningBalance - combinedSeed);
+  assert.equal(pnl.running, expectedRunning);
+  assert.equal(books[0].runningPnl, expectedRunning);
+  // Export writes running_pnl_usd from the same cash + lots - seed.
+  assert.equal(live.running_pnl_usd, expectedRunning);
+  assert.equal(live.running_balance_usd, books[0].runningBalance);
+  assert.equal(live.kill_remaining_usd, killRemainingUsd(books[0].runningBalance, live.day_pnl_usd));
   assert.notEqual(books[0].realizedPnl, live.realized_pnl_usd);
-  assert.ok(Math.abs(books[0].runningPnl - (books[0].runningBalance - SEEDS_USD.combined)) < 0.001);
+  assert.equal(SEEDS_USD.combined, combinedSeed);
 });
 
 test("equities is not rendered as its own book", () => {
@@ -269,7 +302,9 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.notEqual(merged.book_usd, publicSignal.book_usd);
   assert.equal(merged.day_pnl_usd, withPnl.day_pnl_usd);
   assert.notEqual(merged.day_pnl_usd, publicSignal.day_pnl_usd);
-  assert.equal(merged.kill_remaining_usd, 77.5);
+  const keptKill =
+    withPnl.kill_remaining_usd == null ? publicSignal.kill_remaining_usd : withPnl.kill_remaining_usd;
+  assert.equal(merged.kill_remaining_usd, keptKill);
   assert.equal(merged.realized_pnl_usd, withPnl.realized_pnl_usd);
   assert.equal(merged.unrealized_pnl_usd, withPnl.unrealized_pnl_usd);
   assert.equal(merged.running_pnl_usd, withPnl.running_pnl_usd);
@@ -311,7 +346,7 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(liveCard.realizedPnl, livePnl.realized);
   assert.equal(liveCard.unrealizedPnl, livePnl.unrealized);
   assert.equal(liveCard.runningPnl, livePnl.running);
-  assert.notEqual(liveCard.runningPnl, live.running_pnl_usd);
+  assert.equal(liveCard.runningPnl, roundCents(liveCard.runningBalance - combinedSeed));
   assert.equal(published.includes("\"realized_pnl_usd\": null"), false);
   assert.equal(published.includes("\"running_pnl_usd\": null"), false);
   const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
@@ -393,7 +428,7 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
     assert.equal(typeof drop.as_of, "string");
     assert.equal(Number.isNaN(Date.parse(drop.as_of)), false);
   }
-  assert.equal(Object.hasOwn(drop, "day_realized_usd"), false);
+  assertOptionalDayRealized(drop);
   const applied = {
     ...live,
     holdings: (live.holdings || []).map((row) => {
@@ -443,6 +478,45 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
     assert.match(exportStep, /RH_BASE64_PRIVATE_KEY: \$\{\{ secrets\.RH_BASE64_PRIVATE_KEY \}\}/, file);
     assert.equal(exportStep.includes("Export KPI expected live Robinhood cash"), false, file);
   }
+});
+
+test("a cash drop may include day realized net, gross, and sell fees", () => {
+  const published = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
+  assertOptionalDayRealized(published);
+  const drop = {
+    USD: published.USD,
+    USDC: published.USDC,
+    day_realized_usd: -1.09,
+    day_realized_gross_usd: 1.25,
+    day_sell_fees_usd: 2.34,
+  };
+  assertOptionalDayRealized(drop);
+  assertOptionalDayRealized({
+    USD: published.USD,
+    USDC: published.USDC,
+    day_realized_usd: drop.day_realized_usd,
+  });
+  assert.throws(() => assertOptionalDayRealized({ day_realized_usd: Number.NaN }));
+
+  const book = {
+    ...live,
+    day_pnl_usd: drop.day_realized_usd,
+    holdings: (live.holdings || []).map((row) => {
+      if (row.ticker === "USD") return { ...row, value_usd: drop.USD };
+      if (row.ticker === "USDC") return { ...row, value_usd: drop.USDC, cost_basis_usd: drop.USDC };
+      return row;
+    }),
+  };
+  book.book_usd = holdingsSum(book);
+  const view = cryptoBookView(book);
+  const balance = agenticTotal(book);
+  const spent = Math.min(drop.day_realized_usd, 0);
+  assert.equal(view.runningBalance, balance);
+  assert.equal(view.bookUsd, holdingsSum(book));
+  assert.equal(view.dayPnl, drop.day_realized_usd);
+  assert.equal(view.runningPnl, roundCents(balance - combinedSeed));
+  assert.equal(view.killHeadroom, killRemainingUsd(balance, drop.day_realized_usd));
+  assert.equal(view.killHeadroom, Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent)));
 });
 
 test("open nets stay beside cash and the rails follow the running balance", () => {
