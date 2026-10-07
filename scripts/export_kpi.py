@@ -11,10 +11,16 @@ ALPHA_VANTAGE_API_KEY and FINNHUB_API_KEY are not read here. Marks are
 applied by scripts/refresh_kpi_snapshots.py before this export.
 With no service role key, the script leaves the committed KPI JSON
 in place, stamps data/meta.json with export_status "stale", and exits 0,
-unless KPI_REFRESH_EXPECTED=1. In that case a missing credential or the
-latest kpi_summary.as_of per sleeve older than 15 minutes exits non-zero,
-stamps meta.json, and does not rewrite KPI numbers. Older snapshots for
-the same sleeve are ignored. It does not rewrite data/models.json.
+unless KPI_REFRESH_EXPECTED=1. In that case a missing Supabase credential
+or the latest kpi_summary.as_of per sleeve older than 15 minutes exits
+non-zero, stamps meta.json, and does not rewrite KPI numbers. Older
+snapshots for the same sleeve are ignored. It does not rewrite data/models.json.
+
+Robinhood cash is separate. Unset RH_API_KEY or RH_BASE64_PRIVATE_KEY skips
+the signed REST read and does not fail the run, even when KPI_REFRESH_EXPECTED
+is set. Export then reads data/rh_cash.json. A missing or invalid drop leaves
+the USD and USDC lines already on data/live_book.json. Live balances are not
+hardcoded in this script.
 
   python3 scripts/export_kpi.py --self-test
 
@@ -47,6 +53,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2398,9 +2405,10 @@ def _rh_collect(api_key: str, private_key: str, path: str, rh_get, path_from_nex
 def load_rh_cash(env: dict | None = None) -> dict | None:
     """Live USD buying power and USDC quantity for the agentic account.
 
-    None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. A signed GET
+    None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. That None does
+    not fail export; the caller may read data/rh_cash.json. A signed GET
     that fails, or a payload without both lines, raises so export does not
-    publish fresh lots on stale cash. This does not place an order.
+    publish fresh lots on a broken cash read. This does not place an order.
     """
     from sync_rh_kpi_trades import SyncError, path_from_next, rh_credentials, rh_get
 
@@ -2433,8 +2441,59 @@ def load_rh_cash(env: dict | None = None) -> dict | None:
     return {"USD": usd, "USDC": usdc}
 
 
+_ISO8601_STAMP = re.compile(
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})"
+)
+
+
+def _iso8601_stamp(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if _ISO8601_STAMP.fullmatch(text) is None:
+        return False
+    try:
+        parse_as_of(text)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _json_cash_number(value):
+    """A JSON number, in cents. Strings and booleans are not cash."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
+    return _cents_number(value)
+
+
+def load_rh_cash_drop(data_dir: Path) -> dict | None:
+    """USD and USDC from data/rh_cash.json.
+
+    Shape is {"USD": number, "USDC": number, "as_of": "ISO8601 optional"}.
+    Unknown keys are ignored. A missing file, non-object, non-number cash
+    line, or a present as_of that is not ISO8601 returns None. This does
+    not call Robinhood and does not invent a balance.
+    """
+    payload = _read_json(Path(data_dir) / "rh_cash.json", None)
+    if not isinstance(payload, dict):
+        return None
+    usd = _json_cash_number(payload.get("USD"))
+    usdc = _json_cash_number(payload.get("USDC"))
+    if usd is None or usdc is None:
+        return None
+    out = {"USD": usd, "USDC": usdc}
+    if "as_of" in payload and payload.get("as_of") not in (None, ""):
+        as_of = payload.get("as_of")
+        if not _iso8601_stamp(as_of):
+            return None
+        out["as_of"] = str(as_of).strip()
+    return out
+
+
 def apply_rh_cash(book: dict, cash: dict | None) -> dict:
-    """Replace USD and USDC holdings with a live Robinhood cash read.
+    """Replace USD and USDC holdings with a Robinhood cash read.
 
     book_usd is recomputed from the holdings. Open lots, the signal book,
     and kill_remaining_usd stay. None leaves the cash lines already on the file.
@@ -2489,9 +2548,10 @@ def refresh_live_book(
     as_of. Day P&L stays the signal copy. generated_at stays the signal time.
     A missing snapshot does not delete P&L or day P&L already on the file.
     When positions is the open-net read, those rows replace the list. None
-    leaves open rows already on the file. When cash is the live Robinhood
-    read, USD and USDC holdings are that cash and book_usd is recomputed.
-    None leaves the cash lines already on the file.
+    leaves open rows already on the file. When cash is a Robinhood USD and
+    USDC read (REST, or data/rh_cash.json when REST keys are unset), those
+    holdings are that cash and book_usd is recomputed. None leaves the cash
+    lines already on the file.
     """
     path = target / "live_book.json"
     if not path.exists():
@@ -3291,6 +3351,112 @@ def self_test() -> int:
         raise RuntimeError("cash refresh moved kill headroom")
     if cashed.get("signal_book_usd") != published_open.get("signal_book_usd"):
         raise RuntimeError("cash refresh copied onto the signal book")
+    main_src = Path(__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
+    if "Export KPI expected live Robinhood cash" in main_src:
+        raise RuntimeError("KPI_REFRESH_EXPECTED still fail-closes when Robinhood keys are unset")
+    rest_at = main_src.find("rest_cash = load_rh_cash()")
+    skip_at = main_src.find("REST cash skipped")
+    drop_at = main_src.find("load_rh_cash_drop(DATA)")
+    if rest_at < 0 or not (rest_at < skip_at < drop_at):
+        raise RuntimeError("main does not soft-skip REST cash onto the drop file")
+    if "cash=cash" not in main_src[drop_at:]:
+        raise RuntimeError("main does not pass resolved cash into refresh_live_book")
+    seeded = load_rh_cash_drop(DATA)
+    if not isinstance(seeded, dict) or "USD" not in seeded or "USDC" not in seeded:
+        raise RuntimeError("data/rh_cash.json is not a cash drop")
+    if any(key not in {"USD", "USDC", "as_of"} for key in seeded):
+        raise RuntimeError(f"cash drop kept an unknown key: {seeded}")
+    bare_env = {"KPI_REFRESH_EXPECTED": "1"}
+    if load_rh_cash(bare_env) is not None:
+        raise RuntimeError("unset RH keys did not skip REST")
+    if _json_cash_number(float("nan")) is not None or _json_cash_number(True) is not None:
+        raise RuntimeError("non-finite or boolean cash was accepted")
+    if _json_cash_number("11.5") is not None:
+        raise RuntimeError("a string cash line was accepted")
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        if load_rh_cash_drop(folder) is not None:
+            raise RuntimeError("a missing cash drop invented a balance")
+        (folder / "rh_cash.json").write_text("{", encoding="utf-8")
+        if load_rh_cash_drop(folder) is not None:
+            raise RuntimeError("invalid cash drop JSON became a balance")
+        (folder / "rh_cash.json").write_text("[]", encoding="utf-8")
+        if load_rh_cash_drop(folder) is not None:
+            raise RuntimeError("a cash drop list became a balance")
+        for bad in (
+            {"USD": "11.5", "USDC": 2.25},
+            {"USD": True, "USDC": 2.25},
+            {"USDC": 2.25},
+            {"USD": 11.5, "USDC": 2.25, "as_of": "yesterday"},
+            {"USD": 11.5, "USDC": 2.25, "as_of": "2026-13-40T00:00:00Z"},
+        ):
+            (folder / "rh_cash.json").write_text(json.dumps(bad), encoding="utf-8")
+            if load_rh_cash_drop(folder) is not None:
+                raise RuntimeError(f"invalid cash drop was accepted: {bad}")
+        (folder / "rh_cash.json").write_text(
+            json.dumps(
+                {
+                    "USD": 11.5,
+                    "USDC": 2.25,
+                    "as_of": "2026-01-02T03:04:05Z",
+                    "account_number": "ignored",
+                }
+            ),
+            encoding="utf-8",
+        )
+        parsed_drop = load_rh_cash_drop(folder)
+        if parsed_drop != {"USD": 11.5, "USDC": 2.25, "as_of": "2026-01-02T03:04:05Z"}:
+            raise RuntimeError(f"cash drop was not the file: {parsed_drop}")
+        (folder / "rh_cash.json").write_text(
+            json.dumps({"USD": 11, "USDC": 2, "note": "ignored"}),
+            encoding="utf-8",
+        )
+        plain_drop = load_rh_cash_drop(folder)
+        if plain_drop != {"USD": 11.0, "USDC": 2.0}:
+            raise RuntimeError(f"optional as_of was required: {plain_drop}")
+        resolved = load_rh_cash(bare_env)
+        if resolved is None:
+            resolved = load_rh_cash_drop(folder)
+        if resolved != plain_drop:
+            raise RuntimeError(
+                "KPI_REFRESH_EXPECTED with unset RH keys did not use the drop: "
+                + repr(resolved)
+            )
+        prior = {
+            "book_usd": 100,
+            "signal_book_usd": 775,
+            "kill_remaining_usd": 77.5,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 70},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 30, "cost_basis_usd": 30},
+            ],
+            "positions": [{"sleeve": "crypto", "ticker": "ZZ", "qty": "1", "value_usd": 5}],
+        }
+        write_json(folder / "live_book.json", prior)
+        refreshed = refresh_live_book(folder, fetch=False, cash=resolved)
+        usd_line = next(row for row in refreshed["holdings"] if row["ticker"] == "USD")
+        usdc_line = next(row for row in refreshed["holdings"] if row["ticker"] == "USDC")
+        if usd_line["value_usd"] != 11.0 or usdc_line["value_usd"] != 2.0:
+            raise RuntimeError(f"drop was not applied: {refreshed['holdings']}")
+        if usdc_line.get("cost_basis_usd") != 2.0:
+            raise RuntimeError("drop left USDC cost basis on the previous quantity")
+        if refreshed["book_usd"] != account_book_usd(refreshed["holdings"]):
+            raise RuntimeError("drop apply did not recompute book_usd")
+        if refreshed.get("positions") != prior["positions"]:
+            raise RuntimeError("drop apply rewrote open lots")
+        if refreshed.get("kill_remaining_usd") != 77.5 or refreshed.get("signal_book_usd") != 775:
+            raise RuntimeError("drop apply moved the signal rail")
+        empty = folder / "empty"
+        empty.mkdir()
+        write_json(empty / "live_book.json", prior)
+        skipped = load_rh_cash(bare_env)
+        if skipped is not None or load_rh_cash_drop(empty) is not None:
+            raise RuntimeError("missing RH keys and no drop did not soft-skip")
+        left = refresh_live_book(empty, fetch=False, cash=skipped)
+        if [row.get("value_usd") for row in left["holdings"]] != [70, 30]:
+            raise RuntimeError(f"soft-skip rewrote holdings: {left['holdings']}")
+        if left["book_usd"] != 100:
+            raise RuntimeError(f"soft-skip recomputed the book: {left['book_usd']}")
     parsed_usd = usd_cash_from_accounts(
         {
             "results": [
@@ -3429,15 +3595,24 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"])
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        cash = load_rh_cash()
-        if cash is None and refresh_expected:
-            raise RuntimeError(
-                "Export KPI expected live Robinhood cash. "
-                "RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. Holdings were not refreshed."
-            )
-        if cash:
+        # REST when the keys are set. Unset keys skip REST even if
+        # KPI_REFRESH_EXPECTED is set, then the desk drop, then the cash
+        # lines already on the file. Live balances are not hardcoded here.
+        rest_cash = load_rh_cash()
+        if rest_cash is None:
             print(
-                "live book cash from Robinhood "
+                "Robinhood REST cash skipped. "
+                "RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset."
+            )
+            cash = load_rh_cash_drop(DATA)
+        else:
+            cash = rest_cash
+        if cash:
+            origin = "Robinhood" if rest_cash is not None else "data/rh_cash.json"
+            print(
+                "live book cash from "
+                + origin
+                + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )
         refresh_live_book(

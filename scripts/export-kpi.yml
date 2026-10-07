@@ -178,7 +178,8 @@ jobs:
           # sleeve_as_of is that snapshot as_of. generated_at stays the signal file time and is not the MTM clock.
           # Day P&L stays the signal day_pnl_usd. A snapshot with no day column does not clear it.
           # Open positions on that file are net qty from kpi_trades with the snapshot mark.
-          # USD and USDC holdings are the live Robinhood cash and USDC quantity from this run.
+          # USD and USDC holdings are Robinhood cash: REST when RH keys are set, otherwise data/rh_cash.json.
+          # Unset RH keys skip REST and do not fail this step. Live balances are not hardcoded here.
           # The card sizes the day kill and the day target from that cash plus open marks, not from signal_book_usd.
           # Each open row's running P&L is that ticker's close pnl_trade_usd plus the same mark.
           git add -- data/live_book.json data/kpi_summary.json data/kpi_trades_scrubbed.json data/open_positions.json data/sleeve_curves.json data/models_oos.json data/model_scorecard.json data/meta.json

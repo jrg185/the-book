@@ -43,7 +43,7 @@ Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml)
 - A fill payload, or a secrets-backed hourly poll, upserts `public.kpi_trades`, then the same run refreshes `kpi_sleeve_snapshots` and exports. A bad requested payload, or a failed refresh, does not commit KPI JSON
 - Reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `SUPABASE_DB_URL` is optional
 - Crypto marks: public Coinbase ticker, then Yahoo `{SYMBOL}-USD`. Equities marks: Finnhub when `FINNHUB_API_KEY` is set, then Yahoo chart. CoinStats and Alpha Vantage are later fallbacks when those keys are set
-- Writes `data/kpi_summary.json`, `data/kpi_trades_scrubbed.json`, `data/models_oos.json`, `data/model_scorecard.json`, and `data/meta.json` when they changed. The same run rewrites `data/live_book.json` so `book_usd` is the sum of the holding values, copies `running_balance_usd`, realized, unrealized, and running P&L from the latest `sleeve=combined` row of `public.kpi_sleeve_snapshots`, stamps that row's `as_of` onto `sleeve_as_of`, writes each open net from `public.kpi_trades` onto `positions`, and replaces the USD and USDC holding lines with the live Robinhood account cash and USDC quantity. The book card uses `sleeve_as_of` as the MTM clock. `generated_at` stays the signal file time. It keeps `signal_book_usd`, day P&L, and kill headroom from the signal file when that file is readable. It does not copy the signal book onto `book_usd` or onto the running-balance line, and it does not clear day P&L when the snapshot has no day column. The commit step `git add`s `data/live_book.json` and `data/model_scorecard.json` with the other KPI files. `SUPABASE_DB_URL` is passed into the export step so fee and signal-linkage reads can fall back to SQL.
+- Writes `data/kpi_summary.json`, `data/kpi_trades_scrubbed.json`, `data/models_oos.json`, `data/model_scorecard.json`, and `data/meta.json` when they changed. The same run rewrites `data/live_book.json` so `book_usd` is the sum of the holding values, copies `running_balance_usd`, realized, unrealized, and running P&L from the latest `sleeve=combined` row of `public.kpi_sleeve_snapshots`, stamps that row's `as_of` onto `sleeve_as_of`, writes each open net from `public.kpi_trades` onto `positions`, and replaces the USD and USDC holding lines from Robinhood cash when a read is available (signed REST if `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` are set, otherwise `data/rh_cash.json`). Unset keys skip REST and do not fail the export. A missing or invalid drop leaves those cash lines in place. The book card uses `sleeve_as_of` as the MTM clock. `generated_at` stays the signal file time. It keeps `signal_book_usd`, day P&L, and kill headroom from the signal file when that file is readable. It does not copy the signal book onto `book_usd` or onto the running-balance line, and it does not clear day P&L when the snapshot has no day column. The commit step `git add`s `data/live_book.json` and `data/model_scorecard.json` with the other KPI files. `SUPABASE_DB_URL` is passed into the export step so fee and signal-linkage reads can fall back to SQL.
 - Does not rewrite `data/models.json`
 - Does not deploy Pages and does not change the Pages source
 
@@ -129,6 +129,16 @@ Add these repository secrets (Settings → Secrets and variables → Actions). D
 | `ALPHA_VANTAGE_API_KEY` | Optional equities mark after Finnhub and Yahoo. |
 
 Public Coinbase and Yahoo marks do not need those quote keys. `ROBINHOOD_TOKEN` is not used. Optional later, not required to merge: `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` turn on the Actions hourly poll. `RH_AGENTIC_ACCOUNT` overrides `546048042` on that poll.
+
+### Agentic cash
+
+Export KPI writes the USD and USDC lines on `data/live_book.json` from a cash read, then recomputes `book_usd` as the holdings sum. The day kill and the day target stay fractions of the running balance (that cash plus open marks).
+
+The read order is signed Robinhood REST when `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` are both set, otherwise `data/rh_cash.json`, otherwise the cash lines already on the file. Unset keys skip REST. That skip does not fail the export, including when `KPI_REFRESH_EXPECTED=1`. The hourly `0 * * * *` poll stays skip-when-unset and does not call Robinhood. Those secrets stay optional.
+
+`data/rh_cash.json` is the desk drop. `USD` and `USDC` are numbers. `as_of` is optional ISO8601. Unknown keys are ignored. A missing or invalid file is not a balance.
+
+Desk path: Robinhood MCP on Agentic account `546048042` → write `data/rh_cash.json` → run **Export KPI**. A push that only touches `data/**` does not start the workflow. Do not hardcode live balances in `derive.js`, the rail math, or `scripts/export_kpi.py`. The drop file is the source of truth until Desk replaces it.
 
 ### RH fill ingest
 

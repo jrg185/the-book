@@ -324,6 +324,7 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(exporter.includes("def refresh_live_book"), true);
   assert.equal(exporter.includes("def apply_rh_cash"), true);
   assert.equal(exporter.includes("def load_rh_cash"), true);
+  assert.equal(exporter.includes("def load_rh_cash_drop"), true);
   assert.equal(exporter.includes("/api/v2/crypto/trading/accounts/"), true);
   assert.equal(exporter.includes("/api/v2/crypto/trading/holdings/"), true);
   assert.equal(exporter.includes("buying_power"), true);
@@ -353,6 +354,60 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(derive.includes("const runningPnl = null"), false);
   assert.equal(derive.includes("delete base.realized_pnl"), false);
   assert.equal(derive.includes("delete base.running_pnl"), false);
+});
+
+test("a cash drop replaces USD and USDC and unset REST keys do not fail export", () => {
+  const drop = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
+  assert.equal(typeof drop.USD, "number");
+  assert.equal(typeof drop.USDC, "number");
+  assert.equal(Number.isFinite(drop.USD), true);
+  assert.equal(Number.isFinite(drop.USDC), true);
+  if (drop.as_of != null) {
+    assert.equal(typeof drop.as_of, "string");
+    assert.equal(Number.isNaN(Date.parse(drop.as_of)), false);
+  }
+  const applied = {
+    ...live,
+    holdings: (live.holdings || []).map((row) => {
+      if (row.ticker === "USD") return { ...row, value_usd: drop.USD };
+      if (row.ticker === "USDC") return { ...row, value_usd: drop.USDC, cost_basis_usd: drop.USDC };
+      return row;
+    }),
+  };
+  applied.book_usd = holdingsSum(applied);
+  const view = cryptoBookView(applied);
+  const usd = holdingRows(applied).find((row) => row.ticker === "USD");
+  const usdc = holdingRows(applied).find((row) => row.ticker === "USDC");
+  assert.equal(usd.valueUsd, drop.USD);
+  assert.equal(usdc.valueUsd, drop.USDC);
+  assert.equal(view.bookUsd, applied.book_usd);
+  assertLiveRails(view, applied);
+  assert.deepEqual(
+    (applied.positions || []).map((row) => row.ticker),
+    (live.positions || []).map((row) => row.ticker)
+  );
+  const exporter = readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8");
+  const main = exporter.split("\ndef main(argv")[1];
+  const restAt = main.indexOf("rest_cash = load_rh_cash()");
+  const skipAt = main.indexOf("REST cash skipped");
+  const dropAt = main.indexOf("load_rh_cash_drop(DATA)");
+  assert.ok(restAt >= 0 && restAt < skipAt && skipAt < dropAt);
+  assert.equal(main.includes("Export KPI expected live Robinhood cash"), false);
+  assert.equal(main.includes("cash=cash"), true);
+  assert.equal(exporter.includes(String(drop.USD)), false);
+  for (const file of ["derive.js", "app.js", "index.html"]) {
+    const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.equal(text.includes(String(drop.USD)), false, file);
+    assert.equal(text.includes(String(drop.USDC)), false, file);
+  }
+  for (const file of [".github/workflows/export-kpi.yml", "scripts/export-kpi.yml"]) {
+    const workflow = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.match(workflow, /Hourly Actions poll skipped/, file);
+    const exportStep = workflow.split("Export scrubbed Supabase views")[1].split("Commit refreshed JSON")[0];
+    assert.match(exportStep, /RH_API_KEY: \$\{\{ secrets\.RH_API_KEY \}\}/, file);
+    assert.match(exportStep, /RH_BASE64_PRIVATE_KEY: \$\{\{ secrets\.RH_BASE64_PRIVATE_KEY \}\}/, file);
+    assert.equal(exportStep.includes("Export KPI expected live Robinhood cash"), false, file);
+  }
 });
 
 test("open nets stay beside cash and the rails follow the running balance", () => {
