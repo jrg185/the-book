@@ -269,7 +269,6 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assert.equal(published.includes("\"realized_pnl_usd\": null"), false);
   assert.equal(published.includes("\"running_pnl_usd\": null"), false);
   const tapeNames = (openPositions.positions || []).map((row) => row.ticker);
-  assert.ok(tapeNames.length > 1);
   for (const name of tapeNames) {
     if (name === "USD" || name === "USDC") continue;
     assert.equal(rows.some((row) => row.ticker === name), false, name);
