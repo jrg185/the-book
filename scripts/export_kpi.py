@@ -2038,6 +2038,36 @@ def js_round_cents(value) -> float:
     return math.floor(shifted + 0.5) / 100.0
 
 
+def approx_cents(left, right, tol: float = 0.005) -> bool:
+    """True when two USD amounts are inside half a cent.
+
+    None and non-numbers do not match. Callers that must tell null from a
+    dollar still use identity.
+    """
+    if isinstance(left, bool) or isinstance(right, bool):
+        return False
+    if left is None or right is None:
+        return False
+    try:
+        a = float(left)
+        b = float(right)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(a) or not math.isfinite(b):
+        return False
+    return abs(a - b) < tol
+
+
+def usd_equal(left, right) -> bool:
+    if left is None or right is None:
+        return left is right
+    return approx_cents(left, right)
+
+
+def usd_differ(left, right) -> bool:
+    return not usd_equal(left, right)
+
+
 _LIVE_RAILS: dict[str, Decimal] | None = None
 
 
@@ -2795,6 +2825,14 @@ def write_bundle(target: Path, bundle: dict) -> None:
 
 def self_test() -> int:
     """Mixed history passes; a cohort whose latest rows are all stale fails."""
+    marks = (0.1, 0.2)
+    raw_lot = marks[0] + marks[1]
+    rounded_lot = js_round_cents(raw_lot)
+    if raw_lot == rounded_lot:
+        raise RuntimeError("lot-mark float sum no longer misses exact equality")
+    if not approx_cents(raw_lot, rounded_lot):
+        raise RuntimeError(f"cent compare rejected a lot-mark float sum: {raw_lot} vs {rounded_lot}")
+
     now = dt.datetime(2026, 9, 28, 1, 30, tzinfo=dt.timezone.utc)
     fresh = (now - dt.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
     stale = "2026-09-27T23:48:00Z"
@@ -3115,7 +3153,7 @@ def self_test() -> int:
         raise RuntimeError(f"promoted {card['live_backend']}")
     if card["closed_fills"]["wins"] != 1 or card["closed_fills"]["losses"] != 1 or card["closed_fills"]["deduped"] != 1:
         raise RuntimeError(f"fills {card['closed_fills']}")
-    if card["fee_drag"]["status"] != "known" or card["fee_drag"]["fee_usd"] != 1.0:
+    if card["fee_drag"]["status"] != "known" or not usd_equal(card["fee_drag"]["fee_usd"], 1.0):
         raise RuntimeError(f"fees {card['fee_drag']}")
     if "95 bps" not in card["fee_drag"]["note"] or "190 RT" not in card["fee_drag"]["note"] or "T24d" not in card["fee_drag"]["note"]:
         raise RuntimeError(f"fee handoff {card['fee_drag']['note']}")
@@ -3138,7 +3176,7 @@ def self_test() -> int:
             "note": "from warehouse",
         },
     )
-    if kept["fee_drag"]["status"] != "known" or kept["fee_drag"]["fee_usd"] != 4.5:
+    if kept["fee_drag"]["status"] != "known" or not usd_equal(kept["fee_drag"]["fee_usd"], 4.5):
         raise RuntimeError(f"warehouse fees were replaced {kept['fee_drag']}")
     if "95 bps" not in kept["fee_drag"]["note"] or '"order_id"' in json.dumps(kept):
         raise RuntimeError("known fee drag dropped the handoff or wrote an id")
@@ -3149,7 +3187,7 @@ def self_test() -> int:
         {"sleeve": "crypto", "side": "sell", "fee_usd": "0", "notional_usd": "100", "order_id": "d"},
     ]
     measured = fee_drag_from_rows(ratio_rows)
-    if measured["status"] != "known" or measured["n"] != 4 or measured["fee_usd"] != 2.85:
+    if measured["status"] != "known" or measured["n"] != 4 or not usd_equal(measured["fee_usd"], 2.85):
         raise RuntimeError(f"fee sum {measured}")
     if "This read median 95 bps/leg" not in measured["note"] or "~190 RT" not in measured["note"]:
         raise RuntimeError(f"median note {measured['note']}")
@@ -3232,9 +3270,9 @@ def self_test() -> int:
     }
     merged_book = merge_live_book(account, copied)
     expected_book = account_book_usd(account["holdings"])
-    if expected_book is None or merged_book["book_usd"] != expected_book:
+    if expected_book is None or not usd_equal(merged_book["book_usd"], expected_book):
         raise RuntimeError(f"live book was not the holdings sum: {merged_book}")
-    if merged_book["book_usd"] == copied["book_usd"] or merged_book["book_usd"] == 775:
+    if not usd_differ(merged_book["book_usd"], copied["book_usd"]) or not usd_differ(merged_book["book_usd"], 775):
         raise RuntimeError("signal book_usd was copied onto the account")
     if merged_book.get("signal_book_usd") != 775:
         raise RuntimeError(f"signal rail book was dropped: {merged_book}")
@@ -3252,7 +3290,9 @@ def self_test() -> int:
         raise RuntimeError("account day replaced the signal day")
     if merged_book.get("running_balance_usd") != 812.4:
         raise RuntimeError(f"merge dropped running balance: {merged_book}")
-    if merged_book["running_balance_usd"] == expected_book or merged_book["running_balance_usd"] == 775:
+    if not usd_differ(merged_book["running_balance_usd"], expected_book) or not usd_differ(
+        merged_book["running_balance_usd"], 775
+    ):
         raise RuntimeError("running balance was replaced by the holdings sum or the signal book")
     snapshot_rows = [
         {
@@ -3296,7 +3336,7 @@ def self_test() -> int:
     if account_pnl["running_balance_usd"] == 807.0:
         raise RuntimeError("an older combined row replaced the latest")
     seeded = float((Decimal("0.049797") * Decimal("300")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-    if account_pnl["realized_pnl_usd"] == seeded or account_pnl["running_pnl_usd"] == seeded:
+    if usd_equal(account_pnl["realized_pnl_usd"], seeded) or usd_equal(account_pnl["running_pnl_usd"], seeded):
         raise RuntimeError("account P&L was recomputed as a fraction of the sleeve seed")
     if latest_account_pnl(
         [
@@ -3326,11 +3366,13 @@ def self_test() -> int:
         raise RuntimeError(f"writer dropped running: {published}")
     if published.get("running_balance_usd") != account_pnl["running_balance_usd"]:
         raise RuntimeError(f"writer dropped running balance: {published}")
-    if published["running_balance_usd"] == published["book_usd"] or published["running_balance_usd"] == 775:
+    if not usd_differ(published["running_balance_usd"], published["book_usd"]) or not usd_differ(
+        published["running_balance_usd"], 775
+    ):
         raise RuntimeError("writer put the holdings sum or the signal book on running balance")
     if published.get("day_pnl_usd") != copied["day_pnl_usd"]:
         raise RuntimeError(f"writer dropped the signal day: {published}")
-    if published["book_usd"] != expected_book or published.get("signal_book_usd") != 775:
+    if not usd_equal(published["book_usd"], expected_book) or published.get("signal_book_usd") != 775:
         raise RuntimeError(f"writer moved the book off the holdings sum: {published}")
     if published.get("sleeve_as_of") != "2026-10-04T21:40:15Z":
         raise RuntimeError(f"writer dropped the warehouse sleeve clock: {published}")
@@ -3373,7 +3415,7 @@ def self_test() -> int:
     if kept.get("day_pnl_usd") != copied["day_pnl_usd"]:
         raise RuntimeError(f"a snapshot without day_pnl_usd cleared the signal day: {kept}")
     stale_book = merge_live_book(account, None)
-    if stale_book["book_usd"] != expected_book or stale_book.get("signal_book_usd") != 775:
+    if not usd_equal(stale_book["book_usd"], expected_book) or stale_book.get("signal_book_usd") != 775:
         raise RuntimeError(f"a missing signal put 775 back: {stale_book}")
     if stale_book.get("realized_pnl_usd") != 8.5 or stale_book.get("running_pnl_usd") != 9.75:
         raise RuntimeError(f"a missing signal deleted account P&L: {stale_book}")
@@ -3438,9 +3480,9 @@ def self_test() -> int:
         raise RuntimeError(f"open net was not qty times the mark: {opened}")
     if any(row["ticker"] == "QQ" for row in opened):
         raise RuntimeError("a flat equity net was published")
-    if opened[0]["value_usd"] == opened[0]["unrealized_pnl_usd"]:
+    if usd_equal(opened[0]["value_usd"], opened[0]["unrealized_pnl_usd"]):
         raise RuntimeError("open value collapsed to unrealized")
-    if opened[0]["running_pnl_usd"] == opened[0]["unrealized_pnl_usd"]:
+    if usd_equal(opened[0]["running_pnl_usd"], opened[0]["unrealized_pnl_usd"]):
         raise RuntimeError("running P&L dropped the ticker's close")
     position_src = Path(__file__).read_text(encoding="utf-8").split("def card_positions(", 1)[1].split(
         "def card_positions_from_scrubbed", 1
@@ -3452,7 +3494,7 @@ def self_test() -> int:
         raise RuntimeError("open value is rebuilt from a seed fraction")
     scrubbed = scrub_open_positions(open_fills, open_marks, "2026-10-04T00:00:00Z")
     from_scrub = card_positions_from_scrubbed(scrubbed)
-    if from_scrub[0]["qty"] != opened[0]["qty"] or from_scrub[0]["value_usd"] != opened[0]["value_usd"]:
+    if from_scrub[0]["qty"] != opened[0]["qty"] or not usd_equal(from_scrub[0]["value_usd"], opened[0]["value_usd"]):
         raise RuntimeError(f"scrubbed mark did not match the book: {from_scrub}")
     if "running_pnl_usd" in from_scrub[0]:
         raise RuntimeError("a scrubbed fraction row invented running P&L")
@@ -3525,14 +3567,16 @@ def self_test() -> int:
     kept_open = merge_live_book(held, {**copied, "positions": [{"ticker": "NOPE", "qty": "9", "value_usd": 1}]})
     if [row.get("ticker") for row in kept_open.get("positions") or []] != ["ZZ"]:
         raise RuntimeError(f"signal positions replaced the book: {kept_open}")
-    if kept_open["book_usd"] != expected_book or kept_open.get("kill_remaining_usd") != 77.5:
+    if not usd_equal(kept_open["book_usd"], expected_book) or kept_open.get("kill_remaining_usd") != 77.5:
         raise RuntimeError(f"open positions moved the book or the kill: {kept_open}")
     if kept_open.get("day_pnl_usd") != copied["day_pnl_usd"]:
         raise RuntimeError("open positions replaced the signal day")
     published_open = apply_card_positions(kept_open, opened)
     if published_open["positions"] != opened:
         raise RuntimeError(f"writer dropped the open net: {published_open}")
-    if published_open["book_usd"] != expected_book or published_open.get("running_balance_usd") != 812.4:
+    if not usd_equal(published_open["book_usd"], expected_book) or not usd_equal(
+        published_open.get("running_balance_usd"), 812.4
+    ):
         raise RuntimeError("writer put the open mark on the running balance or the cash book")
     if [row["ticker"] for row in published_open["holdings"]] != ["USD", "USDC"]:
         raise RuntimeError("writer replaced the cash lines")
@@ -3543,9 +3587,9 @@ def self_test() -> int:
         raise RuntimeError(f"cash lines were not the Robinhood read: {cashed['holdings']}")
     if usdc_row.get("cost_basis_usd") != 3.25:
         raise RuntimeError("USDC cost basis was left on the previous quantity")
-    if cashed["book_usd"] != account_book_usd(cashed["holdings"]):
+    if not usd_equal(cashed["book_usd"], account_book_usd(cashed["holdings"])):
         raise RuntimeError("book_usd was not the refreshed holdings sum")
-    if cashed["book_usd"] == published_open["book_usd"]:
+    if not usd_differ(cashed["book_usd"], published_open["book_usd"]):
         raise RuntimeError("stale cash stayed on the book")
     if cashed.get("positions") != published_open.get("positions"):
         raise RuntimeError("cash refresh rewrote open lots")
@@ -3670,22 +3714,23 @@ def self_test() -> int:
             raise RuntimeError(f"drop was not applied: {refreshed['holdings']}")
         if usdc_line.get("cost_basis_usd") != 2.0:
             raise RuntimeError("drop left USDC cost basis on the previous quantity")
-        if refreshed["book_usd"] != account_book_usd(refreshed["holdings"]):
+        if not usd_equal(refreshed["book_usd"], account_book_usd(refreshed["holdings"])):
             raise RuntimeError("drop apply did not recompute book_usd")
         if refreshed.get("positions") != prior["positions"]:
             raise RuntimeError("drop apply rewrote open lots")
         if refreshed.get("signal_book_usd") != 775:
             raise RuntimeError("drop apply moved the signal book")
         marked_cash = agentic_book_usd(refreshed)
-        if marked_cash is None or refreshed.get("running_balance_usd") != marked_cash:
+        if marked_cash is None or not usd_equal(refreshed.get("running_balance_usd"), marked_cash):
             raise RuntimeError(f"running balance was not cash plus lots: {refreshed}")
-        if refreshed["book_usd"] == refreshed["running_balance_usd"]:
+        if not usd_differ(refreshed["book_usd"], refreshed["running_balance_usd"]):
             raise RuntimeError("book_usd included open lots")
-        if refreshed.get("running_pnl_usd") != js_round_cents(
-            Decimal(str(marked_cash)) - BOOK_SEEDS["combined"]
+        if not usd_equal(
+            refreshed.get("running_pnl_usd"),
+            js_round_cents(Decimal(str(marked_cash)) - BOOK_SEEDS["combined"]),
         ):
             raise RuntimeError(f"running P&L was not the agentic total minus the combined seed: {refreshed}")
-        if refreshed.get("kill_remaining_usd") != kill_remaining_usd(marked_cash, refreshed.get("day_pnl_usd")):
+        if not usd_equal(refreshed.get("kill_remaining_usd"), kill_remaining_usd(marked_cash, refreshed.get("day_pnl_usd"))):
             raise RuntimeError(f"kill headroom was not the day rail: {refreshed}")
         if refreshed.get("day_pnl_usd") is not None:
             raise RuntimeError("a drop without day_realized invented a day")
@@ -3789,17 +3834,17 @@ def self_test() -> int:
             raise RuntimeError(f"day P&L was not the drop net: {published_day}")
         if published_day.get("day_realized_gross_usd") != 1.0 or published_day.get("day_sell_fees_usd") != 0.25:
             raise RuntimeError(f"audit fields were not copied: {published_day}")
-        if published_day["book_usd"] != 50:
+        if not usd_equal(published_day["book_usd"], 50):
             raise RuntimeError(f"book_usd was not the cash sum: {published_day}")
-        if published_day["running_balance_usd"] != 100:
+        if not usd_equal(published_day["running_balance_usd"], 100):
             raise RuntimeError(f"running balance was not cash plus the crypto lot: {published_day}")
-        if published_day["running_balance_usd"] == 804 or published_day["running_pnl_usd"] == 4:
+        if not usd_differ(published_day["running_balance_usd"], 804) or not usd_differ(published_day["running_pnl_usd"], 4):
             raise RuntimeError("warehouse running figures replaced the agentic total")
-        if published_day["running_pnl_usd"] != js_round_cents(Decimal("100") - BOOK_SEEDS["combined"]):
+        if not usd_equal(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["combined"])):
             raise RuntimeError(f"running P&L was not the combined seed gap: {published_day}")
-        if published_day["running_pnl_usd"] == js_round_cents(Decimal("100") - BOOK_SEEDS["crypto"]):
+        if not usd_differ(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["crypto"])):
             raise RuntimeError("running P&L used the crypto seed")
-        if published_day["kill_remaining_usd"] != kill_remaining_usd(100, -2.5):
+        if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(100, -2.5)):
             raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
         if published_day.get("realized_pnl_usd") != 3.4 or published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
             raise RuntimeError(f"snapshot realized or sleeve clock was dropped: {published_day}")
@@ -3821,7 +3866,7 @@ def self_test() -> int:
             sys.stderr = old_err
         if "differs from day_realized_usd" in stderr.getvalue():
             raise RuntimeError("a matching gross minus fees warned")
-        if matched["day_pnl_usd"] != -1.5 or matched["kill_remaining_usd"] != kill_remaining_usd(100, -1.5):
+        if matched["day_pnl_usd"] != -1.5 or not usd_equal(matched["kill_remaining_usd"], kill_remaining_usd(100, -1.5)):
             raise RuntimeError(f"matched net was recomputed: {matched}")
         cent_cash = {
             "USD": 40,
@@ -3843,13 +3888,13 @@ def self_test() -> int:
             raise RuntimeError(f"a one-cent gap changed day P&L: {within}")
         profit_cash = {"USD": 40, "USDC": 10, "day_realized_usd": 6}
         profit = refresh_live_book(folder, fetch=False, cash=profit_cash)
-        if profit["day_pnl_usd"] != 6 or profit["kill_remaining_usd"] != kill_remaining_usd(100, 0):
+        if profit["day_pnl_usd"] != 6 or not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 0)):
             raise RuntimeError(f"a positive day increased kill headroom: {profit}")
-        if profit["kill_remaining_usd"] != kill_remaining_usd(100, 6):
+        if not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 6)):
             raise RuntimeError("positive day headroom did not match a flat day")
         stopped_cash = {"USD": 40, "USDC": 10, "day_realized_usd": -40}
         stopped = refresh_live_book(folder, fetch=False, cash=stopped_cash)
-        if stopped["day_pnl_usd"] != -40 or stopped["kill_remaining_usd"] != 0:
+        if stopped["day_pnl_usd"] != -40 or not usd_equal(stopped["kill_remaining_usd"], 0):
             raise RuntimeError(f"a day loss past the rail left headroom: {stopped}")
         kept_signal = {
             "generated_at": "2026-01-01T00:00:00Z",
@@ -3884,9 +3929,9 @@ def self_test() -> int:
             raise RuntimeError("a missing day_realized_usd was not logged")
         if from_signal["day_pnl_usd"] != 3.25:
             raise RuntimeError(f"a missing day_realized_usd did not keep the signal day: {from_signal}")
-        if from_signal["running_balance_usd"] != 100:
+        if not usd_equal(from_signal["running_balance_usd"], 100):
             raise RuntimeError(f"signal day path dropped the agentic total: {from_signal}")
-        if from_signal["kill_remaining_usd"] != kill_remaining_usd(100, 3.25):
+        if not usd_equal(from_signal["kill_remaining_usd"], kill_remaining_usd(100, 3.25)):
             raise RuntimeError(f"signal day path left the signal kill: {from_signal}")
         unmarked = dict(synthetic)
         unmarked["positions"] = [{"sleeve": "crypto", "ticker": "ZZ", "qty": "2"}]
@@ -3964,7 +4009,7 @@ def self_test() -> int:
         raise RuntimeError("a bad holdings payload became a balance")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
-    if card["kill"]["kill_headroom_usd"] != 3.75 or card["kill"]["day_kill_usd"] != -30.0:
+    if not usd_equal(card["kill"]["kill_headroom_usd"], 3.75) or not usd_equal(card["kill"]["day_kill_usd"], -30.0):
         raise RuntimeError(f"kill dollars {card['kill']}")
     if '"order_id"' in json.dumps(card):
         raise RuntimeError("scorecard wrote an order id")
@@ -3976,7 +4021,7 @@ def self_test() -> int:
     )
     if plain["fee_drag"]["status"] != "unknown" or plain["live_backend"]["id"] is not None:
         raise RuntimeError(f"plain scorecard {plain['fee_drag']} {plain['live_backend']}")
-    if plain["closed_fills"]["wins"] != 1 or plain["closed_fills"]["expectancy_usd"] != 6.0:
+    if plain["closed_fills"]["wins"] != 1 or not usd_equal(plain["closed_fills"]["expectancy_usd"], 6.0):
         raise RuntimeError(f"plain fills {plain['closed_fills']}")
 
     print("self-test ok")
