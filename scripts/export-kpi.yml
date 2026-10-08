@@ -68,11 +68,17 @@ jobs:
           python3 -m pip install --disable-pip-version-check --break-system-packages pytest
           python3 -m pytest scripts/test_kpi_realized.py -q
 
+      - name: Book seeds
+        run: |
+          python3 scripts/sync_book_seeds.py --self-test
+          python3 -m unittest scripts/test_book_seeds.py
+          node --test scripts/test_book_seeds.mjs
+
       - name: Export scrub
         run: |
           python3 scripts/export_kpi.py --self-test
           python3 -m unittest scripts/test_export_status.py
-          node --test scripts/test_tape_ux.mjs scripts/test_board_t17.mjs scripts/test_model_scorecard.mjs scripts/test_live_book.mjs
+          node --test scripts/test_tape_ux.mjs scripts/test_board_t17.mjs scripts/test_model_scorecard.mjs scripts/test_live_book.mjs scripts/test_book_seeds.mjs
 
   export:
     needs: check
@@ -164,6 +170,14 @@ jobs:
           COINSTATS_API_KEY: ${{ secrets.COINSTATS_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
         run: python3 scripts/refresh_kpi_snapshots.py
+
+      # Apply order: migration, then this seed sync, then the export reads the view.
+      - name: Sync book seeds
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python3 scripts/sync_book_seeds.py
 
       - name: Export scrubbed Supabase views
         env:
