@@ -12,7 +12,7 @@ Tonight Crypto Desk runs the poll. Once an hour, from a checkout of this repo:
 
 Then Robinhood Trading MCP get_crypto_orders:
 
-  rhs_account_number  546048042
+  rhs_account_number  RH_AGENTIC_ACCOUNT
   state               filled
   updated_at_gte      the timestamp --print-cursor printed
 
@@ -31,7 +31,8 @@ SUPABASE_SERVICE_ROLE_KEY are in the environment:
 
 Optional later: Actions cron 0 * * * * calls --from-rh when RH_API_KEY and
 RH_BASE64_PRIVATE_KEY are both set. If either is absent, that step exits 0
-and does not call Robinhood. RH_AGENTIC_ACCOUNT overrides 546048042.
+and does not call Robinhood. --from-rh reads the account from
+RH_AGENTIC_ACCOUNT and fails if that variable is unset.
 
 Bonus, not the standing path: repository_dispatch rh-fill, or a fill JSON
 passed the moment a desk sees one. Same schema. The */15 cron only refreshes
@@ -203,7 +204,7 @@ FEEDS_PATH = DATA / "rh_fills.json"
 MIGRATION_PATH = ROOT / "scripts" / "migrate_kpi_trades_order_id.sql"
 DEFAULT_URL = "https://bsnqwgbshwszbjncglqx.supabase.co"
 RH_BASE = "https://trading.robinhood.com"
-DEFAULT_AGENTIC_ACCOUNT = "546048042"
+ACCOUNT_RE = re.compile(r"[A-Za-z0-9-]+")
 BOOTSTRAP_CURSOR = "2026-09-26T00:00:00Z"
 OVERLAP = dt.timedelta(hours=6)
 DUST = Decimal("0.00000001")
@@ -1073,7 +1074,7 @@ def path_from_next(next_url: str) -> str:
 
 
 def orders_path(account: str, updated_at_start: str) -> str:
-    if not re.fullmatch(r"[A-Za-z0-9]+", account):
+    if not ACCOUNT_RE.fullmatch(account):
         raise SyncError("RH_AGENTIC_ACCOUNT has unexpected characters")
     return (
         "/api/v2/crypto/trading/orders/"
@@ -1149,8 +1150,13 @@ def remember_cursor(path: Path, orders: list[dict]) -> None:
 
 
 def agentic_account(env: dict[str, str]) -> str:
-    chosen = (env.get("RH_AGENTIC_ACCOUNT") or DEFAULT_AGENTIC_ACCOUNT).strip()
-    if not re.fullmatch(r"[A-Za-z0-9]+", chosen):
+    chosen = (env.get("RH_AGENTIC_ACCOUNT") or "").strip()
+    if not chosen:
+        raise SyncError(
+            "RH_AGENTIC_ACCOUNT is unset. The Agentic account is required "
+            "and there is no default. kpi_trades was not changed."
+        )
+    if not ACCOUNT_RE.fullmatch(chosen):
         raise SyncError("RH_AGENTIC_ACCOUNT has unexpected characters")
     return chosen
 
@@ -1555,6 +1561,7 @@ def public_sync_message(message: str) -> str:
         "SYNC_RH_JSON",
         "RH_API_KEY",
         "RH_BASE64_PRIVATE_KEY",
+        "RH_AGENTIC_ACCOUNT",
         "ROBINHOOD_TOKEN",
     ):
         secret = (os.environ.get(name) or "").strip()
@@ -2246,15 +2253,54 @@ def self_test() -> int:
         raise SyncError("hourly poll does not skip when Robinhood secrets are absent")
     if "ROBINHOOD_TOKEN:" in workflow:
         raise SyncError("export workflow requires a Robinhood token")
-    if agentic_account({}) != DEFAULT_AGENTIC_ACCOUNT:
-        raise SyncError("Agentic account default was not 546048042")
+    for relative in (".github/workflows/export-kpi.yml", "scripts/export-kpi.yml"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        for chunk in text.split("\n      - name:")[1:]:
+            if "sync_rh_kpi_trades.py" not in chunk:
+                continue
+            if "secrets.RH_AGENTIC_ACCOUNT" not in chunk:
+                raise SyncError(f"{relative} runs the sync without RH_AGENTIC_ACCOUNT")
+    try:
+        agentic_account({})
+    except SyncError as exc:
+        if "RH_AGENTIC_ACCOUNT" not in str(exc) or "unset" not in str(exc).lower():
+            raise
+    else:
+        raise SyncError("missing RH_AGENTIC_ACCOUNT did not fail")
+    try:
+        agentic_account({"RH_AGENTIC_ACCOUNT": "   "})
+    except SyncError as exc:
+        if "unset" not in str(exc).lower():
+            raise
+    else:
+        raise SyncError("blank RH_AGENTIC_ACCOUNT did not fail")
+    if agentic_account({"RH_AGENTIC_ACCOUNT": "TEST-ACCOUNT"}) != "TEST-ACCOUNT":
+        raise SyncError("RH_AGENTIC_ACCOUNT was not read")
+    try:
+        orders_path("bad account", "2026-09-26T00:00:00Z")
+    except SyncError as exc:
+        if "unexpected characters" not in str(exc):
+            raise
+    else:
+        raise SyncError("an account with unexpected characters was accepted")
     if poll_start(Path("/no/such/rh-cursor.json")) != query_start(BOOTSTRAP_CURSOR):
         raise SyncError("missing cursor did not use the bootstrap")
     if query_start("2026-09-28T18:00:01Z") != "2026-09-28T12:00:01Z":
         raise SyncError("cursor overlap was not 6 hours")
-    listed = orders_path(DEFAULT_AGENTIC_ACCOUNT, "2026-09-26T00:00:00Z")
-    if "state=filled" not in listed or DEFAULT_AGENTIC_ACCOUNT not in listed:
+    listed = orders_path("TEST-ACCOUNT", "2026-09-26T00:00:00Z")
+    if "state=filled" not in listed or "TEST-ACCOUNT" not in listed:
         raise SyncError("orders path is not a filled-order GET for the Agentic account")
+    try:
+        sync(
+            from_rh=True,
+            env={"RH_API_KEY": "test-key", "RH_BASE64_PRIVATE_KEY": "test-secret"},
+            default_feed=Path("/no/such/rh_fills.json"),
+        )
+    except SyncError as exc:
+        if "RH_AGENTIC_ACCOUNT" not in str(exc) or "unset" not in str(exc).lower():
+            raise
+    else:
+        raise SyncError("hourly poll without RH_AGENTIC_ACCOUNT did not fail")
     try:
         sync(from_rh=True, env={}, default_feed=Path("/no/such/rh_fills.json"))
     except SyncError as exc:
@@ -2619,7 +2665,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--from-rh",
         action="store_true",
-        help="GET filled orders when RH_API_KEY and RH_BASE64_PRIVATE_KEY are set.",
+        help="GET filled orders when RH_API_KEY and RH_BASE64_PRIVATE_KEY are set. Requires RH_AGENTIC_ACCOUNT.",
     )
     args = parser.parse_args(argv)
     try:
