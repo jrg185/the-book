@@ -109,7 +109,16 @@ order_id is the Robinhood uuid. why and notes stay null unless the fill
 carries a human why, notes, note, or exit. "RH Agentic backfill order <uuid>",
 "RH Agentic sync order <uuid>", and the bare placeholder "backfill from RH"
 are not human notes and are never written into why. Opening buys store
-pnl_trade_usd 0. A closing sell stores price P&L versus the open average.
+pnl_trade_usd 0. A closing sell stores FIFO P&L: lots for that sleeve and
+ticker are consumed oldest-first, and pnl_trade_usd is the sum of
+(sell price - lot price) x lot qty, minus that sell's fee. The fee comes
+from the fill payload via fee_of(), never a hardcoded rate. Buys stay 0.
+A later poll that fills a null or zero fee writes fee_usd only. It does not
+change pnl_trade_usd on a row that already exists. Historical realized P&L
+changes only when the recon backfill diff is applied after approval.
+Replay skips a NULL order_id row when an order_id twin has the same sleeve,
+ticker, side, qty, and avg_price and a timestamp within a couple of seconds,
+and it skips a repeated order_id. Those legacy twins are not inventory.
 Insert is ON CONFLICT (order_id) DO UPDATE of why/notes only when the new
 why is human and the stored why is null, blank, or a machine stub. A stored
 human why is left unchanged. A later poll can attach ledger why, notes, or
@@ -125,9 +134,16 @@ Supabase, same project as refresh and export:
 
   python3 scripts/sync_rh_kpi_trades.py --self-test
   python3 scripts/sync_rh_kpi_trades.py --dry-run
-  python3 scripts/sync_rh_kpi_trades.py --from-json fills.json
   python3 scripts/sync_rh_kpi_trades.py --dry-run --from-json fills.json
+  python3 scripts/sync_rh_kpi_trades.py --dry-run --from-json fills.json --existing-json rows.json
+  python3 scripts/sync_rh_kpi_trades.py --from-json fills.json
   python3 scripts/sync_rh_kpi_trades.py --from-json -
+
+--dry-run does not call Supabase. With --existing-json it seeds lots from that
+read-only rows JSON (a kpi_trades SELECT * drop) and prices sells. Without it,
+a sell is not priced: pnl_trade_usd is null and pnl_label is
+"not priced in dry-run". It does not invent a P&L and it does not raise when
+the sell has no lots.
 
 Example a desk can send the moment a GRT buy fills. Extra MCP fields are
 ignored. This buy maps to sleeve crypto, ticker GRT, pnl_trade_usd 0:
@@ -191,6 +207,9 @@ DEFAULT_AGENTIC_ACCOUNT = "546048042"
 BOOTSTRAP_CURSOR = "2026-09-26T00:00:00Z"
 OVERLAP = dt.timedelta(hours=6)
 DUST = Decimal("0.00000001")
+# NULL order_id twins of an order_id fill land within a couple of seconds.
+TWIN_WINDOW = dt.timedelta(seconds=2)
+NOT_PRICED_LABEL = "not priced in dry-run"
 PAGE_CAP = 50
 SYMBOL = re.compile(r"^[A-Z0-9]{1,15}$")
 UUID_RE = re.compile(
@@ -627,54 +646,232 @@ def drop_known(rows: list[dict], existing: list[dict]) -> list[dict]:
     return kept
 
 
-def apply_fill(book: dict, row: dict, assign: bool) -> None:
+def order_id_of(row: dict) -> str:
+    return str(row.get("order_id") or "").strip().lower()
+
+
+def _same_number(left, right) -> bool:
+    a = dec(left)
+    b = dec(right)
+    if a is None or b is None:
+        return False
+    return abs(a - b) <= DUST
+
+
+def fills_match(left: dict, right: dict) -> bool:
+    """Same sleeve, ticker, side, qty, and price, timestamps within TWIN_WINDOW."""
+    if str(left.get("sleeve") or "") != str(right.get("sleeve") or ""):
+        return False
+    if str(left.get("ticker") or "") != str(right.get("ticker") or ""):
+        return False
+    if str(left.get("side") or "").lower() != str(right.get("side") or "").lower():
+        return False
+    if not _same_number(left.get("qty"), right.get("qty")):
+        return False
+    if not _same_number(left.get("avg_price"), right.get("avg_price")):
+        return False
+    try:
+        gap = abs(parse_ts(left["timestamp_et"]) - parse_ts(right["timestamp_et"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+    return gap <= TWIN_WINDOW
+
+
+def legacy_duplicate_ids(rows: list[dict]) -> set[int]:
+    """Object ids of NULL order_id rows that twin a row carrying order_id.
+
+    The 2026-09-27 backfill inserted fills with a null order_id. The next
+    backfill inserted the same fills again with order_id. Replaying both
+    leaves phantom inventory. The null copy is not a lot.
+    """
+    skip: set[int] = set()
+    for row in rows:
+        if order_id_of(row):
+            continue
+        for other in rows:
+            if other is row or not order_id_of(other):
+                continue
+            if fills_match(row, other):
+                skip.add(id(row))
+                break
+    return skip
+
+
+def _fee_amount(row: dict) -> Decimal:
+    """Sell fee already taken off the fill by fee_of(), or stored fee_usd."""
+    amount = dec(row.get("fee_usd"))
+    if amount is None:
+        return Decimal("0")
+    return amount
+
+
+def _open_qty(lots: list[dict]) -> Decimal:
+    total = Decimal("0")
+    for lot in lots:
+        total += lot["qty"]
+    return total
+
+
+def apply_fill(book: dict, row: dict, assign: bool, *, net_fee: bool = True) -> None:
+    """FIFO lots per (sleeve, ticker). Oldest lots are consumed first.
+
+    A closing sell's pnl_trade_usd is sum((sell px - lot px) x qty) minus
+    that sell's fee when net_fee is set. Opening buys stay 0. The oversell
+    guard still refuses a close larger than open quantity.
+    """
     sleeve = row["sleeve"]
     ticker = row["ticker"]
-    side = row["side"]
+    side = str(row["side"]).lower()
     qty = dec(row["qty"])
     price = dec(row["avg_price"])
     if qty is None or qty <= 0 or price is None or price <= 0:
         raise SyncError(f"{sleeve} {ticker}: qty and avg_price must be positive")
+    if side not in {"buy", "sell"}:
+        raise SyncError(f"{sleeve} {ticker}: side {side!r} is not buy or sell")
     signed = qty if side == "buy" else -qty
     key = (sleeve, ticker)
-    pos = book.get(key)
-    open_qty = pos["qty"] if pos else Decimal("0")
+    lots = book.get(key)
+    if not lots:
+        lots = []
+        book[key] = lots
+    open_qty = _open_qty(lots)
     increasing = (signed > 0 and open_qty >= 0) or (signed < 0 and open_qty <= 0)
     if increasing:
-        new_qty = open_qty + signed
-        if abs(open_qty) <= DUST:
-            avg = price
-        else:
-            avg = (abs(open_qty) * pos["avg"] + abs(signed) * price) / abs(new_qty)
-        book[key] = {"qty": new_qty, "avg": avg}
+        lots.append({"qty": signed, "px": price})
         if assign:
             row["pnl_trade_usd"] = "0"
         return
     if abs(signed) - abs(open_qty) > DUST:
         raise SyncError(f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}")
-    if assign:
-        if open_qty > 0:
-            pnl = (price - pos["avg"]) * qty
+    remaining = abs(signed)
+    pnl = Decimal("0")
+    while remaining > DUST:
+        if not lots:
+            raise SyncError(f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}")
+        lot = lots[0]
+        take = min(abs(lot["qty"]), remaining)
+        if lot["qty"] > 0:
+            pnl += (price - lot["px"]) * take
+            lot["qty"] -= take
         else:
-            pnl = (pos["avg"] - price) * qty
+            pnl += (lot["px"] - price) * take
+            lot["qty"] += take
+        remaining -= take
+        if abs(lot["qty"]) <= DUST:
+            lots.pop(0)
+    if assign:
+        if side == "sell" and net_fee:
+            pnl -= _fee_amount(row)
         row["pnl_trade_usd"] = num_text(pnl)
-    remain = abs(open_qty) - abs(signed)
-    if remain <= DUST:
+    if not lots:
         book.pop(key, None)
-    else:
-        sign = Decimal("1") if open_qty > 0 else Decimal("-1")
-        book[key] = {"qty": sign * remain, "avg": pos["avg"]}
+
+
+def _walk_book(
+    events: list[tuple[bool, dict]],
+    *,
+    net_fee: bool = True,
+    skip_legacy: bool = True,
+    mark_skips: bool = False,
+) -> dict:
+    """Apply events in the order given. assign is the bool on each event."""
+    rows = [row for _assign, row in events]
+    skipped = legacy_duplicate_ids(rows) if skip_legacy else set()
+    seen: set[str] = set()
+    book: dict = {}
+    for assign, row in events:
+        if id(row) in skipped:
+            if mark_skips:
+                row["replay_skip"] = "legacy_duplicate"
+            continue
+        order_id = order_id_of(row)
+        if order_id:
+            if order_id in seen:
+                if mark_skips:
+                    row["replay_skip"] = "duplicate_order_id"
+                continue
+            seen.add(order_id)
+        apply_fill(book, row, assign, net_fee=net_fee)
+    return book
+
+
+def _timed(events: list[tuple[bool, dict]]) -> list[tuple[bool, dict]]:
+    return sorted(events, key=lambda item: (parse_ts(item[1]["timestamp_et"]), 0 if not item[0] else 1))
 
 
 def assign_pnl(existing: list[dict], new_rows: list[dict]) -> list[dict]:
-    """Replay the book. Opening buys stay at pnl 0. Closing legs get price P&L."""
-    events: list[tuple[str, dict]] = [("old", row) for row in existing]
-    events.extend(("new", row) for row in new_rows)
-    events.sort(key=lambda item: (parse_ts(item[1]["timestamp_et"]), 0 if item[0] == "old" else 1))
-    book: dict = {}
-    for kind, row in events:
-        apply_fill(book, row, assign=(kind == "new"))
+    """Replay the book. Opening buys stay at pnl 0. Closing sells get FIFO net P&L."""
+    events = [(False, row) for row in existing]
+    events.extend((True, row) for row in new_rows)
+    _walk_book(_timed(events), net_fee=True, skip_legacy=True, mark_skips=False)
     return new_rows
+
+
+def replay_rows(rows: list[dict], *, net_fee: bool = True, skip_legacy: bool = True) -> list[dict]:
+    """Price a copy of every row. Legacy null twins and duplicate order ids are marked.
+
+    Returned dicts stay in input order. pnl_trade_usd on an applied sell is the
+    FIFO net (or the gross when net_fee is false). Skipped rows keep their
+    copied pnl and gain replay_skip.
+    """
+    copies = [dict(row) for row in rows]
+    events = [(True, row) for row in copies]
+    _walk_book(_timed(events), net_fee=net_fee, skip_legacy=skip_legacy, mark_skips=True)
+    return copies
+
+
+def lots_after(rows: list[dict], *, skip_legacy: bool = True) -> dict:
+    """Open FIFO lots after replaying rows. Does not rewrite the caller's dicts."""
+    copies = [dict(row) for row in rows]
+    events = [(False, row) for row in copies]
+    return _walk_book(_timed(events), net_fee=True, skip_legacy=skip_legacy, mark_skips=False)
+
+
+def dry_run_rows(orders: list[dict], existing: list[dict] | None) -> list[dict]:
+    """Map a dry-run. existing is None when no warehouse seed was provided.
+
+    A sell with no seed is labeled, not priced, and does not raise. A provided
+    list (including an empty one) is the lot seed and uses the live pricer.
+    """
+    if existing is None:
+        fresh = drop_known(map_orders(orders), [])
+        for row in fresh:
+            if row["side"] == "sell":
+                row["pnl_trade_usd"] = None
+                row["pnl_label"] = NOT_PRICED_LABEL
+        return fresh
+    return rows_from_orders(orders, existing)
+
+
+def rows_from_document(payload) -> list[dict]:
+    """A JSON list, a SELECT * drop, or an envelope with rows/results/trades."""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("rows", "data", "results", "trades"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+            if isinstance(value, dict) and isinstance(value.get("results"), list):
+                return [item for item in value["results"] if isinstance(item, dict)]
+        if payload.get("sleeve") or payload.get("id") or payload.get("order_id"):
+            return [payload]
+    raise SyncError("rows JSON must be a list or an object with rows, results, or trades")
+
+
+def load_row_document(source: str) -> list[dict]:
+    if source == "-":
+        raw = sys.stdin.read()
+    else:
+        path = Path(source)
+        if not path.is_file():
+            raise SyncError(f"Rows file was not found: {source}")
+        raw = path.read_text(encoding="utf-8")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SyncError("rows JSON could not be parsed") from exc
+    return rows_from_document(payload)
 
 
 def rows_from_orders(orders: list[dict], existing: list[dict]) -> list[dict]:
@@ -685,8 +882,10 @@ def rows_from_orders(orders: list[dict], existing: list[dict]) -> list[dict]:
 def fee_backfill_for(mapped: list[dict], existing: list[dict]) -> list[dict]:
     """Positive explicit fees for stored rows whose fee_usd is null or zero.
 
-    Does not touch why or notes. A payload with no fee field is skipped.
-    A stored positive fee is left in place.
+    Does not touch why, notes, or pnl_trade_usd. A payload with no fee field
+    is skipped. A stored positive fee is left in place. A fee that arrived
+    after the close was priced is classified by the recon plan
+    (late_fee_not_netted). The live sync does not rewrite that P&L.
     """
     index: dict[str, dict] = {}
     for row in existing:
@@ -1184,8 +1383,17 @@ def apply_note_fills(env: dict[str, str], fills: list[dict], source: str) -> int
     return apply_note_fills_db(db_url, fills)
 
 
+def fee_backfill_rest_body(patch: dict) -> dict:
+    """REST body for a fee backfill. fee_usd only, never pnl_trade_usd."""
+    return {"fee_usd": patch["fee_usd"]}
+
+
 def apply_fee_backfill_rest(base_url: str, key: str, patches: list[dict]) -> int:
-    """PATCH fee_usd only while the stored fee is still null or zero."""
+    """PATCH fee_usd while the stored fee is still null or zero.
+
+    Does not send pnl_trade_usd. The fee filter keeps a second poll from
+    writing the fee again.
+    """
     written = 0
     for patch in patches:
         order_id = str(patch.get("order_id") or "")
@@ -1199,7 +1407,7 @@ def apply_fee_backfill_rest(base_url: str, key: str, patches: list[dict]) -> int
             key,
             path,
             method="PATCH",
-            body={"fee_usd": patch["fee_usd"]},
+            body=fee_backfill_rest_body(patch),
             extra_headers={"Prefer": "return=representation"},
         )
         rows = returned if isinstance(returned, list) else []
@@ -1218,7 +1426,10 @@ def apply_fee_backfill_db(db_url: str, patches: list[dict]) -> int:
                     order_id = str(patch.get("order_id") or "")
                     if not UUID_RE.fullmatch(order_id):
                         raise SyncError("fee backfill order_id is not a uuid")
-                    cur.execute(FEE_BACKFILL_SQL, {"order_id": order_id, "fee_usd": patch["fee_usd"]})
+                    cur.execute(
+                        FEE_BACKFILL_SQL,
+                        {"order_id": order_id, "fee_usd": patch["fee_usd"]},
+                    )
                     if cur.rowcount > 1:
                         raise SyncError(f"fee backfill matched {cur.rowcount} rows")
                     written += cur.rowcount
@@ -1531,7 +1742,8 @@ def self_test() -> int:
         raise SyncError("sell shape")
     if sell["qty"] != "4" or sell["avg_price"] != "5" or sell["notional_usd"] != "20":
         raise SyncError(f"sell numbers {sell}")
-    if sell["fee_usd"] != "0.2" or sell["pnl_trade_usd"] != "12":
+    # Fee-net FIFO: (5 - 2) * 4 - 0.2 = 11.8. The old average path expected 12.
+    if sell["fee_usd"] != "0.2" or sell["pnl_trade_usd"] != "11.8":
         raise SyncError(f"sell fee/pnl {sell['fee_usd']} {sell['pnl_trade_usd']}")
     if rows.count(sell) != 1:
         raise SyncError("duplicate sell in one batch was inserted twice")
@@ -1785,8 +1997,61 @@ def self_test() -> int:
         raise SyncError(f"explicit zero fee was invented or dropped {explicit_zero}")
     if fee_backfill_for(explicit_zero, [zero_stored]):
         raise SyncError("explicit zero replaced a stored fee")
+    opening_sell = {
+        "order_id": sell["order_id"],
+        "why": "keep this thesis",
+        "fee_usd": "0",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "sell",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T11:00:00+00:00",
+        "pnl_trade_usd": "0",
+    }
+    if fee_backfill_for(priced, [opening_sell]) != [{"order_id": sell["order_id"], "fee_usd": "0.2"}]:
+        raise SyncError("opening sell fee backfill changed pnl")
+    flat_buy = {
+        "order_id": "11111111-1111-4111-8111-111111111111",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "buy",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T09:00:00+00:00",
+        "fee_usd": "0",
+        "pnl_trade_usd": "0",
+    }
+    flat_sell = {
+        "order_id": sell["order_id"],
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "sell",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T11:00:00+00:00",
+        "fee_usd": "0",
+        "pnl_trade_usd": "0",
+    }
+    flat_patch = fee_backfill_for(priced, [flat_buy, flat_sell])
+    if flat_patch != [{"order_id": sell["order_id"], "fee_usd": "0.2"}]:
+        raise SyncError(f"closing-sell fee backfill touched pnl {flat_patch}")
+    if any("pnl_trade_usd" in patch for patch in flat_patch):
+        raise SyncError("fee backfill returned a pnl adjustment")
     if note_fills_for(priced, [zero_stored]):
         raise SyncError("fee backfill changed a human why")
+    stored_open = {
+        "order_id": "11111111-1111-4111-8111-111111111111",
+        "why": "open lot",
+        "fee_usd": "0.10",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "buy",
+        "qty": "10",
+        "avg_price": "2",
+        "timestamp_et": "2026-09-28T09:00:00+00:00",
+        "pnl_trade_usd": "0",
+    }
     stored_book = {
         "order_id": sell["order_id"],
         "why": "keep this thesis",
@@ -1812,10 +2077,12 @@ def self_test() -> int:
                 "created_at": "2026-09-28T11:00:00Z",
             }
         ],
-        [stored_book],
+        [stored_open, stored_book],
     )
     if fresh_plan or note_plan or fee_plan != [{"order_id": sell["order_id"], "fee_usd": "0.2"}]:
         raise SyncError(f"known order was reinserted instead of a fee backfill {fresh_plan} {note_plan} {fee_plan}")
+    if any("pnl_trade_usd" in patch for patch in fee_plan):
+        raise SyncError("known-order fee backfill rewrote pnl")
     ledger_id = "12121212-1212-4121-8121-121212121212"
     with_why = map_order(
         {
@@ -1953,6 +2220,8 @@ def self_test() -> int:
         raise SyncError("notes-less conflict update does not refresh fee_usd")
     if "fee_usd is null or fee_usd = 0" not in FEE_BACKFILL_SQL.lower():
         raise SyncError("fee backfill can overwrite a stored positive fee")
+    if "pnl_trade_usd" in FEE_BACKFILL_SQL.lower():
+        raise SyncError("fee backfill rewrites pnl_trade_usd")
     if "rh agentic (backfill|sync) order" not in UPSERT_SQL.lower():
         raise SyncError("conflict update does not recognize a machine why")
     if "notes" not in UPSERT_SQL or "do update" not in UPSERT_SQL_NO_NOTES.lower():
@@ -2098,8 +2367,226 @@ def self_test() -> int:
         raise SyncError("oversell did not fail")
     if meta.get("warehouse_status"):
         raise SyncError("RH miss stamped a warehouse status")
+    fifo_self_checks()
     print("self-test ok")
     return 0
+
+
+def _book_row(
+    ticker: str,
+    side: str,
+    qty: str,
+    price: str,
+    stamp: str,
+    order_id: str | None,
+    fee: str = "0",
+    sleeve: str = "crypto",
+) -> dict:
+    return {
+        "sleeve": sleeve,
+        "ticker": ticker,
+        "side": side,
+        "qty": qty,
+        "avg_price": price,
+        "timestamp_et": stamp,
+        "order_id": order_id,
+        "fee_usd": fee,
+        "pnl_trade_usd": "0",
+    }
+
+
+def _priced(rows: list[dict], order_id: str) -> Decimal:
+    for row in replay_rows(rows):
+        if order_id_of(row) == order_id:
+            if row.get("replay_skip"):
+                raise SyncError(f"{order_id} was skipped ({row['replay_skip']})")
+            return Decimal(row["pnl_trade_usd"])
+    raise SyncError(f"missing replay row {order_id}")
+
+
+def fifo_self_checks() -> None:
+    """Synthetic FIFO, fee-net, legacy-twin, and dry-run checks.
+
+    Numbers here are fixtures. They are not warehouse or broker figures.
+    """
+    buy = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+    full = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+    reopen = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3"
+    partial = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4"
+    later = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5"
+    tail = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6"
+    # Legacy NULL twins sit one second beside the order_id fills. The full
+    # close must consume only the real buy. The later buy must stay its own
+    # lot, not a blend with lots that already closed.
+    qnt = [
+        _book_row("QNT", "buy", "4", "10", "2026-01-01T00:00:00+00:00", buy),
+        _book_row("QNT", "buy", "4", "10", "2026-01-01T00:00:01+00:00", None),
+        _book_row("QNT", "sell", "4", "14", "2026-01-02T00:00:00+00:00", full, "1"),
+        _book_row("QNT", "sell", "4", "14", "2026-01-02T00:00:01+00:00", None, "1"),
+        _book_row("QNT", "buy", "6", "20", "2026-01-03T00:00:00+00:00", reopen),
+        _book_row("QNT", "sell", "2", "25", "2026-01-04T00:00:00+00:00", partial, "0.40"),
+        _book_row("QNT", "buy", "3", "30", "2026-01-05T00:00:00+00:00", later),
+        _book_row("QNT", "sell", "5", "28", "2026-01-06T00:00:00+00:00", tail, "0.10"),
+    ]
+    if _priced(qnt, full) != Decimal("15"):
+        raise SyncError(f"full close {_priced(qnt, full)} != 15")
+    if _priced(qnt, partial) != Decimal("9.6"):
+        raise SyncError(f"partial sell {_priced(qnt, partial)} != 9.6")
+    if _priced(qnt, tail) != Decimal("29.9"):
+        raise SyncError(f"tail sell {_priced(qnt, tail)} != 29.9")
+    skipped = [row for row in replay_rows(qnt) if row.get("replay_skip") == "legacy_duplicate"]
+    if len(skipped) != 2:
+        raise SyncError(f"legacy twins were not both skipped {skipped}")
+    lots = lots_after(qnt[:-1]).get(("crypto", "QNT"))
+    if not lots or [(lot["qty"], lot["px"]) for lot in lots] != [
+        (Decimal("4"), Decimal("20")),
+        (Decimal("3"), Decimal("30")),
+    ]:
+        raise SyncError(f"later buy blended with closed or open lots {lots}")
+    # Two buys, partial sell. FIFO uses the older price. Average cost would be 0.
+    older = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"
+    newer = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"
+    half = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3"
+    spread = [
+        _book_row("AVG", "buy", "2", "10", "2026-01-01T00:00:00+00:00", older),
+        _book_row("AVG", "buy", "2", "30", "2026-01-01T01:00:00+00:00", newer),
+        _book_row("AVG", "sell", "2", "20", "2026-01-01T02:00:00+00:00", half, "0"),
+    ]
+    if _priced(spread, half) != Decimal("20"):
+        raise SyncError(f"avg-vs-fifo {_priced(spread, half)} != 20")
+    # Fee-net, and a Market-Maker zero fee that must stay the gross.
+    gross_id = "cccccccc-cccc-4ccc-8ccc-ccccccccccc1"
+    fee_id = "cccccccc-cccc-4ccc-8ccc-ccccccccccc2"
+    zero_id = "cccccccc-cccc-4ccc-8ccc-ccccccccccc3"
+    if _priced(
+        [
+            _book_row("FEE", "buy", "1", "10", "2026-01-01T00:00:00+00:00", gross_id),
+            _book_row("FEE", "sell", "1", "12", "2026-01-01T01:00:00+00:00", fee_id, "0.25"),
+        ],
+        fee_id,
+    ) != Decimal("1.75"):
+        raise SyncError("fee-net sell was not gross minus the fill fee")
+    if _priced(
+        [
+            _book_row("MM", "buy", "1", "10", "2026-01-01T00:00:00+00:00", gross_id),
+            _book_row("MM", "sell", "1", "12", "2026-01-01T01:00:00+00:00", zero_id, "0"),
+        ],
+        zero_id,
+    ) != Decimal("2"):
+        raise SyncError("market-maker zero fee changed the gross")
+    # fee_of() on the payload, not a rate. 1.50 is not 0.95% of a 100 notional.
+    routed = rows_from_orders(
+        [
+            {
+                "id": "dddddddd-dddd-4ddd-8ddd-ddddddddddd1",
+                "currency_code": "FEE",
+                "side": "buy",
+                "state": "filled",
+                "cumulative_quantity": "10",
+                "average_price": "10",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            {
+                "id": "dddddddd-dddd-4ddd-8ddd-ddddddddddd2",
+                "currency_code": "FEE",
+                "side": "sell",
+                "state": "filled",
+                "cumulative_quantity": "10",
+                "average_price": "11",
+                "fees": [{"fee_data": {"fee_amount": "1.50"}}],
+                "created_at": "2026-01-01T01:00:00Z",
+            },
+        ],
+        [],
+    )
+    routed_sell = routed[-1]
+    if routed_sell["fee_usd"] != "1.5" or Decimal(routed_sell["pnl_trade_usd"]) != Decimal("8.5"):
+        raise SyncError(f"payload fee was not netted {routed_sell}")
+    maker = rows_from_orders(
+        [
+            {
+                "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",
+                "currency_code": "MM",
+                "side": "buy",
+                "state": "filled",
+                "cumulative_quantity": "1",
+                "average_price": "10",
+                "fee": "0",
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            {
+                "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2",
+                "currency_code": "MM",
+                "side": "sell",
+                "state": "filled",
+                "cumulative_quantity": "1",
+                "average_price": "12",
+                "fee": "0",
+                "created_at": "2026-01-01T01:00:00Z",
+            },
+        ],
+        [],
+    )
+    if Decimal(maker[-1]["pnl_trade_usd"]) != Decimal("2"):
+        raise SyncError(f"explicit zero fee was not a market-maker gross {maker[-1]}")
+    unpriced = dry_run_rows(
+        [
+            {
+                "id": "ffffffff-ffff-4fff-8fff-fffffffffff1",
+                "currency_code": "AAA",
+                "side": "sell",
+                "state": "filled",
+                "cumulative_quantity": "1",
+                "average_price": "5",
+                "fee": "0.20",
+                "created_at": "2026-01-01T00:00:00Z",
+            }
+        ],
+        None,
+    )
+    if len(unpriced) != 1 or unpriced[0]["pnl_trade_usd"] is not None or unpriced[0].get("pnl_label") != NOT_PRICED_LABEL:
+        raise SyncError(f"dry-run sell was priced without a lot seed {unpriced}")
+    seeded = dry_run_rows(
+        [
+            {
+                "id": "ffffffff-ffff-4fff-8fff-fffffffffff2",
+                "currency_code": "AAA",
+                "side": "sell",
+                "state": "filled",
+                "cumulative_quantity": "4",
+                "average_price": "5",
+                "fee": "0.20",
+                "created_at": "2026-09-28T11:00:00Z",
+            }
+        ],
+        [
+            {
+                "sleeve": "crypto",
+                "ticker": "AAA",
+                "side": "buy",
+                "qty": "10",
+                "avg_price": "2",
+                "timestamp_et": "2026-09-28T09:00:00+00:00",
+                "order_id": "11111111-1111-4111-8111-111111111111",
+                "fee_usd": "0",
+                "pnl_trade_usd": "0",
+            }
+        ],
+    )
+    if Decimal(seeded[0]["pnl_trade_usd"]) != Decimal("11.8") or seeded[0].get("pnl_label"):
+        raise SyncError(f"seeded dry-run did not fee-net the sell {seeded}")
+    far = [
+        _book_row("FAR", "buy", "1", "10", "2026-01-01T00:00:00+00:00", None),
+        _book_row("FAR", "buy", "1", "10", "2026-01-01T00:00:03+00:00", older),
+    ]
+    if any(row.get("replay_skip") for row in replay_rows(far)):
+        raise SyncError("a null row more than a couple of seconds away was treated as a twin")
+    near = [
+        _book_row("NEAR", "buy", "1", "10", "2026-01-01T00:00:00+00:00", None),
+        _book_row("NEAR", "buy", "1", "10", "2026-01-01T00:00:02+00:00", older),
+    ]
+    if replay_rows(near)[0].get("replay_skip") != "legacy_duplicate":
+        raise SyncError("a two-second null twin was replayed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2113,6 +2600,11 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run",
         action="store_true",
         help="Print mapped rows and do not call Supabase",
+    )
+    parser.add_argument(
+        "--existing-json",
+        metavar="PATH",
+        help="Read-only kpi_trades rows JSON. Dry-run seeds FIFO lots from it.",
     )
     parser.add_argument(
         "--from-json",
@@ -2138,7 +2630,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.dry_run:
             orders = load_fills(args.from_json) if args.from_json else fixture_orders()
-            print(json.dumps(rows_from_orders(orders, []), indent=2))
+            existing = load_row_document(args.existing_json) if args.existing_json else None
+            print(json.dumps(dry_run_rows(orders, existing), indent=2))
             print("dry-run: no upsert", file=sys.stderr)
             return 0
         return sync(from_json=args.from_json, from_rh=args.from_rh)

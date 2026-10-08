@@ -10,6 +10,9 @@ running_pnl = realized + unrealized
 running_balance = start + running_pnl
 realized = sum of pnl_trade_usd on closing legs
 unrealized = open_qty * (mark - avg_cost)
+avg_cost is the open cost that matches those stored close dollars. A FIFO
+close leaves the oldest lots. A close still stored at the older average
+cost leaves that blend, so realized + unrealized stays one book.
 
 Do not read public.kpi_trades_scrubbed. That view has no qty or price and joins
 the latest snapshot, so it cannot refresh mark-to-market.
@@ -77,6 +80,9 @@ START = {
     "combined": Decimal("800"),
 }
 DUST = Decimal("0.00000001")
+# fifo_gross - stored within this of fee_usd means that fee is already in the
+# stored close, so the leftover stays on the FIFO lots.
+BASIS_TOL = Decimal("0.001")
 SYMBOL = re.compile(r"^[A-Z0-9]{1,15}$")
 COINBASE_PRODUCT = {"MNT": "MANTLE-USD"}
 WRITE_COLUMNS = (
@@ -367,21 +373,38 @@ def _bucket_key(fill: dict):
     return (sleeve, ticker, side, format(qty.quantize(quantum), "f"), price_key, moment.isoformat())
 
 
+def _legacy_twin_ids(fills: list[dict]) -> set[int]:
+    """Object ids of null order_id rows the sync does not treat as lots.
+
+    Same rule as sync_rh_kpi_trades.legacy_duplicate_ids: a null order_id
+    beside an order_id twin, same sleeve, ticker, side, qty, and price,
+    timestamp within a couple of seconds. Whole-second stamps a second apart
+    are twins. Two fractional fills are not.
+    """
+    import sync_rh_kpi_trades as sync
+
+    return sync.legacy_duplicate_ids(fills)
+
+
 def collapse_duplicate_fills(fills: list[dict]) -> tuple[list[dict], int]:
     """Drop a second copy of the same fill before the net is replayed.
 
-    Two warehouse shapes count as one fill:
+    Three warehouse shapes count as one fill:
 
     - the same non-empty order_id
     - one timestamp at a whole second and another in that same second with a
       fraction, with the same sleeve, ticker, side, qty, and price
+    - a null order_id row within a couple of seconds of an order_id twin
 
     A later exit then closes the name. Two different fills that both carry a
     fractional timestamp stay, including two buys of the same size 30 seconds
     apart. This does not delete kpi_trades.
     """
     rows = [fill for fill in fills if isinstance(fill, dict)]
-    dropped = 0
+    skipped = _legacy_twin_ids(rows)
+    if skipped:
+        rows = [fill for fill in rows if id(fill) not in skipped]
+    dropped = len(skipped)
     by_order: dict[str, int] = {}
     stage: list[dict] = []
     for fill in rows:
@@ -435,7 +458,8 @@ def open_lots_note(collapsed: int, hidden: list[str], open_names: list[str]) -> 
     if collapsed:
         bits.append(
             f"Collapsed {collapsed} duplicate kpi_trades rows "
-            "(same broker order, or a whole-second copy of the same qty and price)."
+            "(same broker order, a whole-second copy of the same qty and price, "
+            "or a null order_id twin)."
         )
     if hidden:
         bits.append("Duplicate opens had hidden these exits: " + ", ".join(hidden) + ".")
@@ -450,10 +474,31 @@ def open_lots_note(collapsed: int, hidden: list[str], open_names: list[str]) -> 
     return " ".join(bits)
 
 
+def _open_lots(lots: list[dict] | None) -> tuple[list[dict], Decimal]:
+    kept = [lot for lot in (lots or []) if abs(lot["qty"]) > DUST]
+    qty = Decimal("0")
+    for lot in kept:
+        qty += lot["qty"]
+    return kept, qty
+
+
+def _lots_position(lots: list[dict], cost: Decimal | None = None) -> dict | None:
+    """Signed qty and open cost. The default cost is the remaining lot prices."""
+    kept, qty = _open_lots(lots)
+    if abs(qty) <= DUST:
+        return None
+    if cost is None:
+        cost = Decimal("0")
+        for lot in kept:
+            cost += abs(lot["qty"]) * lot["px"]
+    return {"qty": qty, "avg": cost / abs(qty)}
+
+
 def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
     realized = {sleeve: Decimal("0") for sleeve in TRADE_SLEEVES}
     realized_by_ticker: dict[tuple[str, str], Decimal] = {}
-    book: dict[tuple[str, str], dict] = {}
+    book: dict[tuple[str, str], list] = {}
+    cost_basis: dict[tuple[str, str], Decimal] = {}
     ordered = sorted(enumerate(fills), key=lambda item: (parse_ts(item[1]["timestamp_et"]), item[0]))
     for _, fill in ordered:
         sleeve = str(fill.get("sleeve") or "").strip().lower()
@@ -474,20 +519,15 @@ def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str
         pnl = dec(fill.get("pnl_trade_usd")) or Decimal("0")
         signed = qty if side == "buy" else -qty
         key = (sleeve, ticker)
-        pos = book.get(key)
-        open_qty = pos["qty"] if pos else Decimal("0")
+        lots, open_qty = _open_lots(book.get(key))
         increasing = (signed > 0 and open_qty >= 0) or (signed < 0 and open_qty <= 0)
         if increasing:
             if price is None or price <= 0:
                 raise RefreshError(f"{sleeve} {ticker}: opening fill is missing avg_price")
-            new_qty = open_qty + signed
-            if abs(open_qty) <= DUST:
-                avg = price
-            else:
-                avg = (abs(open_qty) * pos["avg"] + abs(signed) * price) / abs(new_qty)
-            book[key] = {"qty": new_qty, "avg": avg}
+            lots.append({"qty": signed, "px": price})
+            book[key] = lots
+            cost_basis[key] = cost_basis.get(key, Decimal("0")) + abs(signed) * price
             continue
-        close_qty = min(abs(open_qty), abs(signed))
         excess = abs(signed) - abs(open_qty)
         if excess > DUST:
             raise RefreshError(
@@ -495,16 +535,72 @@ def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str
             )
         realized[sleeve] += pnl
         realized_by_ticker[key] = realized_by_ticker.get(key, Decimal("0")) + pnl
-        remain = abs(open_qty) - close_qty
-        if remain <= DUST:
+        remaining = abs(signed)
+        fifo_cost = Decimal("0")
+        fifo_gross = Decimal("0")
+        while remaining > DUST:
+            if not lots:
+                raise RefreshError(f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}")
+            lot = lots[0]
+            take = min(abs(lot["qty"]), remaining)
+            fifo_cost += lot["px"] * take
+            if price is not None:
+                if lot["qty"] > 0:
+                    fifo_gross += (price - lot["px"]) * take
+                else:
+                    fifo_gross += (lot["px"] - price) * take
+            if lot["qty"] > 0:
+                lot["qty"] -= take
+            else:
+                lot["qty"] += take
+            remaining -= take
+            if abs(lot["qty"]) <= DUST:
+                lots.pop(0)
+        # Stored pnl stays on the snapshot. Shift open cost when that pnl is
+        # not the FIFO amount, so the leftover mark uses the same basis.
+        removed = _cost_removed(open_qty, qty, price, pnl, fifo_gross, fifo_cost, fill)
+        cost_basis[key] = cost_basis.get(key, Decimal("0")) - removed
+        if _lots_position(lots) is None:
             book.pop(key, None)
+            cost_basis.pop(key, None)
         else:
-            sign = Decimal("1") if open_qty > 0 else Decimal("-1")
-            book[key] = {"qty": sign * remain, "avg": pos["avg"]}
-    open_book = {key: pos for key, pos in book.items() if abs(pos["qty"]) > DUST}
-    for key, pos in open_book.items():
+            book[key] = lots
+    open_book: dict[tuple[str, str], dict] = {}
+    for key, lots in book.items():
+        pos = _lots_position(lots, cost_basis.get(key))
+        if pos is None:
+            continue
         pos["realized"] = realized_by_ticker.get(key, Decimal("0"))
+        open_book[key] = pos
     return realized, open_book
+
+
+def _cost_removed(
+    open_qty: Decimal,
+    qty: Decimal,
+    price: Decimal | None,
+    stored: Decimal,
+    fifo_gross: Decimal,
+    fifo_cost: Decimal,
+    fill: dict,
+) -> Decimal:
+    """Cost the stored close took off the open book.
+
+    FIFO gross, or FIFO gross minus a fee already inside pnl, removes the
+    lot cost. Any other stored pnl (the unbackfilled average-cost figure)
+    removes the cost that pnl implies, so running P&L still telescopes.
+    """
+    if price is None or price <= 0:
+        return fifo_cost
+    fee = dec(fill.get("fee_usd")) or Decimal("0")
+    if fee < 0:
+        fee = Decimal("0")
+    fee_in_pnl = Decimal("0")
+    if fee > 0 and abs((fifo_gross - stored) - fee) <= BASIS_TOL:
+        fee_in_pnl = fee
+    if open_qty > 0:
+        return price * qty - fee_in_pnl - stored
+    return stored + price * qty + fee_in_pnl
 
 
 def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
@@ -512,7 +608,10 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
 
     Sleeve realized is the sum of those close dollars. Each open position
     also keeps that ticker's own close dollars, including closes from before
-    a later reopen. Opening fills do not add realized.
+    a later reopen. Opening fills do not add realized. Leftover avg_cost
+    follows the stored close: FIFO lot cost when that pnl is FIFO, and the
+    blended cost when the row is still average-cost. Realized and unrealized
+    then describe one book.
 
     Duplicate fills are collapsed first. Replaying both copies leaves the
     later exit covering only one of them, so a closed name stays on the book.
@@ -681,7 +780,7 @@ def fetch_trades_rest(base_url: str, key: str) -> list[dict]:
     for offset in range(0, page * 20, page):
         path = (
             "/rest/v1/kpi_trades"
-            "?select=sleeve,ticker,side,qty,avg_price,pnl_trade_usd,timestamp_et,order_id"
+            "?select=sleeve,ticker,side,qty,avg_price,pnl_trade_usd,fee_usd,timestamp_et,order_id"
             "&order=timestamp_et.asc"
             f"&limit={page}&offset={offset}"
         )
@@ -778,7 +877,7 @@ def db_error(exc, secrets: list[str]) -> RefreshError:
 
 def fetch_trades_db(db_url: str, secrets: list[str]) -> list[dict]:
     sql = """
-        select sleeve, ticker, side, qty, avg_price, pnl_trade_usd, timestamp_et, order_id
+        select sleeve, ticker, side, qty, avg_price, pnl_trade_usd, fee_usd, timestamp_et, order_id
         from public.kpi_trades
         order by timestamp_et asc
     """
@@ -1041,7 +1140,7 @@ def self_test() -> int:
             "side": "sell",
             "qty": "5",
             "avg_price": "5",
-            "pnl_trade_usd": "10",
+            "pnl_trade_usd": "15",
             "timestamp_et": "2026-09-03T00:00:00Z",
         },
         {
@@ -1058,10 +1157,11 @@ def self_test() -> int:
     priors = {"crypto": {"day_kill_pct": Decimal("-0.10"), "day_target_pct": Decimal("0.025")}}
     rows, opens = build_rows(fills, marks, priors, "2026-09-28T01:00:00Z")
     by = {row["sleeve"]: row for row in rows}
-    # Opening buys ignore pnl_trade_usd. Avg cost (10*2 + 10*4) / 20 = 3. Sell 5 leaves 15.
-    if by["crypto"]["realized_pnl_usd"] != "10.000000":
+    # Opening buys ignore pnl_trade_usd. FIFO sells 5 of the $2 lot at $5 (realized 15).
+    # Leftover is 5 @ 2 and 10 @ 4, cost 50. Mark 4 unrealized is 10, not 15 at the old blend of 3.
+    if by["crypto"]["realized_pnl_usd"] != "15.000000":
         raise RefreshError(f"crypto realized {by['crypto']['realized_pnl_usd']}")
-    if by["crypto"]["unrealized_pnl_usd"] != "15.000000":
+    if by["crypto"]["unrealized_pnl_usd"] != "10.000000":
         raise RefreshError(f"crypto unrealized {by['crypto']['unrealized_pnl_usd']}")
     if by["crypto"]["running_pnl_usd"] != "25.000000":
         raise RefreshError("crypto running")
@@ -1077,9 +1177,9 @@ def self_test() -> int:
         raise RefreshError("equities balance")
     if by["equities"]["day_kill_pct"] is not None:
         raise RefreshError("missing prior rail should stay null")
-    if by["combined"]["realized_pnl_usd"] != "10.000000":
+    if by["combined"]["realized_pnl_usd"] != "15.000000":
         raise RefreshError("combined realized")
-    if by["combined"]["unrealized_pnl_usd"] != "35.000000":
+    if by["combined"]["unrealized_pnl_usd"] != "30.000000":
         raise RefreshError("combined unrealized")
     if by["combined"]["running_balance_usd"] != "845.000000":
         raise RefreshError("combined balance")
@@ -1087,6 +1187,33 @@ def self_test() -> int:
         raise RefreshError("combined seed")
     if len(opens) != 2:
         raise RefreshError("open count")
+    aaa = next(row for row in opens if row["ticker"] == "AAA")
+    if Decimal(aaa["qty"]) != Decimal("15") or Decimal(aaa["avg_cost"]) != Decimal("50") / Decimal("15"):
+        raise RefreshError(f"fifo leftover was blended {aaa}")
+    # Warehouse rows still store the average-cost close (10), not the FIFO 15.
+    # Leftover cost stays the blend of 3 so running is 25, not 10 + 10.
+    average_fills = [dict(fill) for fill in fills]
+    average_fills[2] = dict(average_fills[2], pnl_trade_usd="10")
+    avg_rows, avg_opens = build_rows(average_fills, marks, priors, "2026-09-28T01:00:00Z")
+    avg_by = {row["sleeve"]: row for row in avg_rows}
+    if avg_by["crypto"]["realized_pnl_usd"] != "10.000000":
+        raise RefreshError(f"average realized {avg_by['crypto']['realized_pnl_usd']}")
+    if avg_by["crypto"]["unrealized_pnl_usd"] != "15.000000":
+        raise RefreshError(f"average unrealized was marked FIFO {avg_by['crypto']['unrealized_pnl_usd']}")
+    if avg_by["crypto"]["running_pnl_usd"] != "25.000000":
+        raise RefreshError(f"average running mixed bases {avg_by['crypto']['running_pnl_usd']}")
+    avg_aaa = next(row for row in avg_opens if row["ticker"] == "AAA")
+    if Decimal(avg_aaa["qty"]) != Decimal("15") or Decimal(avg_aaa["avg_cost"]) != Decimal("3"):
+        raise RefreshError(f"average-cost close was marked FIFO {avg_aaa}")
+    fee_fills = [dict(fill) for fill in fills]
+    fee_fills[2] = dict(fee_fills[2], pnl_trade_usd="14.8", fee_usd="0.2")
+    fee_rows, fee_opens = build_rows(fee_fills, marks, priors, "2026-09-28T01:00:00Z")
+    fee_by = {row["sleeve"]: row for row in fee_rows}
+    fee_aaa = next(row for row in fee_opens if row["ticker"] == "AAA")
+    if Decimal(fee_aaa["avg_cost"]) != Decimal("50") / Decimal("15"):
+        raise RefreshError(f"fee-net FIFO leftover absorbed the fee {fee_aaa}")
+    if fee_by["crypto"]["realized_pnl_usd"] != "14.800000" or fee_by["crypto"]["running_pnl_usd"] != "24.800000":
+        raise RefreshError(f"fee-net book {fee_by['crypto']}")
     try:
         build_rows(fills, {("crypto", "AAA"): Decimal("4")}, priors, "2026-09-28T01:00:00Z")
     except RefreshError as exc:
@@ -1312,6 +1439,109 @@ def self_test() -> int:
         raise RefreshError(f"same order_id was replayed twice: {order_opens}")
     if apply_books.duplicates_collapsed != 1:
         raise RefreshError("same order_id was not one fill")
+    legacy_twin = [
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "order_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            "timestamp_et": "2026-01-01T00:00:00Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-01-01T00:00:01Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "sell",
+            "qty": "4",
+            "avg_price": "14",
+            "pnl_trade_usd": "16",
+            "order_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+            "timestamp_et": "2026-01-02T00:00:00Z",
+        },
+    ]
+    twin_rows, twin_opens = build_rows(
+        legacy_twin,
+        {("crypto", "QNT"): Decimal("14")},
+        {},
+        "2026-10-06T00:00:00Z",
+    )
+    if twin_opens:
+        raise RefreshError(f"null order_id twin a second later stayed open: {twin_opens}")
+    if twin_rows[0]["realized_pnl_usd"] != "16.000000":
+        raise RefreshError(f"legacy twin close {twin_rows[0]['realized_pnl_usd']}")
+    if apply_books.duplicates_collapsed != 1:
+        raise RefreshError(f"legacy twin was not collapsed {apply_books.duplicates_collapsed}")
+    whole_second = [
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "order_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            "timestamp_et": "2026-01-01T00:00:00Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "4",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-01-01T00:00:00Z",
+        },
+    ]
+    _whole_rows, whole_opens = build_rows(
+        whole_second,
+        {("crypto", "QNT"): Decimal("10")},
+        {},
+        "2026-10-06T00:00:00Z",
+    )
+    if len(whole_opens) != 1 or whole_opens[0]["qty"] != "4":
+        raise RefreshError(f"same-second null twin was replayed: {whole_opens}")
+    far_twin = [
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "1",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "timestamp_et": "2026-01-01T00:00:00Z",
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "QNT",
+            "side": "buy",
+            "qty": "1",
+            "avg_price": "10",
+            "pnl_trade_usd": "0",
+            "order_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+            "timestamp_et": "2026-01-01T00:00:03Z",
+        },
+    ]
+    _far_rows, far_opens = build_rows(
+        far_twin,
+        {("crypto", "QNT"): Decimal("10")},
+        {},
+        "2026-10-06T00:00:00Z",
+    )
+    if len(far_opens) != 1 or far_opens[0]["qty"] != "2":
+        raise RefreshError(f"a null row three seconds away was treated as a twin: {far_opens}")
+    if apply_books.duplicates_collapsed != 0:
+        raise RefreshError("a far null row was collapsed")
     message = rest_error(
         "POST",
         "/rest/v1/kpi_sleeve_snapshots",
