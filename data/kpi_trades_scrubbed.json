@@ -1644,6 +1644,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T01:52:34+00:00",
+    "ticker": "AERO",
+    "side": "sell",
+    "notional_frac_of_book": 0.336867,
+    "pnl_frac_of_book": 0.009992,
+    "why": "Artifact ad0e4845 SELL on held name: AERO P(up)=0.39 -> full exit per desk rule (sell signal on held lot).",
+    "running_pnl_frac": 0.091458,
+    "running_balance_frac": 1.091458,
+    "fee_frac_of_book": 0.0032
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
