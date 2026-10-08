@@ -1668,6 +1668,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T03:53:38+00:00",
+    "ticker": "RENDER",
+    "side": "sell",
+    "notional_frac_of_book": 0.327133,
+    "pnl_frac_of_book": -0.00496,
+    "why": "Artifact 91ae2b5e SELL on held name: RENDER P(up)=0.39 -> full exit per desk rule (sell signal on held lot).",
+    "running_pnl_frac": 0.088954,
+    "running_balance_frac": 1.088954,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
