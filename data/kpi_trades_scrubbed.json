@@ -1,18 +1,6 @@
 [
   {
     "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T16:36:50+00:00",
-    "ticker": "AVAX",
-    "side": "buy",
-    "notional_frac_of_book": 0.082733,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": 0.0,
-    "running_balance_frac": 1.0,
-    "fee_frac_of_book": 0.0008
-  },
-  {
-    "sleeve": "crypto",
     "timestamp_et": "2026-09-26T16:36:50.714048+00:00",
     "ticker": "AVAX",
     "side": "buy",
@@ -25,39 +13,15 @@
   },
   {
     "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T18:22:05+00:00",
-    "ticker": "AVAX",
-    "side": "sell",
-    "notional_frac_of_book": 0.081667,
-    "pnl_frac_of_book": -0.001833,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.001833,
-    "running_balance_frac": 0.998167,
-    "fee_frac_of_book": 0.000767
-  },
-  {
-    "sleeve": "crypto",
     "timestamp_et": "2026-09-26T18:22:05.677327+00:00",
     "ticker": "AVAX",
     "side": "sell",
     "notional_frac_of_book": 0.081667,
-    "pnl_frac_of_book": -0.001043,
+    "pnl_frac_of_book": -0.00181,
     "why": "backfill from RH \u2014 closed",
-    "running_pnl_frac": -0.002876,
-    "running_balance_frac": 0.997124,
+    "running_pnl_frac": -0.00181,
+    "running_balance_frac": 0.99819,
     "fee_frac_of_book": 0.000767
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T20:48:07+00:00",
-    "ticker": "QNT",
-    "side": "buy",
-    "notional_frac_of_book": 0.082967,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.002876,
-    "running_balance_frac": 0.997124,
-    "fee_frac_of_book": 0.0008
   },
   {
     "sleeve": "crypto",
@@ -67,20 +31,8 @@
     "notional_frac_of_book": 0.082967,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.002876,
-    "running_balance_frac": 0.997124,
-    "fee_frac_of_book": 0.0008
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T20:48:37+00:00",
-    "ticker": "QNT",
-    "side": "buy",
-    "notional_frac_of_book": 0.082967,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.002876,
-    "running_balance_frac": 0.997124,
+    "running_pnl_frac": -0.00181,
+    "running_balance_frac": 0.99819,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -91,20 +43,8 @@
     "notional_frac_of_book": 0.082967,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.002876,
-    "running_balance_frac": 0.997124,
-    "fee_frac_of_book": 0.0008
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T20:49:44+00:00",
-    "ticker": "QNT",
-    "side": "sell",
-    "notional_frac_of_book": 0.082933,
-    "pnl_frac_of_book": -0.000833,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.003709,
-    "running_balance_frac": 0.996291,
+    "running_pnl_frac": -0.00181,
+    "running_balance_frac": 0.99819,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -113,23 +53,11 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.082933,
-    "pnl_frac_of_book": -8.1e-05,
+    "pnl_frac_of_book": -0.000813,
     "why": "backfill from RH \u2014 leftover 0.2062 hold",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0008
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T21:50:54+00:00",
-    "ticker": "ZEC",
-    "side": "buy",
-    "notional_frac_of_book": 0.091567,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000867
   },
   {
     "sleeve": "crypto",
@@ -139,21 +67,9 @@
     "notional_frac_of_book": 0.091567,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000867
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T21:51:01+00:00",
-    "ticker": "XCN",
-    "side": "buy",
-    "notional_frac_of_book": 0.0905,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0
   },
   {
     "sleeve": "crypto",
@@ -163,20 +79,8 @@
     "notional_frac_of_book": 0.0905,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-26T23:56:32+00:00",
-    "ticker": "W",
-    "side": "buy",
-    "notional_frac_of_book": 0.084633,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0
   },
   {
@@ -187,21 +91,9 @@
     "notional_frac_of_book": 0.084633,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T00:51:37+00:00",
-    "ticker": "PYTH",
-    "side": "buy",
-    "notional_frac_of_book": 0.098867,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000933
   },
   {
     "sleeve": "crypto",
@@ -211,21 +103,9 @@
     "notional_frac_of_book": 0.098867,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000933
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T03:47:37+00:00",
-    "ticker": "COMP",
-    "side": "buy",
-    "notional_frac_of_book": 0.0615,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0006
   },
   {
     "sleeve": "crypto",
@@ -235,33 +115,9 @@
     "notional_frac_of_book": 0.0615,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0006
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T04:53:08+00:00",
-    "ticker": "COMP",
-    "side": "buy",
-    "notional_frac_of_book": 0.0189,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000167
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T04:53:08+00:00",
-    "ticker": "W",
-    "side": "buy",
-    "notional_frac_of_book": 0.0092,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0
   },
   {
     "sleeve": "crypto",
@@ -271,8 +127,8 @@
     "notional_frac_of_book": 0.0189,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000167
   },
   {
@@ -283,21 +139,9 @@
     "notional_frac_of_book": 0.0092,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T06:54:08+00:00",
-    "ticker": "DOT",
-    "side": "buy",
-    "notional_frac_of_book": 0.059267,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000567
   },
   {
     "sleeve": "crypto",
@@ -307,21 +151,9 @@
     "notional_frac_of_book": 0.059267,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000567
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T06:54:09+00:00",
-    "ticker": "UNI",
-    "side": "buy",
-    "notional_frac_of_book": 0.064367,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0006
   },
   {
     "sleeve": "crypto",
@@ -331,21 +163,9 @@
     "notional_frac_of_book": 0.064367,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0006
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T07:50:18+00:00",
-    "ticker": "AVAX",
-    "side": "buy",
-    "notional_frac_of_book": 0.074433,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0007
   },
   {
     "sleeve": "crypto",
@@ -355,33 +175,9 @@
     "notional_frac_of_book": 0.074433,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0007
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T07:50:19+00:00",
-    "ticker": "ORCA",
-    "side": "buy",
-    "notional_frac_of_book": 0.0634,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0006
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T07:50:19+00:00",
-    "ticker": "VVV",
-    "side": "buy",
-    "notional_frac_of_book": 0.070667,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000667
   },
   {
     "sleeve": "crypto",
@@ -391,8 +187,8 @@
     "notional_frac_of_book": 0.0634,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0006
   },
   {
@@ -403,21 +199,9 @@
     "notional_frac_of_book": 0.070667,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000667
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T09:53:11+00:00",
-    "ticker": "RENDER",
-    "side": "buy",
-    "notional_frac_of_book": 0.066133,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.0
   },
   {
     "sleeve": "crypto",
@@ -427,21 +211,9 @@
     "notional_frac_of_book": 0.066133,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T10:53:12+00:00",
-    "ticker": "ORCA",
-    "side": "buy",
-    "notional_frac_of_book": 0.0241,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
-    "fee_frac_of_book": 0.000233
   },
   {
     "sleeve": "crypto",
@@ -451,21 +223,9 @@
     "notional_frac_of_book": 0.0241,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": -0.00379,
-    "running_balance_frac": 0.99621,
+    "running_pnl_frac": -0.002623,
+    "running_balance_frac": 0.997377,
     "fee_frac_of_book": 0.000233
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T13:58:25+00:00",
-    "ticker": "QNT",
-    "side": "sell",
-    "notional_frac_of_book": 0.055267,
-    "pnl_frac_of_book": 0.01325,
-    "why": "+15% scale",
-    "running_pnl_frac": 0.00946,
-    "running_balance_frac": 1.00946,
-    "fee_frac_of_book": 0.000533
   },
   {
     "sleeve": "crypto",
@@ -473,23 +233,11 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.055267,
-    "pnl_frac_of_book": 0.013842,
+    "pnl_frac_of_book": 0.013275,
     "why": "+15% scale vs ~$120.66 cost",
-    "running_pnl_frac": 0.023302,
-    "running_balance_frac": 1.023302,
+    "running_pnl_frac": 0.010652,
+    "running_balance_frac": 1.010652,
     "fee_frac_of_book": 0.000533
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T16:50:05+00:00",
-    "ticker": "W",
-    "side": "sell",
-    "notional_frac_of_book": 0.054233,
-    "pnl_frac_of_book": 0.007694,
-    "why": "+15% scale",
-    "running_pnl_frac": 0.030996,
-    "running_balance_frac": 1.030996,
-    "fee_frac_of_book": 0.0
   },
   {
     "sleeve": "crypto",
@@ -497,23 +245,11 @@
     "ticker": "W",
     "side": "sell",
     "notional_frac_of_book": 0.054233,
-    "pnl_frac_of_book": 0.007362,
+    "pnl_frac_of_book": 0.007728,
     "why": "+15% scale",
-    "running_pnl_frac": 0.038358,
-    "running_balance_frac": 1.038358,
+    "running_pnl_frac": 0.01838,
+    "running_balance_frac": 1.01838,
     "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T18:55:20+00:00",
-    "ticker": "GRT",
-    "side": "buy",
-    "notional_frac_of_book": 0.089767,
-    "pnl_frac_of_book": 0.0,
-    "why": "artifact buy",
-    "running_pnl_frac": 0.038358,
-    "running_balance_frac": 1.038358,
-    "fee_frac_of_book": 0.000867
   },
   {
     "sleeve": "crypto",
@@ -523,33 +259,9 @@
     "notional_frac_of_book": 0.089767,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy",
-    "running_pnl_frac": 0.038358,
-    "running_balance_frac": 1.038358,
+    "running_pnl_frac": 0.01838,
+    "running_balance_frac": 1.01838,
     "fee_frac_of_book": 0.000867
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T21:56:12+00:00",
-    "ticker": "GRT",
-    "side": "sell",
-    "notional_frac_of_book": 0.051533,
-    "pnl_frac_of_book": 0.00615,
-    "why": "+15% scale",
-    "running_pnl_frac": 0.044508,
-    "running_balance_frac": 1.044508,
-    "fee_frac_of_book": 0.0005
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T21:56:12+00:00",
-    "ticker": "ORCA",
-    "side": "sell",
-    "notional_frac_of_book": 0.089367,
-    "pnl_frac_of_book": 0.001033,
-    "why": "rotation small gainer",
-    "running_pnl_frac": 0.045541,
-    "running_balance_frac": 1.045541,
-    "fee_frac_of_book": 0.000833
   },
   {
     "sleeve": "crypto",
@@ -557,10 +269,10 @@
     "ticker": "GRT",
     "side": "sell",
     "notional_frac_of_book": 0.051533,
-    "pnl_frac_of_book": 0.006676,
+    "pnl_frac_of_book": 0.006176,
     "why": "+15% scale",
-    "running_pnl_frac": 0.052217,
-    "running_balance_frac": 1.052217,
+    "running_pnl_frac": 0.024556,
+    "running_balance_frac": 1.024556,
     "fee_frac_of_book": 0.0005
   },
   {
@@ -569,35 +281,11 @@
     "ticker": "ORCA",
     "side": "sell",
     "notional_frac_of_book": 0.089367,
-    "pnl_frac_of_book": 0.001917,
+    "pnl_frac_of_book": 0.001084,
     "why": "rotation small gainer",
-    "running_pnl_frac": 0.054134,
-    "running_balance_frac": 1.054134,
+    "running_pnl_frac": 0.02564,
+    "running_balance_frac": 1.02564,
     "fee_frac_of_book": 0.000833
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T21:56:25+00:00",
-    "ticker": "IMX",
-    "side": "buy",
-    "notional_frac_of_book": 0.0898,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": 0.054134,
-    "running_balance_frac": 1.054134,
-    "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T21:56:25+00:00",
-    "ticker": "NEAR",
-    "side": "buy",
-    "notional_frac_of_book": 0.0903,
-    "pnl_frac_of_book": 0.0,
-    "why": "backfill from RH",
-    "running_pnl_frac": 0.054134,
-    "running_balance_frac": 1.054134,
-    "fee_frac_of_book": 0.000867
   },
   {
     "sleeve": "crypto",
@@ -607,8 +295,8 @@
     "notional_frac_of_book": 0.0903,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": 0.054134,
-    "running_balance_frac": 1.054134,
+    "running_pnl_frac": 0.02564,
+    "running_balance_frac": 1.02564,
     "fee_frac_of_book": 0.000867
   },
   {
@@ -619,21 +307,9 @@
     "notional_frac_of_book": 0.0898,
     "pnl_frac_of_book": 0.0,
     "why": "backfill from RH",
-    "running_pnl_frac": 0.054134,
-    "running_balance_frac": 1.054134,
+    "running_pnl_frac": 0.02564,
+    "running_balance_frac": 1.02564,
     "fee_frac_of_book": 0.0
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T22:53:11+00:00",
-    "ticker": "VVV",
-    "side": "sell",
-    "notional_frac_of_book": 0.066633,
-    "pnl_frac_of_book": -0.004667,
-    "why": "artifact sell exit (24h -2.20% vol z=1.47 conv 0.63)",
-    "running_pnl_frac": 0.049467,
-    "running_balance_frac": 1.049467,
-    "fee_frac_of_book": 0.000633
   },
   {
     "sleeve": "crypto",
@@ -641,35 +317,11 @@
     "ticker": "VVV",
     "side": "sell",
     "notional_frac_of_book": 0.066633,
-    "pnl_frac_of_book": -0.003995,
+    "pnl_frac_of_book": -0.004628,
     "why": "artifact sell exit (24h -2.20% vol z=1.47 conv 0.63)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.000633
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T22:53:18+00:00",
-    "ticker": "CRV",
-    "side": "buy",
-    "notional_frac_of_book": 0.074567,
-    "pnl_frac_of_book": 0.0,
-    "why": "artifact buy $22.59 conv 0.75 (+2.10% 24h vol z=5.96)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
-    "fee_frac_of_book": 0.0007
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T22:53:18+00:00",
-    "ticker": "SEI",
-    "side": "buy",
-    "notional_frac_of_book": 0.091233,
-    "pnl_frac_of_book": 0.0,
-    "why": "artifact buy $27.64 conv 0.92 (+7.73% 24h vol z=2.99)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
-    "fee_frac_of_book": 0.000867
   },
   {
     "sleeve": "crypto",
@@ -679,8 +331,8 @@
     "notional_frac_of_book": 0.091233,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $27.64 conv 0.92 (+7.73% 24h vol z=2.99)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.000867
   },
   {
@@ -691,20 +343,8 @@
     "notional_frac_of_book": 0.074567,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $22.59 conv 0.75 (+2.10% 24h vol z=5.96)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
-    "fee_frac_of_book": 0.0007
-  },
-  {
-    "sleeve": "crypto",
-    "timestamp_et": "2026-09-27T22:53:21+00:00",
-    "ticker": "SUI",
-    "side": "buy",
-    "notional_frac_of_book": 0.073533,
-    "pnl_frac_of_book": 0.0,
-    "why": "artifact buy $22.27 conv 0.74 (+8.28% 24h vol z=0.55)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -715,8 +355,8 @@
     "notional_frac_of_book": 0.073533,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $22.27 conv 0.74 (+8.28% 24h vol z=0.55)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -727,8 +367,8 @@
     "notional_frac_of_book": 0.043033,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy top-up to $26.50 (held leftover after prior +15% scale); conv 0.88; +28.66% 24h vol z=0.92",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0004
   },
   {
@@ -739,8 +379,8 @@
     "notional_frac_of_book": 0.078233,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $23.69 conv 0.79 (+3.32% 24h vol z=4.21)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.000733
   },
   {
@@ -751,8 +391,8 @@
     "notional_frac_of_book": 0.063233,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $19.15 conv 0.64 (+2.76% 24h vol z=1.32)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0006
   },
   {
@@ -763,8 +403,8 @@
     "notional_frac_of_book": 0.0586,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $17.75 conv 0.59 (+2.91% 24h vol z=0.68)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.000567
   },
   {
@@ -775,8 +415,8 @@
     "notional_frac_of_book": 0.058033,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $17.58 conv 0.59 (+2.30% 24h vol z=0.84)",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.000567
   },
   {
@@ -787,8 +427,8 @@
     "notional_frac_of_book": 0.012,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy top-up to $30; conv 1.0; +29.33% 24h vol z=2.44",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0001
   },
   {
@@ -799,8 +439,8 @@
     "notional_frac_of_book": 0.010167,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy top-up to $30; conv 1.0; +13.57% 24h vol z=2.61",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0
   },
   {
@@ -811,8 +451,8 @@
     "notional_frac_of_book": 0.008667,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy top-up to $30; conv 1.0; +13.84% 24h vol z=4.77",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 6.7e-05
   },
   {
@@ -823,8 +463,8 @@
     "notional_frac_of_book": 0.0105,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy top-up to $25.24; conv 0.84; +9.22% 24h vol z=1.43",
-    "running_pnl_frac": 0.045472,
-    "running_balance_frac": 1.045472,
+    "running_pnl_frac": 0.021012,
+    "running_balance_frac": 1.021012,
     "fee_frac_of_book": 0.0001
   },
   {
@@ -833,10 +473,10 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.0886,
-    "pnl_frac_of_book": 0.046283,
+    "pnl_frac_of_book": 0.046329,
     "why": "Joe exit \u2014 missed peak / downside",
-    "running_pnl_frac": 0.091755,
-    "running_balance_frac": 1.091755,
+    "running_pnl_frac": 0.067341,
+    "running_balance_frac": 1.067341,
     "fee_frac_of_book": 0.000833
   },
   {
@@ -845,10 +485,10 @@
     "ticker": "W",
     "side": "sell",
     "notional_frac_of_book": 0.053167,
-    "pnl_frac_of_book": 0.005873,
+    "pnl_frac_of_book": 0.005937,
     "why": "profit-exit model: trail through; leftover full exit",
-    "running_pnl_frac": 0.097628,
-    "running_balance_frac": 1.097628,
+    "running_pnl_frac": 0.073278,
+    "running_balance_frac": 1.073278,
     "fee_frac_of_book": 0.0
   },
   {
@@ -857,10 +497,10 @@
     "ticker": "SEI",
     "side": "sell",
     "notional_frac_of_book": 0.0544,
-    "pnl_frac_of_book": 0.00395,
+    "pnl_frac_of_book": 0.004297,
     "why": "profit-exit +5% reanalyze half-scale",
-    "running_pnl_frac": 0.101578,
-    "running_balance_frac": 1.101578,
+    "running_pnl_frac": 0.077575,
+    "running_balance_frac": 1.077575,
     "fee_frac_of_book": 0.000533
   },
   {
@@ -869,10 +509,10 @@
     "ticker": "IMX",
     "side": "sell",
     "notional_frac_of_book": 0.051733,
-    "pnl_frac_of_book": 0.00175,
+    "pnl_frac_of_book": 0.002134,
     "why": "profit-exit +5% reanalyze half-scale (gate)",
-    "running_pnl_frac": 0.103328,
-    "running_balance_frac": 1.103328,
+    "running_pnl_frac": 0.079709,
+    "running_balance_frac": 1.079709,
     "fee_frac_of_book": 0.0
   },
   {
@@ -883,8 +523,8 @@
     "notional_frac_of_book": 0.1039,
     "pnl_frac_of_book": 0.003049,
     "why": "profit-exit trail breach (bc-b76ce034 / PR#50); full exit not half",
-    "running_pnl_frac": 0.106377,
-    "running_balance_frac": 1.106377,
+    "running_pnl_frac": 0.082758,
+    "running_balance_frac": 1.082758,
     "fee_frac_of_book": 0.001
   },
   {
@@ -893,10 +533,10 @@
     "ticker": "CRV",
     "side": "sell",
     "notional_frac_of_book": 0.071533,
-    "pnl_frac_of_book": -0.003024,
+    "pnl_frac_of_book": -0.003691,
     "why": "artifact sell (24h -3.60% vol z=4.35 conv 0.80)",
-    "running_pnl_frac": 0.103353,
-    "running_balance_frac": 1.103353,
+    "running_pnl_frac": 0.079067,
+    "running_balance_frac": 1.079067,
     "fee_frac_of_book": 0.000667
   },
   {
@@ -907,8 +547,8 @@
     "notional_frac_of_book": 0.087967,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $26.65 conv 0.888 (+20.85% 24h vol z=0.98)",
-    "running_pnl_frac": 0.103353,
-    "running_balance_frac": 1.103353,
+    "running_pnl_frac": 0.079067,
+    "running_balance_frac": 1.079067,
     "fee_frac_of_book": 0.000833
   },
   {
@@ -917,10 +557,10 @@
     "ticker": "COMP",
     "side": "sell",
     "notional_frac_of_book": 0.075533,
-    "pnl_frac_of_book": -0.004825,
+    "pnl_frac_of_book": -0.005558,
     "why": "artifact sell (24h -5.64% vol z=1.06 conv 0.704)",
-    "running_pnl_frac": 0.098528,
-    "running_balance_frac": 1.098528,
+    "running_pnl_frac": 0.073509,
+    "running_balance_frac": 1.073509,
     "fee_frac_of_book": 0.000733
   },
   {
@@ -931,8 +571,8 @@
     "notional_frac_of_book": 0.0606,
     "pnl_frac_of_book": -0.00549,
     "why": "artifact sell (24h -4.26% vol z=1.61 conv 0.707)",
-    "running_pnl_frac": 0.093038,
-    "running_balance_frac": 1.093038,
+    "running_pnl_frac": 0.068019,
+    "running_balance_frac": 1.068019,
     "fee_frac_of_book": 0.0
   },
   {
@@ -943,8 +583,8 @@
     "notional_frac_of_book": 0.0725,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $21.95 conv 0.732 (+3.01% 24h vol z=2.39); top-up held lot",
-    "running_pnl_frac": 0.093038,
-    "running_balance_frac": 1.093038,
+    "running_pnl_frac": 0.068019,
+    "running_balance_frac": 1.068019,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -955,8 +595,8 @@
     "notional_frac_of_book": 0.0595,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $18.04 conv 0.601 (+2.58% 24h vol z=0.92)",
-    "running_pnl_frac": 0.093038,
-    "running_balance_frac": 1.093038,
+    "running_pnl_frac": 0.068019,
+    "running_balance_frac": 1.068019,
     "fee_frac_of_book": 0.000567
   },
   {
@@ -965,10 +605,10 @@
     "ticker": "LDO",
     "side": "sell",
     "notional_frac_of_book": 0.054633,
-    "pnl_frac_of_book": -0.003925,
+    "pnl_frac_of_book": -0.004458,
     "why": "artifact sell (24h -5.70% vol z=1.81 conv 0.766)",
-    "running_pnl_frac": 0.089113,
-    "running_balance_frac": 1.089113,
+    "running_pnl_frac": 0.063561,
+    "running_balance_frac": 1.063561,
     "fee_frac_of_book": 0.000533
   },
   {
@@ -977,10 +617,10 @@
     "ticker": "SEI",
     "side": "sell",
     "notional_frac_of_book": 0.050967,
-    "pnl_frac_of_book": 0.001209,
+    "pnl_frac_of_book": 0.000219,
     "why": "profit-exit trail breach (trail 0.082063; mark through)",
-    "running_pnl_frac": 0.090322,
-    "running_balance_frac": 1.090322,
+    "running_pnl_frac": 0.06378,
+    "running_balance_frac": 1.06378,
     "fee_frac_of_book": 0.0005
   },
   {
@@ -989,10 +629,10 @@
     "ticker": "HBAR",
     "side": "sell",
     "notional_frac_of_book": 0.075833,
-    "pnl_frac_of_book": 0.008024,
+    "pnl_frac_of_book": 0.007629,
     "why": "profit-exit +5% reanalyze half-scale (+11.53% vs 0.09695; no profit_exits model; short-hold)",
-    "running_pnl_frac": 0.098346,
-    "running_balance_frac": 1.098346,
+    "running_pnl_frac": 0.071409,
+    "running_balance_frac": 1.071409,
     "fee_frac_of_book": 0.000733
   },
   {
@@ -1003,8 +643,8 @@
     "notional_frac_of_book": 0.085,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $25.51 conv 0.850 (+6.86% 24h vol z=2.43)",
-    "running_pnl_frac": 0.098346,
-    "running_balance_frac": 1.098346,
+    "running_pnl_frac": 0.071409,
+    "running_balance_frac": 1.071409,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1015,8 +655,8 @@
     "notional_frac_of_book": 0.085633,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $25.85 conv 0.862 (+28.25% 24h vol z=0.64; ATR%~19%)",
-    "running_pnl_frac": 0.098346,
-    "running_balance_frac": 1.098346,
+    "running_pnl_frac": 0.071409,
+    "running_balance_frac": 1.071409,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -1025,10 +665,10 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.0472,
-    "pnl_frac_of_book": 0.012134,
+    "pnl_frac_of_book": 0.003979,
     "why": "profit-exit +5% reanalyze half-scale (+9.72% vs 201.928; no profit_exits model; short-hold)",
-    "running_pnl_frac": 0.11048,
-    "running_balance_frac": 1.11048,
+    "running_pnl_frac": 0.075388,
+    "running_balance_frac": 1.075388,
     "fee_frac_of_book": 0.000433
   },
   {
@@ -1037,10 +677,10 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.050439,
-    "pnl_frac_of_book": 0.015352,
+    "pnl_frac_of_book": 0.007163,
     "why": "short-hold profit-take leftover (+17.82% vs 201.928; past +15% failsafe 232.22; no profit_exits; do not ride QNT leftover)",
-    "running_pnl_frac": 0.125832,
-    "running_balance_frac": 1.125832,
+    "running_pnl_frac": 0.082551,
+    "running_balance_frac": 1.082551,
     "fee_frac_of_book": 0.000467
   },
   {
@@ -1049,10 +689,10 @@
     "ticker": "SUI",
     "side": "sell",
     "notional_frac_of_book": 0.079733,
-    "pnl_frac_of_book": -0.004213,
+    "pnl_frac_of_book": -0.005039,
     "why": "artifact sell (24h -5.57% vol z=0.83 conv 0.684)",
-    "running_pnl_frac": 0.121619,
-    "running_balance_frac": 1.121619,
+    "running_pnl_frac": 0.077512,
+    "running_balance_frac": 1.077512,
     "fee_frac_of_book": 0.000767
   },
   {
@@ -1063,8 +703,8 @@
     "notional_frac_of_book": 0.078667,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $23.81 conv 0.794 (+3.45% 24h vol z=5.70)",
-    "running_pnl_frac": 0.121619,
-    "running_balance_frac": 1.121619,
+    "running_pnl_frac": 0.077512,
+    "running_balance_frac": 1.077512,
     "fee_frac_of_book": 0.000733
   },
   {
@@ -1075,8 +715,8 @@
     "notional_frac_of_book": 0.079433,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $24.05 conv 0.802 (+8.14% 24h vol z=1.34)",
-    "running_pnl_frac": 0.121619,
-    "running_balance_frac": 1.121619,
+    "running_pnl_frac": 0.077512,
+    "running_balance_frac": 1.077512,
     "fee_frac_of_book": 0.000767
   },
   {
@@ -1087,8 +727,8 @@
     "notional_frac_of_book": 0.084267,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $25.51 conv 0.850 (+5.34% 24h vol z=6.18)",
-    "running_pnl_frac": 0.121619,
-    "running_balance_frac": 1.121619,
+    "running_pnl_frac": 0.077512,
+    "running_balance_frac": 1.077512,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -1099,8 +739,8 @@
     "notional_frac_of_book": 0.044567,
     "pnl_frac_of_book": 0.002091,
     "why": "profit-exit +5% reanalyze half-scale (+6.47% vs 0.12605; no profit_exits model; artifact still buy; short-hold)",
-    "running_pnl_frac": 0.12371,
-    "running_balance_frac": 1.12371,
+    "running_pnl_frac": 0.079603,
+    "running_balance_frac": 1.079603,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1109,10 +749,10 @@
     "ticker": "DOT",
     "side": "sell",
     "notional_frac_of_book": 0.055367,
-    "pnl_frac_of_book": -0.003877,
+    "pnl_frac_of_book": -0.004411,
     "why": "artifact sell (24h -3.96% vol z=0.92 conv 0.642)",
-    "running_pnl_frac": 0.119833,
-    "running_balance_frac": 1.119833,
+    "running_pnl_frac": 0.075192,
+    "running_balance_frac": 1.075192,
     "fee_frac_of_book": 0.000533
   },
   {
@@ -1121,10 +761,10 @@
     "ticker": "BONK",
     "side": "sell",
     "notional_frac_of_book": 0.072767,
-    "pnl_frac_of_book": -0.005438,
+    "pnl_frac_of_book": -0.006138,
     "why": "artifact sell (24h -5.12% vol z=0.79 conv 0.667)",
-    "running_pnl_frac": 0.114395,
-    "running_balance_frac": 1.114395,
+    "running_pnl_frac": 0.069054,
+    "running_balance_frac": 1.069054,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -1133,10 +773,10 @@
     "ticker": "PYTH",
     "side": "sell",
     "notional_frac_of_book": 0.0936,
-    "pnl_frac_of_book": -0.005236,
+    "pnl_frac_of_book": -0.006136,
     "why": "artifact sell (24h -5.86% vol z=1.17 conv 0.719)",
-    "running_pnl_frac": 0.109159,
-    "running_balance_frac": 1.109159,
+    "running_pnl_frac": 0.062918,
+    "running_balance_frac": 1.062918,
     "fee_frac_of_book": 0.0009
   },
   {
@@ -1147,8 +787,8 @@
     "notional_frac_of_book": 0.043533,
     "pnl_frac_of_book": 0.001043,
     "why": "profit-exit trail breach (trail 0.13235; mark through; leftover after prior +5% half-scale)",
-    "running_pnl_frac": 0.110202,
-    "running_balance_frac": 1.110202,
+    "running_pnl_frac": 0.063961,
+    "running_balance_frac": 1.063961,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1157,10 +797,10 @@
     "ticker": "ZEC",
     "side": "sell",
     "notional_frac_of_book": 0.083567,
-    "pnl_frac_of_book": -0.007967,
+    "pnl_frac_of_book": -0.008767,
     "why": "artifact sell (24h -3.27% vol z=0.69 conv 0.603)",
-    "running_pnl_frac": 0.102235,
-    "running_balance_frac": 1.102235,
+    "running_pnl_frac": 0.055194,
+    "running_balance_frac": 1.055194,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -1169,10 +809,10 @@
     "ticker": "UNI",
     "side": "sell",
     "notional_frac_of_book": 0.055967,
-    "pnl_frac_of_book": -0.008374,
+    "pnl_frac_of_book": -0.008907,
     "why": "artifact sell (24h -9.64% vol z=1.44 conv 0.855)",
-    "running_pnl_frac": 0.093861,
-    "running_balance_frac": 1.093861,
+    "running_pnl_frac": 0.046287,
+    "running_balance_frac": 1.046287,
     "fee_frac_of_book": 0.000533
   },
   {
@@ -1183,8 +823,8 @@
     "notional_frac_of_book": 0.072567,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $22 rails-capped (artifact 25.90; kill_rem ~22.33) conv 0.863 (+27.23% 24h vol z=0.67); top-up after leftover scale",
-    "running_pnl_frac": 0.093861,
-    "running_balance_frac": 1.093861,
+    "running_pnl_frac": 0.046287,
+    "running_balance_frac": 1.046287,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -1193,10 +833,10 @@
     "ticker": "HBAR",
     "side": "sell",
     "notional_frac_of_book": 0.039167,
-    "pnl_frac_of_book": 0.006137,
+    "pnl_frac_of_book": 0.008493,
     "why": "profit-exit +5% reanalyze half-scale on NEW lot (+8.03% vs 0.116518; no profit_exits model; short-hold; artifact still buy)",
-    "running_pnl_frac": 0.099998,
-    "running_balance_frac": 1.099998,
+    "running_pnl_frac": 0.05478,
+    "running_balance_frac": 1.05478,
     "fee_frac_of_book": 0.000367
   },
   {
@@ -1205,10 +845,10 @@
     "ticker": "NEAR",
     "side": "sell",
     "notional_frac_of_book": 0.080667,
-    "pnl_frac_of_book": -0.0096,
+    "pnl_frac_of_book": -0.010367,
     "why": "artifact sell (24h -5.32% vol z=1.57 conv 0.735)",
-    "running_pnl_frac": 0.090398,
-    "running_balance_frac": 1.090398,
+    "running_pnl_frac": 0.044413,
+    "running_balance_frac": 1.044413,
     "fee_frac_of_book": 0.000767
   },
   {
@@ -1219,8 +859,8 @@
     "notional_frac_of_book": 0.056633,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $17 rails-capped (artifact size_usd 4.64 compressed by model kill_rem 5.2; realized kill_rem ~17.70) conv 0.893 (+14.31% 24h vol z=1.04)",
-    "running_pnl_frac": 0.090398,
-    "running_balance_frac": 1.090398,
+    "running_pnl_frac": 0.044413,
+    "running_balance_frac": 1.044413,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1229,10 +869,10 @@
     "ticker": "HBAR",
     "side": "sell",
     "notional_frac_of_book": 0.0379,
-    "pnl_frac_of_book": 0.004874,
+    "pnl_frac_of_book": 0.00723,
     "why": "profit-exit trail breach (trail 0.122344; mark through; leftover after prior +5% half-scale on NEW lot)",
-    "running_pnl_frac": 0.095272,
-    "running_balance_frac": 1.095272,
+    "running_pnl_frac": 0.051643,
+    "running_balance_frac": 1.051643,
     "fee_frac_of_book": 0.000367
   },
   {
@@ -1241,10 +881,10 @@
     "ticker": "LINK",
     "side": "sell",
     "notional_frac_of_book": 0.0415,
-    "pnl_frac_of_book": 0.002181,
+    "pnl_frac_of_book": 0.001781,
     "why": "profit-exit +5% reanalyze half-scale (+5.55% vs 14.73208; no profit_exits model; short-hold; artifact flat)",
-    "running_pnl_frac": 0.097453,
-    "running_balance_frac": 1.097453,
+    "running_pnl_frac": 0.053424,
+    "running_balance_frac": 1.053424,
     "fee_frac_of_book": 0.0004
   },
   {
@@ -1253,10 +893,10 @@
     "ticker": "LINK",
     "side": "sell",
     "notional_frac_of_book": 0.040067,
-    "pnl_frac_of_book": 0.000755,
+    "pnl_frac_of_book": 0.000389,
     "why": "profit-exit trail breach (trail 15.11386; mark through; leftover after prior +5% half-scale)",
-    "running_pnl_frac": 0.098208,
-    "running_balance_frac": 1.098208,
+    "running_pnl_frac": 0.053813,
+    "running_balance_frac": 1.053813,
     "fee_frac_of_book": 0.000367
   },
   {
@@ -1265,10 +905,10 @@
     "ticker": "HBAR",
     "side": "sell",
     "notional_frac_of_book": 0.073533,
-    "pnl_frac_of_book": -0.000766,
+    "pnl_frac_of_book": -0.00725,
     "why": "profit-exit trail breach (trail 0.11149; mark through; leftover after prior +15% scale; no profit_exits; short-hold)",
-    "running_pnl_frac": 0.097442,
-    "running_balance_frac": 1.097442,
+    "running_pnl_frac": 0.046563,
+    "running_balance_frac": 1.046563,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -1279,8 +919,8 @@
     "notional_frac_of_book": 0.077533,
     "pnl_frac_of_book": -0.012936,
     "why": "artifact sell (24h -3.26% vol z=3.58 conv 0.788); spot exit/reduce advisory",
-    "running_pnl_frac": 0.084506,
-    "running_balance_frac": 1.084506,
+    "running_pnl_frac": 0.033627,
+    "running_balance_frac": 1.033627,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1291,8 +931,8 @@
     "notional_frac_of_book": 0.0596,
     "pnl_frac_of_book": 0.0,
     "why": "artifact buy $17.89 conv 0.596 (+2.68% 24h vol z=0.82); momentum + participation spot long",
-    "running_pnl_frac": 0.084506,
-    "running_balance_frac": 1.084506,
+    "running_pnl_frac": 0.033627,
+    "running_balance_frac": 1.033627,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1301,10 +941,10 @@
     "ticker": "AVAX",
     "side": "sell",
     "notional_frac_of_book": 0.072433,
-    "pnl_frac_of_book": -0.001952,
+    "pnl_frac_of_book": -0.002652,
     "why": "artifact sell ml LGBM P(up 8h)=0.40 < buy>=0.58; spot exit/reduce (conv 0.601)",
-    "running_pnl_frac": 0.082554,
-    "running_balance_frac": 1.082554,
+    "running_pnl_frac": 0.030975,
+    "running_balance_frac": 1.030975,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -1313,10 +953,10 @@
     "ticker": "IMX",
     "side": "sell",
     "notional_frac_of_book": 0.045467,
-    "pnl_frac_of_book": -0.004301,
+    "pnl_frac_of_book": -0.004832,
     "why": "artifact sell ml LGBM P(up 8h)=0.39 < buy>=0.58; spot exit/reduce (conv 0.609); NOT a re-scale \u2014 full exit of leftover",
-    "running_pnl_frac": 0.078253,
-    "running_balance_frac": 1.078253,
+    "running_pnl_frac": 0.026143,
+    "running_balance_frac": 1.026143,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1325,10 +965,10 @@
     "ticker": "XLM",
     "side": "sell",
     "notional_frac_of_book": 0.084133,
-    "pnl_frac_of_book": -9.6e-05,
+    "pnl_frac_of_book": -0.000896,
     "why": "artifact sell ml LGBM P(up 8h)=0.40 < buy>=0.58; spot exit/reduce (conv 0.603)",
-    "running_pnl_frac": 0.078157,
-    "running_balance_frac": 1.078157,
+    "running_pnl_frac": 0.025247,
+    "running_balance_frac": 1.025247,
     "fee_frac_of_book": 0.0008
   },
   {
@@ -1339,8 +979,8 @@
     "notional_frac_of_book": 0.0526,
     "pnl_frac_of_book": -0.003985,
     "why": "artifact sell ml LGBM P(up 8h)=0.39 < buy>=0.58; spot exit/reduce (conv 0.6095)",
-    "running_pnl_frac": 0.074172,
-    "running_balance_frac": 1.074172,
+    "running_pnl_frac": 0.021262,
+    "running_balance_frac": 1.021262,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1349,10 +989,10 @@
     "ticker": "GRT",
     "side": "sell",
     "notional_frac_of_book": 0.077833,
-    "pnl_frac_of_book": -0.009307,
+    "pnl_frac_of_book": -0.010822,
     "why": "artifact sell ml LGBM P(up 8h)=0.40 < buy>=0.58; spot exit/reduce (conv 0.6020)",
-    "running_pnl_frac": 0.064865,
-    "running_balance_frac": 1.064865,
+    "running_pnl_frac": 0.01044,
+    "running_balance_frac": 1.01044,
     "fee_frac_of_book": 0.000733
   },
   {
@@ -1361,10 +1001,10 @@
     "ticker": "OP",
     "side": "sell",
     "notional_frac_of_book": 0.0513,
-    "pnl_frac_of_book": -0.006703,
+    "pnl_frac_of_book": -0.007203,
     "why": "artifact sell ml LGBM P(up 8h)=0.38 < buy>=0.58; spot exit/reduce (conv 0.6169)",
-    "running_pnl_frac": 0.058162,
-    "running_balance_frac": 1.058162,
+    "running_pnl_frac": 0.003237,
+    "running_balance_frac": 1.003237,
     "fee_frac_of_book": 0.0005
   },
   {
@@ -1373,10 +1013,10 @@
     "ticker": "SEI",
     "side": "sell",
     "notional_frac_of_book": 0.0732,
-    "pnl_frac_of_book": -0.004565,
+    "pnl_frac_of_book": -0.006899,
     "why": "artifact sell ml LGBM P(up 8h)=0.39 < buy>=0.58; spot exit/reduce (conv 0.6125)",
-    "running_pnl_frac": 0.053597,
-    "running_balance_frac": 1.053597,
+    "running_pnl_frac": -0.003662,
+    "running_balance_frac": 0.996338,
     "fee_frac_of_book": 0.0007
   },
   {
@@ -1387,8 +1027,8 @@
     "notional_frac_of_book": 0.059,
     "pnl_frac_of_book": -0.000594,
     "why": "artifact sell (ml P(up)~0.38); spot exit/reduce on fresh artifact 8efd3a18",
-    "running_pnl_frac": 0.053003,
-    "running_balance_frac": 1.053003,
+    "running_pnl_frac": -0.004256,
+    "running_balance_frac": 0.995744,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1397,10 +1037,10 @@
     "ticker": "ORCA",
     "side": "sell",
     "notional_frac_of_book": 0.056233,
-    "pnl_frac_of_book": -0.00321,
+    "pnl_frac_of_book": -0.003743,
     "why": "artifact sell ml LGBM P(up 8h)=0.40 < buy>=0.58; spot exit/reduce (conv 0.6016) on fresh artifact 10774791",
-    "running_pnl_frac": 0.049793,
-    "running_balance_frac": 1.049793,
+    "running_pnl_frac": -0.007999,
+    "running_balance_frac": 0.992001,
     "fee_frac_of_book": 0.000533
   },
   {
@@ -1411,8 +1051,8 @@
     "notional_frac_of_book": 0.3298,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact P=0.50; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.049793,
-    "running_balance_frac": 1.049793,
+    "running_pnl_frac": -0.007999,
+    "running_balance_frac": 0.992001,
     "fee_frac_of_book": 0.003133
   },
   {
@@ -1423,8 +1063,8 @@
     "notional_frac_of_book": 0.330167,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact P=0.50; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.049793,
-    "running_balance_frac": 1.049793,
+    "running_pnl_frac": -0.007999,
+    "running_balance_frac": 0.992001,
     "fee_frac_of_book": 0.003133
   },
   {
@@ -1435,8 +1075,8 @@
     "notional_frac_of_book": 0.330067,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact acb6e65b CRV P=0.50; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.049793,
-    "running_balance_frac": 1.049793,
+    "running_pnl_frac": -0.007999,
+    "running_balance_frac": 0.992001,
     "fee_frac_of_book": 0.003133
   },
   {
@@ -1445,10 +1085,10 @@
     "ticker": "WIF",
     "side": "sell",
     "notional_frac_of_book": 0.329167,
-    "pnl_frac_of_book": -0.000955,
+    "pnl_frac_of_book": -0.004088,
     "why": "Artifact 4b689588 (ml, generated 2026-10-07T00:37:31Z) flipped WIF to sell, P(up 8h)=0.38; standing rule artifact sell forces full exit.",
-    "running_pnl_frac": 0.048838,
-    "running_balance_frac": 1.048838,
+    "running_pnl_frac": -0.012087,
+    "running_balance_frac": 0.987913,
     "fee_frac_of_book": 0.003133
   },
   {
@@ -1457,10 +1097,10 @@
     "ticker": "CRV",
     "side": "sell",
     "notional_frac_of_book": 0.3248,
-    "pnl_frac_of_book": -0.003416,
+    "pnl_frac_of_book": -0.008318,
     "why": "Artifact e03ea484 CRV SELL (P=0.40). Full exit.",
-    "running_pnl_frac": 0.045422,
-    "running_balance_frac": 1.045422,
+    "running_pnl_frac": -0.020405,
+    "running_balance_frac": 0.979595,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1471,8 +1111,8 @@
     "notional_frac_of_book": 0.326867,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact e03ea484 QNT P=0.54; meta still 0.58 flat). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.045422,
-    "running_balance_frac": 1.045422,
+    "running_pnl_frac": -0.020405,
+    "running_balance_frac": 0.979595,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1481,10 +1121,10 @@
     "ticker": "VVV",
     "side": "sell",
     "notional_frac_of_book": 0.3276,
-    "pnl_frac_of_book": -0.002177,
+    "pnl_frac_of_book": -0.005277,
     "why": "Artifact 96f5ec81 VVV SELL (P=0.39). Full exit.",
-    "running_pnl_frac": 0.043245,
-    "running_balance_frac": 1.043245,
+    "running_pnl_frac": -0.025682,
+    "running_balance_frac": 0.974318,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1493,10 +1133,10 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.3242,
-    "pnl_frac_of_book": 0.02167,
+    "pnl_frac_of_book": -0.005709,
     "why": "Artifact 8812512f QNT SELL (P=0.39). Full exit.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.003067
   },
   {
@@ -1507,8 +1147,8 @@
     "notional_frac_of_book": 0.329767,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact aca4dea6 RENDER P=0.52; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1519,8 +1159,8 @@
     "notional_frac_of_book": 0.329933,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact aca4dea6 BAT P=0.51; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1531,8 +1171,8 @@
     "notional_frac_of_book": 0.3297,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact aca4dea6 AXS P=0.51; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1543,8 +1183,8 @@
     "notional_frac_of_book": 0.3268,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact 8d6a4a90 QNT P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1555,8 +1195,8 @@
     "notional_frac_of_book": 0.329933,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact 8d6a4a90 FET P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1567,8 +1207,8 @@
     "notional_frac_of_book": 0.3269,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact 8d6a4a90 BONK P=0.53; side flat, meta 0.58). Half-size override $100 max. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1579,8 +1219,8 @@
     "notional_frac_of_book": 0.3269,
     "pnl_frac_of_book": 0.0,
     "why": "Desk gate 0.50 hit (artifact db09ed70 AERO P=0.53; side flat, meta 0.58). Half-size override $100 max. Top conviction of AERO/ENA/INJ 0.53 tier, tight exchange spread. Short-hold.",
-    "running_pnl_frac": 0.064915,
-    "running_balance_frac": 1.064915,
+    "running_pnl_frac": -0.031391,
+    "running_balance_frac": 0.968609,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1589,10 +1229,10 @@
     "ticker": "QNT",
     "side": "sell",
     "notional_frac_of_book": 0.172067,
-    "pnl_frac_of_book": 0.009155,
+    "pnl_frac_of_book": 0.007066,
     "why": "+5% short-hold profit-take, half-scale (artifact bd96338c QNT P=0.45 flat; mark 252.99 vs avg 239.59, +5.6%; trigger 251.57; no profit_exits).",
-    "running_pnl_frac": 0.07407,
-    "running_balance_frac": 1.07407,
+    "running_pnl_frac": -0.024325,
+    "running_balance_frac": 0.975675,
     "fee_frac_of_book": 0.001633
   },
   {
@@ -1603,8 +1243,8 @@
     "notional_frac_of_book": 0.166533,
     "pnl_frac_of_book": 0.0,
     "why": "Rotate QNT half-scale proceeds into top eligible not-held name: artifact bd96338c STRK P=0.53 >= 0.50 temp gate; $50 under $100 half-normal cap; cash buffer ~$58. Short-hold.",
-    "running_pnl_frac": 0.07407,
-    "running_balance_frac": 1.07407,
+    "running_pnl_frac": -0.024325,
+    "running_balance_frac": 0.975675,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1615,8 +1255,8 @@
     "notional_frac_of_book": 0.330333,
     "pnl_frac_of_book": 0.000436,
     "why": "Artifact 3358df20 SELL on held name: BAT P(up)=0.37 -> full exit per desk rule (sell signal on held lot).",
-    "running_pnl_frac": 0.074506,
-    "running_balance_frac": 1.074506,
+    "running_pnl_frac": -0.023889,
+    "running_balance_frac": 0.976111,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1627,8 +1267,8 @@
     "notional_frac_of_book": 0.326767,
     "pnl_frac_of_book": 0.0,
     "why": "Rotate BAT exit proceeds into top eligible not-held name: artifact 3358df20 VVV P=0.54 >= 0.50 temp gate; $99 under $100 half-normal cap; cash buffer ~$58 kept. Short-hold.",
-    "running_pnl_frac": 0.074506,
-    "running_balance_frac": 1.074506,
+    "running_pnl_frac": -0.023889,
+    "running_balance_frac": 0.976111,
     "fee_frac_of_book": 0.0031
   },
   {
@@ -1639,8 +1279,8 @@
     "notional_frac_of_book": 0.1718,
     "pnl_frac_of_book": 0.00696,
     "why": "+5% short-hold profit-take, half-scale (artifact 7a2a7ce0 AXS P=0.44 flat; mark 1.2464 vs avg 1.1834, +5.32%; trigger 1.2426; no profit_exits).",
-    "running_pnl_frac": 0.081466,
-    "running_balance_frac": 1.081466,
+    "running_pnl_frac": -0.016929,
+    "running_balance_frac": 0.983071,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1649,10 +1289,10 @@
     "ticker": "AERO",
     "side": "sell",
     "notional_frac_of_book": 0.336867,
-    "pnl_frac_of_book": 0.009992,
+    "pnl_frac_of_book": 0.006792,
     "why": "Artifact ad0e4845 SELL on held name: AERO P(up)=0.39 -> full exit per desk rule (sell signal on held lot).",
-    "running_pnl_frac": 0.091458,
-    "running_balance_frac": 1.091458,
+    "running_pnl_frac": -0.010137,
+    "running_balance_frac": 0.989863,
     "fee_frac_of_book": 0.0032
   },
   {
@@ -1663,8 +1303,8 @@
     "notional_frac_of_book": 0.1673,
     "pnl_frac_of_book": 0.002456,
     "why": "Artifact cf30fa30 SELL on held name: AXS P(up)=0.39 -> full exit of the leftover half per desk rule (sell signal on held lot).",
-    "running_pnl_frac": 0.093914,
-    "running_balance_frac": 1.093914,
+    "running_pnl_frac": -0.007681,
+    "running_balance_frac": 0.992319,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1673,10 +1313,10 @@
     "ticker": "RENDER",
     "side": "sell",
     "notional_frac_of_book": 0.327133,
-    "pnl_frac_of_book": -0.00496,
+    "pnl_frac_of_book": -0.002606,
     "why": "Artifact 91ae2b5e SELL on held name: RENDER P(up)=0.39 -> full exit per desk rule (sell signal on held lot).",
-    "running_pnl_frac": 0.088954,
-    "running_balance_frac": 1.088954,
+    "running_pnl_frac": -0.010287,
+    "running_balance_frac": 0.989713,
     "fee_frac_of_book": 0.0
   },
   {
@@ -1687,8 +1327,8 @@
     "notional_frac_of_book": 0.164133,
     "pnl_frac_of_book": -0.000804,
     "why": "Scaled QNT leftover breached trail $245.26 (mark 240.52) -> exit leftover per desk trail rule (LINK/HBAR/AXS precedent). Artifact 18e3bc0d no buys.",
-    "running_pnl_frac": 0.08815,
-    "running_balance_frac": 1.08815,
+    "running_pnl_frac": -0.011091,
+    "running_balance_frac": 0.988909,
     "fee_frac_of_book": 0.001567
   },
   {
@@ -1699,9 +1339,21 @@
     "notional_frac_of_book": 0.329733,
     "pnl_frac_of_book": 0.0,
     "why": "Top eligible not-held name: artifact ee16e799 ORCA p_up 0.5206 (unrounded, LGBM v1 calibrated) >= 0.50 temp gate; $99 under $100 half-normal cap; funded from USD cash, no USDC convert. Short-hold.",
-    "running_pnl_frac": 0.08815,
-    "running_balance_frac": 1.08815,
+    "running_pnl_frac": -0.011091,
+    "running_balance_frac": 0.988909,
     "fee_frac_of_book": 0.003133
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T09:49:28+00:00",
+    "ticker": "STRK",
+    "side": "sell",
+    "notional_frac_of_book": 0.092867,
+    "pnl_frac_of_book": 0.009621,
+    "why": "+5% profit-take: STRK +12.5% mark / +11.4% bid vs avg cost 0.04908; profit_exits empty and model p_up 0.432 does not support holding upside, so 50% scale-out per desk practice.",
+    "running_pnl_frac": -0.00147,
+    "running_balance_frac": 0.99853,
+    "fee_frac_of_book": 0.0
   },
   {
     "sleeve": "equities",
