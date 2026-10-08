@@ -3015,13 +3015,14 @@ def self_test() -> int:
         "2026-09-28T01:00:00Z",
     )
     by_ticker = {row["ticker"]: row for row in opens["positions"]}
-    # 15 shares left. FIFO cost is 5 @ 2 plus 10 @ 4 = 50, not the pre-close blend of 3.
-    # Mark 4. Unrealized 10 / crypto seed 300.
+    # 15 shares left. Stored close pnl is the average-cost 10, so leftover
+    # cost stays the pre-close blend of 3. Mark 4. Unrealized 15 / seed 300.
+    # A stored FIFO close of 15 would leave cost 50 and unrealized 10.
     if by_ticker["AAA"]["side"] != "long" or by_ticker["AAA"]["qty"] != "15":
         raise RuntimeError(f"AAA open qty {by_ticker.get('AAA')}")
-    if by_ticker["AAA"]["avg"] != format(Decimal("50") / Decimal("15"), "f"):
-        raise RuntimeError(f"AAA leftover avg was blended {by_ticker['AAA']['avg']}")
-    if by_ticker["AAA"]["unrealized_pnl_frac"] != float(q6(Decimal("10") / Decimal("300"))):
+    if by_ticker["AAA"]["avg"] != "3":
+        raise RuntimeError(f"AAA leftover avg mixed FIFO cost onto average pnl {by_ticker['AAA']['avg']}")
+    if by_ticker["AAA"]["unrealized_pnl_frac"] != float(q6(Decimal("15") / Decimal("300"))):
         raise RuntimeError(f"AAA unrealized frac {by_ticker['AAA']['unrealized_pnl_frac']}")
     if by_ticker["QCOM"]["unrealized_pnl_frac"] != float(q6(Decimal("20") / Decimal("500"))):
         raise RuntimeError(f"QCOM unrealized frac {by_ticker['QCOM']['unrealized_pnl_frac']}")
