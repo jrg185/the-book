@@ -47,7 +47,7 @@ test("why-text PR links still target the signal repos for an authenticated reade
 
 test("curve geometry uses fractions and does not invent a point", () => {
   const rows = [
-    { sleeve: "crypto", as_of: "2026-09-27T00:00:00Z", running_balance_frac: 1.0, running_balance_usd: 323.77, account_id: "546048042" },
+    { sleeve: "crypto", as_of: "2026-09-27T00:00:00Z", running_balance_frac: 1.0, running_balance_usd: 323.77, account_id: "TEST-ACCOUNT" },
     { sleeve: "crypto", as_of: "2026-09-28T00:00:00Z", running_balance_frac: 1.05 },
     { sleeve: "equities", as_of: "2026-09-28T00:00:00Z", running_balance_frac: 0.99 },
     { sleeve: "combined", as_of: "2026-09-28T00:00:00Z", running_balance_frac: 1.02 },
@@ -68,7 +68,7 @@ test("curve geometry uses fractions and does not invent a point", () => {
   assert.equal(sampled.values.equities, 0.99);
   const blob = JSON.stringify(chart);
   assert.equal(blob.includes("running_balance_usd"), false);
-  assert.equal(blob.includes("546048042"), false);
+  assert.equal(blob.includes("TEST-ACCOUNT"), false);
   assert.equal(blob.includes("323.77"), false);
   assert.equal(buildChart([], "all").empty, true);
   assert.equal(buildChart([{ sleeve: "crypto", as_of: "2026-09-28T00:00:00Z" }], "crypto").empty, true);
