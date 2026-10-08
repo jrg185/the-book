@@ -50,6 +50,7 @@ NO_CHANGE_TOL = Decimal("0.005")
 MATCH_WINDOW = sync.dt.timedelta(minutes=5)
 
 REASON_FEE = "fee_not_netted"
+REASON_LATE_FEE = "late_fee_not_netted"
 REASON_PHANTOM = "phantom_lots_from_legacy_duplicates"
 REASON_AVG = "avg_cost_not_fifo"
 REASON_ROUND = "rounding"
@@ -197,7 +198,12 @@ def _reasons(
     reasons: list[str] = []
     gross = proposed + fee
     material = abs(stored - proposed) > NO_CHANGE_TOL
-    if fee > 0 and material and abs(stored - gross) <= abs(stored - proposed) + NO_CHANGE_TOL:
+    # Stored pnl already matches FIFO gross. The whole gap is a fee that was
+    # not on the row when it was priced. The live sync must not rewrite it;
+    # the approved backfill is the only writer.
+    if fee > 0 and material and abs(stored - gross) <= NO_CHANGE_TOL:
+        reasons.append(REASON_LATE_FEE)
+    elif fee > 0 and material and abs(stored - gross) <= abs(stored - proposed) + NO_CHANGE_TOL:
         reasons.append(REASON_FEE)
     if dirty is not None and abs(dirty - proposed) > NO_CHANGE_TOL:
         reasons.append(REASON_PHANTOM)

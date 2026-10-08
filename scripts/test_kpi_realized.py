@@ -428,7 +428,9 @@ def test_plan_backfill_tags_fee_average_phantom_and_legacy():
     by_id = {row["kpi_trades_id"]: row for row in plan["rows"]}
     fee = by_id["fee-sell"]
     assert fee["action"] == "UPDATE"
-    assert fee["reasons"] == ["fee_not_netted"]
+    # Stored pnl already matches FIFO gross. The gap is only the fee, so the
+    # plan tags it and the live sync does not rewrite the stored row.
+    assert fee["reasons"] == ["late_fee_not_netted"]
     seed = export_kpi.LEDGER_SEEDS["crypto"]
     assert fee["old_pnl_frac_of_book"] == format(export_kpi.q6(Decimal("2") / seed), "f")
     assert fee["new_pnl_frac_of_book"] == format(export_kpi.q6(Decimal("1.75") / seed), "f")
@@ -447,6 +449,121 @@ def test_plan_backfill_tags_fee_average_phantom_and_legacy():
     text = json.dumps(plan)
     assert "55555555-5555-4555-8555-555555555552" not in text
     assert plan["note"] == "PLANNED ONLY - do not apply until Eng and Wags approve."
+
+
+def test_fee_backfill_never_touches_stored_pnl(monkeypatch):
+    """A late fee fills fee_usd only. REST body and SQL both omit pnl_trade_usd."""
+    sell_id = "22222222-2222-4222-8222-222222222222"
+    buy_id = "11111111-1111-4111-8111-111111111111"
+    priced = sync.map_orders(
+        [
+            {
+                "id": sell_id,
+                "currency_code": "AAA",
+                "side": "sell",
+                "state": "filled",
+                "cumulative_quantity": "4",
+                "average_price": "5",
+                "fee": "0.20",
+                "created_at": "2026-09-28T11:00:00Z",
+            }
+        ]
+    )
+    stored = [
+        {
+            "order_id": buy_id,
+            "sleeve": "crypto",
+            "ticker": "AAA",
+            "side": "buy",
+            "qty": "10",
+            "avg_price": "2",
+            "timestamp_et": "2026-09-28T09:00:00+00:00",
+            "fee_usd": "0.10",
+            "pnl_trade_usd": "0",
+        },
+        {
+            "order_id": sell_id,
+            "sleeve": "crypto",
+            "ticker": "AAA",
+            "side": "sell",
+            "qty": "4",
+            "avg_price": "5",
+            "timestamp_et": "2026-09-28T11:00:00+00:00",
+            "fee_usd": "0",
+            "pnl_trade_usd": "12",
+        },
+    ]
+    patches = sync.fee_backfill_for(priced, stored)
+    assert patches == [{"order_id": sell_id, "fee_usd": "0.2"}]
+    assert "pnl_trade_usd" not in patches[0]
+
+    captured = []
+
+    def fake_rest(base_url, key, path, method="GET", body=None, extra_headers=None):
+        captured.append({"method": method, "path": path, "body": body})
+        return [{"order_id": sell_id, "fee_usd": "0.2", "pnl_trade_usd": "12"}]
+
+    monkeypatch.setattr(sync, "rest_call", fake_rest)
+    stuffed = {"order_id": sell_id, "fee_usd": "0.2", "pnl_trade_usd": "11.8"}
+    written = sync.apply_fee_backfill_rest("https://example.supabase.co", "key", [stuffed])
+    assert written == 1
+    assert captured[0]["method"] == "PATCH"
+    assert captured[0]["body"] == {"fee_usd": "0.2"}
+    assert "pnl_trade_usd" not in captured[0]["body"]
+
+    executed = []
+
+    class FakeCursor:
+        rowcount = 1
+
+        def execute(self, sql, params):
+            executed.append((sql, dict(params)))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+        def commit(self):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(sync, "connect_db", lambda db_url: FakeConn())
+    sync.apply_fee_backfill_db("postgres://example", [stuffed])
+    sql, params = executed[0]
+    assert "pnl_trade_usd" not in sql.lower()
+    assert set(params) == {"order_id", "fee_usd"}
+    assert "pnl_trade_usd" not in sync.FEE_BACKFILL_SQL.lower()
+
+
+def test_late_fee_is_classified_instead_of_rewritten():
+    reasons = recon._reasons(
+        stored=Decimal("2"),
+        proposed=Decimal("1.75"),
+        fee=Decimal("0.25"),
+        dirty=Decimal("1.75"),
+        average=Decimal("2"),
+    )
+    assert reasons == ["late_fee_not_netted"]
+    mixed = recon._reasons(
+        stored=Decimal("6"),
+        proposed=Decimal("1"),
+        fee=Decimal("0.25"),
+        dirty=Decimal("1"),
+        average=Decimal("1.25"),
+    )
+    assert "late_fee_not_netted" not in mixed
+    assert "fee_not_netted" in mixed
 
 
 def test_plan_no_change_when_already_within_tolerance():
