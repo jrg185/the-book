@@ -33,7 +33,7 @@ Derived, scrubbed before they are written (no raw dollar columns, no account ids
     Net open qty by ticker and sleeve, marked with the same public quotes as
     scripts/refresh_kpi_snapshots.py. unrealized_pnl_frac is that P&L ÷ sleeve seed.
   public.kpi_sleeve_snapshots → data/sleeve_curves.json
-    History as fractions of the book seed (crypto 300, equities 500, combined 800).
+    History as fractions of the book seed in config/book_seeds.json.
 
 Optional, written when the view exists and skipped when it does not:
   public.models_oos
@@ -61,6 +61,8 @@ import urllib.parse
 import urllib.request
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+
+from book_seeds import current_seeds
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -90,14 +92,10 @@ DENY_KEYS = {
     "address",
 }
 
-SEEDS = {"crypto": Decimal("300"), "equities": Decimal("500")}
-# Same book seeds as derive.js SEEDS_USD. Curves and open P&L use these divisors,
+# Book seeds from config/book_seeds.json. Curves and open P&L use these divisors,
 # not a raw account balance, so the page can show seed × fraction.
-BOOK_SEEDS = {
-    "crypto": Decimal("300"),
-    "equities": Decimal("500"),
-    "combined": Decimal("800"),
-}
+BOOK_SEEDS = current_seeds()
+SEEDS = {name: BOOK_SEEDS[name] for name in ("crypto", "equities")}
 SNAPSHOT_USD = (
     ("realized_pnl_usd", "realized_pnl_frac"),
     ("unrealized_pnl_usd", "unrealized_pnl_frac"),
@@ -120,7 +118,7 @@ def book_frac(running_pnl: str | Decimal, seed: Decimal) -> float:
 
 
 def sheet_frac(dollars: str | Decimal, seed: Decimal) -> float:
-    """Book or P&L ÷ start, rounded to 6 decimals. 323.77/300 → 1.079233."""
+    """Book or P&L ÷ start, rounded to 6 decimals."""
     if seed == 0:
         raise ValueError("seed is zero")
     quant = (Decimal(dollars) / seed).quantize(Decimal("0.000001"))
@@ -189,8 +187,15 @@ def reshape_trade_row(row: dict) -> dict:
     return dict(row)
 
 
-# Tape ledger seeds. Same dollars as derive.js SEEDS_USD. Not read from a sheet.
-LEDGER_SEEDS = {"crypto": Decimal("300"), "equities": Decimal("500")}
+# Tape ledger seeds. Same file as BOOK_SEEDS. The combined book is not a fill sleeve.
+LEDGER_SEEDS = {name: seed for name, seed in BOOK_SEEDS.items() if name != "combined"}
+
+
+def _crypto_seed() -> Decimal:
+    seed = BOOK_SEEDS.get("crypto")
+    if seed is None or seed == 0:
+        raise RuntimeError("crypto book seed is missing from config/book_seeds.json")
+    return seed
 LEDGER_QUANT = Decimal("0.000001")
 MACHINE_WHY = re.compile(
     r"^RH Agentic (?:backfill|sync) order "
@@ -406,9 +411,9 @@ def sample_bundle() -> dict:
     """
     crypto = SEEDS["crypto"]
     equities = SEEDS["equities"]
-    combined = crypto + equities
-    # Crypto Desk rebuild: book 323.77 = start 300 + 23.77 (realized +6.24 plus uPnL).
-    # Equities book stays 500.87. Combined 323.77 + 500.87 = 824.64.
+    combined = BOOK_SEEDS["combined"]
+    # Crypto Desk rebuild: book is start plus running P&L (realized plus uPnL).
+    # Equities and combined books are the same sheet figures.
     crypto_pnl = "23.77"
     equities_pnl = "0.87"
     combined_pnl = "24.64"
@@ -498,7 +503,10 @@ def sample_bundle() -> dict:
             {
                 "sleeve": "crypto",
                 "name": "Crypto v0 heuristic",
-                "used": "Shadow advisory for the $300 crypto sleeve. Scores 24h return, volume z, and an ATR-ish range. It does not place orders.",
+                "used": (
+                    f"Shadow advisory for the ${format(crypto, 'f')} crypto sleeve. "
+                    "Scores 24h return, volume z, and an ATR-ish range. It does not place orders."
+                ),
                 "training": "No fit. Buy when 24h return is above +2% and volume z is above 0.5. Sell when 24h return is below -2%.",
                 "data_source": "Coinbase Exchange public hourly candles, 168 bars. 57 Robinhood USD names that also have a Coinbase product.",
                 "oos": {
@@ -1289,18 +1297,22 @@ def _exit_pnl_frac(row: dict):
     return _finite_number(row.get("pnl_frac"))
 
 
-def _cents(frac, seed: Decimal = Decimal("300")):
+def _cents(frac, seed: Decimal | None = None):
+    book = _crypto_seed() if seed is None else seed
     if frac is None:
         return None
-    return float((Decimal(str(frac)) * seed).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    return float((Decimal(str(frac)) * book).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def closed_fill_stats(rows: list, sleeve: str = "crypto", seed: Decimal = Decimal("300")) -> dict:
+def closed_fill_stats(rows: list, sleeve: str = "crypto", seed: Decimal | None = None) -> dict:
     """Sell fills with a finite pnl fraction. Flat zero is excluded.
 
     A repeated order id is counted once when that field is present. The
     scrubbed Pages tape drops order ids, so those rows stay one-per-line.
+    An omitted seed is the crypto seed from config/book_seeds.json.
     """
+    if seed is None:
+        seed = _crypto_seed()
     wanted = {"crypto", "equities"} if sleeve == "combined" else {sleeve}
     seen: set[str] = set()
     wins = losses = flats = deduped = 0
@@ -1352,7 +1364,7 @@ def unknown_fee(note: str) -> dict:
         "sell_fee_usd": None,
         "fee_frac": None,
         "n": None,
-        "seed_usd": 300,
+        "seed_usd": int(_crypto_seed()),
         "note": note,
     }
 
@@ -1377,7 +1389,9 @@ def _fee_dollars(row: dict, seed: Decimal) -> Decimal | None:
     return frac * seed
 
 
-def fee_drag_from_rows(rows: list, sleeve: str = "crypto", seed: Decimal = Decimal("300")) -> dict | None:
+def fee_drag_from_rows(rows: list, sleeve: str = "crypto", seed: Decimal | None = None) -> dict | None:
+    if seed is None:
+        seed = _crypto_seed()
     seen: set[str] = set()
     total = Decimal("0")
     sell_total = Decimal("0")
@@ -1613,7 +1627,7 @@ def kill_block(summary) -> dict:
             "day_kill_usd": None,
             "day_target_pct": None,
             "day_target_usd": None,
-            "seed_usd": 300,
+            "seed_usd": int(_crypto_seed()),
             "note": "No crypto row in kpi_summary.",
         }
     stored = _finite_number(crypto.get("kill_headroom_frac"))
@@ -1629,7 +1643,7 @@ def kill_block(summary) -> dict:
         "day_kill_usd": _cents(day_kill),
         "day_target_pct": day_target,
         "day_target_usd": _cents(day_target),
-        "seed_usd": 300,
+        "seed_usd": int(_crypto_seed()),
         "note": "Same reading as the crypto sleeve card. A stored absolute value above 1 is percent points.",
     }
 
@@ -1941,7 +1955,7 @@ def _sql_optional(db_url: str, sql: str):
 
 def _normalize_fact_rows(rows: list) -> list:
     normalized = []
-    seed = Decimal("300")
+    seed = _crypto_seed()
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -2185,7 +2199,7 @@ def account_book_usd(holdings) -> float | None:
 
 
 # Whole-account card. The crypto sleeve row is not this book, and these
-# dollars are not divided by the $300 / $500 / $800 seeds.
+# dollars are not divided by the book seeds in config/book_seeds.json.
 ACCOUNT_PNL_KEYS = (
     "running_balance_usd",
     "realized_pnl_usd",
@@ -2922,12 +2936,14 @@ def self_test() -> int:
     by_ticker = {row["ticker"]: row for row in crypto}
     if by_ticker["AVAX"]["running_pnl_frac"] != 0:
         raise RuntimeError(f"AVAX running pnl {by_ticker['AVAX']['running_pnl_frac']}")
-    if by_ticker["QNT"]["running_pnl_frac"] != float(q6(Decimal("3.98") / Decimal("300"))):
+    crypto_seed = BOOK_SEEDS["crypto"]
+    equities_seed = BOOK_SEEDS["equities"]
+    if by_ticker["QNT"]["running_pnl_frac"] != float(q6(Decimal("3.98") / crypto_seed)):
         raise RuntimeError(f"QNT running pnl {by_ticker['QNT']['running_pnl_frac']}")
-    expected_last = q6(Decimal("6.18") / Decimal("300"))
+    expected_last = q6(Decimal("6.18") / crypto_seed)
     if by_ticker["W"]["running_pnl_frac"] != float(expected_last):
         raise RuntimeError(f"W running pnl {by_ticker['W']['running_pnl_frac']}")
-    if by_ticker["W"]["running_balance_frac"] != float(q6((Decimal("300") + Decimal("6.18")) / Decimal("300"))):
+    if by_ticker["W"]["running_balance_frac"] != float(q6((crypto_seed + Decimal("6.18")) / crypto_seed)):
         raise RuntimeError(f"W running balance {by_ticker['W']['running_balance_frac']}")
     if by_ticker["W"]["running_pnl_frac"] is None or by_ticker["W"]["running_balance_frac"] is None:
         raise RuntimeError("last crypto fill ledger is null")
@@ -3016,15 +3032,15 @@ def self_test() -> int:
     )
     by_ticker = {row["ticker"]: row for row in opens["positions"]}
     # 15 shares left. Stored close pnl is the average-cost 10, so leftover
-    # cost stays the pre-close blend of 3. Mark 4. Unrealized 15 / seed 300.
+    # cost stays the pre-close blend of 3. Mark 4. Unrealized dollars ÷ the crypto seed.
     # A stored FIFO close of 15 would leave cost 50 and unrealized 10.
     if by_ticker["AAA"]["side"] != "long" or by_ticker["AAA"]["qty"] != "15":
         raise RuntimeError(f"AAA open qty {by_ticker.get('AAA')}")
     if by_ticker["AAA"]["avg"] != "3":
         raise RuntimeError(f"AAA leftover avg mixed FIFO cost onto average pnl {by_ticker['AAA']['avg']}")
-    if by_ticker["AAA"]["unrealized_pnl_frac"] != float(q6(Decimal("15") / Decimal("300"))):
+    if by_ticker["AAA"]["unrealized_pnl_frac"] != float(q6(Decimal("15") / crypto_seed)):
         raise RuntimeError(f"AAA unrealized frac {by_ticker['AAA']['unrealized_pnl_frac']}")
-    if by_ticker["QCOM"]["unrealized_pnl_frac"] != float(q6(Decimal("20") / Decimal("500"))):
+    if by_ticker["QCOM"]["unrealized_pnl_frac"] != float(q6(Decimal("20") / equities_seed)):
         raise RuntimeError(f"QCOM unrealized frac {by_ticker['QCOM']['unrealized_pnl_frac']}")
     public_blob = json.dumps(opens)
     if "TEST-ACCOUNT" in public_blob or "unrealized_pnl_usd" in public_blob or "order_id" in public_blob:
@@ -3088,7 +3104,7 @@ def self_test() -> int:
                 "running_pnl_usd": "23.77",
                 "realized_pnl_usd": "6.24",
                 "unrealized_pnl_usd": "17.53",
-                "start_balance_usd": "300",
+                "start_balance_usd": format(crypto_seed, "f"),
                 "account_id": "TEST-ACCOUNT",
                 "notes": "realized $6.24; book $323.77",
             },
@@ -3111,7 +3127,7 @@ def self_test() -> int:
     if "$" in history_blob or "running_balance_usd" in history_blob or "notes" in history_blob:
         raise RuntimeError("curve JSON kept a dollar column or a note")
     crypto_point = next(row for row in history if row["sleeve"] == "crypto")
-    if crypto_point["running_balance_frac"] != float(q6(Decimal("323.77") / Decimal("300"))):
+    if crypto_point["running_balance_frac"] != float(q6(Decimal("323.77") / crypto_seed)):
         raise RuntimeError(f"crypto curve frac {crypto_point['running_balance_frac']}")
     equities_point = next(row for row in history if row["sleeve"] == "equities")
     if equities_point["running_balance_frac"] != float(q6(Decimal("1") + Decimal("0.001740"))):
@@ -3176,7 +3192,7 @@ def self_test() -> int:
             "sell_fee_usd": 2.0,
             "fee_frac": 0.015,
             "n": 10,
-            "seed_usd": 300,
+            "seed_usd": int(crypto_seed),
             "note": "from warehouse",
         },
     )
@@ -3209,7 +3225,7 @@ def self_test() -> int:
         ],
         [],
     )
-    if taped[0].get("fee_frac_of_book") != float(q6(Decimal("2.85") / Decimal("300"))):
+    if taped[0].get("fee_frac_of_book") != float(q6(Decimal("2.85") / crypto_seed)):
         raise RuntimeError(f"fee frac {taped}")
     if "fee_usd" in taped[0] or "order_id" in taped[0]:
         raise RuntimeError(f"raw fee leaked {taped}")
@@ -3339,7 +3355,7 @@ def self_test() -> int:
         raise RuntimeError("crypto-only snapshot replaced the account")
     if account_pnl["running_balance_usd"] == 807.0:
         raise RuntimeError("an older combined row replaced the latest")
-    seeded = float((Decimal("0.049797") * Decimal("300")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    seeded = float((Decimal("0.049797") * crypto_seed).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     if usd_equal(account_pnl["realized_pnl_usd"], seeded) or usd_equal(account_pnl["running_pnl_usd"], seeded):
         raise RuntimeError("account P&L was recomputed as a fraction of the sleeve seed")
     if latest_account_pnl(
@@ -3494,7 +3510,12 @@ def self_test() -> int:
     for column in ("sleeve", "ticker", "side", "qty", "avg_price", "pnl_trade_usd", "timestamp_et"):
         if column not in position_src:
             raise RuntimeError(f"open read does not name kpi_trades.{column}")
-    if "unrealized_pnl_frac" in position_src or "* 300" in position_src or "* Decimal(\"300\")" in position_src:
+    seed_token = format(crypto_seed, "f")
+    if (
+        "unrealized_pnl_frac" in position_src
+        or f"* {seed_token}" in position_src
+        or f'* Decimal("{seed_token}")' in position_src
+    ):
         raise RuntimeError("open value is rebuilt from a seed fraction")
     scrubbed = scrub_open_positions(open_fills, open_marks, "2026-10-04T00:00:00Z")
     from_scrub = card_positions_from_scrubbed(scrubbed)

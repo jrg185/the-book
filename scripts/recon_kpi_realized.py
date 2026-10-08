@@ -37,6 +37,7 @@ SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+import book_seeds
 import export_kpi
 import sync_rh_kpi_trades as sync
 
@@ -109,7 +110,7 @@ def _first_dec(row: dict, keys: tuple[str, ...]) -> Decimal | None:
 
 def _seed(sleeve: str) -> Decimal:
     key = str(sleeve or "").strip().lower()
-    seed = export_kpi.LEDGER_SEEDS.get(key)
+    seed = book_seeds.ledger_seeds().get(key)
     if seed is None or seed == 0:
         raise ReconError(f"no ledger seed for sleeve {sleeve!r}")
     return seed
@@ -271,7 +272,7 @@ def plan_backfill(rows: list[dict]) -> dict:
         counts[row["action"]] = counts.get(row["action"], 0) + 1
     return {
         "note": PLAN_NOTE,
-        "fractions_of": "export_kpi.LEDGER_SEEDS for the row sleeve",
+        "fractions_of": "config/book_seeds.json for the row sleeve",
         "counts": counts,
         "rows": planned,
     }

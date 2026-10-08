@@ -1,15 +1,14 @@
 // Tape fill dollars are still a scrubbed fraction times SEEDS_USD.
+// SEEDS_USD is loaded from config/book_seeds.json. This file has no seed table.
 // book_usd on data/live_book.json is the cash holdings sum.
 // running_balance_usd is the agentic total: that cash plus each marked open lot.
 // Day kill and day target are fractions of that running balance.
 // signal_book_usd is stored beside the account and is not that rail.
 // This file never talks to Supabase.
 
-export const SEEDS_USD = {
-  crypto: 300,
-  equities: 500,
-  combined: 800,
-};
+import { SEEDS_USD } from "./book_seeds.js";
+
+export { SEEDS_USD };
 
 // Public signal file. Its book_usd is the signal book, not the published account. No secret.
 export const LIVE_SIGNAL_URL =
@@ -53,16 +52,17 @@ export function sleeveKey(row) {
     .toLowerCase();
 }
 
-export function seedFor(row, seeds = SEEDS_USD) {
+export function seedFor(row, seeds) {
+  const table = seeds == null ? SEEDS_USD : seeds;
   const explicit = num(pick(row, ["start", "seed", "start_usd", "seed_usd", "book_usd"]));
   if (explicit != null) return explicit;
   const key = sleeveKey(row);
   if (key === "combined") {
-    const crypto = seeds.crypto ?? 0;
-    const equities = seeds.equities ?? 0;
+    const crypto = table.crypto ?? 0;
+    const equities = table.equities ?? 0;
     if (crypto || equities) return crypto + equities;
   }
-  return seeds[key] ?? null;
+  return table[key] ?? null;
 }
 
 export function money(seed, frac) {
@@ -239,7 +239,8 @@ function openCryptoUnrealized(book) {
   return roundCents(sum);
 }
 
-// RH book versus the combined seed. running = cash + lots − $800.
+// RH book versus the combined seed from config/book_seeds.json.
+// running = cash + lots − that seed.
 // unrealized = open-lot mark versus cost. realized = running − unrealized.
 // Null when this file has not published a position list.
 export function reconciledPnl(book) {
@@ -380,9 +381,10 @@ function fractionFrom(row, fracKeys, dollarKeys, seed, { percentPoints = false }
   return dollars / seed;
 }
 
-export function deriveSleeve(row, seeds = SEEDS_USD) {
-  const seed = seedFor(row, seeds);
-  // Book / start can be above 1 (crypto 323.77/300). Do not treat that as percent points.
+export function deriveSleeve(row, seeds) {
+  const table = seeds == null ? SEEDS_USD : seeds;
+  const seed = seedFor(row, table);
+  // Book / start can be above 1. Do not treat that as percent points.
   const runningBalanceFrac = fractionFrom(
     row,
     ["running_balance_frac", "running_bal_vs_start", "balance_frac", "bal_frac", "running_bal_frac"],
@@ -568,7 +570,8 @@ function finiteFrac(value) {
 
 // Same exit rule as winStats. order id collapses duplicate sells when the
 // field is actually on the row. The scrubbed Pages tape does not carry it.
-export function closedFillStats(trades, sleeve, seed = SEEDS_USD.crypto) {
+export function closedFillStats(trades, sleeve, seed) {
+  const bookSeed = seed == null ? SEEDS_USD.crypto : seed;
   const rows = Array.isArray(trades) ? trades : [];
   const wanted = sleeve === "combined" ? ["crypto", "equities"] : [sleeve];
   const seen = new Set();
@@ -609,8 +612,8 @@ export function closedFillStats(trades, sleeve, seed = SEEDS_USD.crypto) {
     decided,
     rate: decided === 0 ? null : wins / decided,
     expectancyFrac,
-    expectancyUsd: money(seed, expectancyFrac),
-    seed,
+    expectancyUsd: money(bookSeed, expectancyFrac),
+    seed: bookSeed,
     deduped,
     orderIdAvailable,
   };
@@ -630,7 +633,8 @@ function feeAmount(row, seed) {
   return null;
 }
 
-export function feeDragFromTrades(trades, sleeve = "crypto", seed = SEEDS_USD.crypto) {
+export function feeDragFromTrades(trades, sleeve = "crypto", seed) {
+  const bookSeed = seed == null ? SEEDS_USD.crypto : seed;
   const rows = Array.isArray(trades) ? trades : [];
   const seen = new Set();
   let sawField = false;
@@ -650,7 +654,7 @@ export function feeDragFromTrades(trades, sleeve = "crypto", seed = SEEDS_USD.cr
       if (seen.has(orderId)) continue;
       seen.add(orderId);
     }
-    const amount = feeAmount(trade, seed);
+    const amount = feeAmount(trade, bookSeed);
     if (amount == null) continue;
     numeric = true;
     total += amount;
@@ -665,9 +669,9 @@ export function feeDragFromTrades(trades, sleeve = "crypto", seed = SEEDS_USD.cr
     status: "known",
     fee_usd: feeUsd,
     sell_fee_usd: sellFeeUsd,
-    fee_frac: seed ? feeUsd / seed : null,
+    fee_frac: bookSeed ? feeUsd / bookSeed : null,
     n,
-    seed_usd: seed,
+    seed_usd: bookSeed,
     note: "Sum of fee dollars on the crypto rows in this snapshot.",
   };
 }
