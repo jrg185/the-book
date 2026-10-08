@@ -1,14 +1,14 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-08T13:23:50+00:00",
+  "sleeve_as_of": "2026-10-08T13:43:56+00:00",
   "book_usd": 447.17,
   "signal_book_usd": 775.0,
   "day_pnl_usd": 2.55,
-  "running_balance_usd": 757.2,
+  "running_balance_usd": 757.25,
   "realized_pnl_usd": -16.63,
-  "unrealized_pnl_usd": -10.87,
-  "running_pnl_usd": -42.8,
+  "unrealized_pnl_usd": -10.75,
+  "running_pnl_usd": -42.75,
   "day_realized_gross_usd": 3.96,
   "day_sell_fees_usd": 1.41,
   "positions": [
@@ -16,44 +16,44 @@
       "sleeve": "crypto",
       "ticker": "FET",
       "qty": "431.4",
-      "mark": "0.23003",
-      "value_usd": 99.23,
+      "mark": "0.23058",
+      "value_usd": 99.47,
       "avg_cost": "0.22943856",
-      "unrealized_pnl_usd": 0.26,
-      "running_pnl_usd": 0.26
+      "unrealized_pnl_usd": 0.49,
+      "running_pnl_usd": 0.49
     },
     {
       "sleeve": "crypto",
       "ticker": "ORCA",
       "qty": "36.32",
-      "mark": "2.6078",
-      "value_usd": 94.72,
+      "mark": "2.5807",
+      "value_usd": 93.73,
       "avg_cost": "2.72351",
-      "unrealized_pnl_usd": -4.2,
-      "running_pnl_usd": -5.0
+      "unrealized_pnl_usd": -5.19,
+      "running_pnl_usd": -5.98
     },
     {
       "sleeve": "crypto",
       "ticker": "STRK",
       "qty": "509.0",
-      "mark": "0.05851",
-      "value_usd": 29.78,
+      "mark": "0.05841",
+      "value_usd": 29.73,
       "avg_cost": "0.0490750",
-      "unrealized_pnl_usd": 4.8,
-      "running_pnl_usd": 7.51
+      "unrealized_pnl_usd": 4.75,
+      "running_pnl_usd": 7.46
     },
     {
       "sleeve": "crypto",
       "ticker": "VVV",
       "qty": "3.905",
-      "mark": "22.1009",
-      "value_usd": 86.3,
+      "mark": "22.3181",
+      "value_usd": 87.15,
       "avg_cost": "25.10328",
-      "unrealized_pnl_usd": -11.72,
-      "running_pnl_usd": -14.7
+      "unrealized_pnl_usd": -10.88,
+      "running_pnl_usd": -13.85
     }
   ],
-  "kill_remaining_usd": 75.72,
+  "kill_remaining_usd": 75.73,
   "holdings": [
     {
       "ticker": "USD",
