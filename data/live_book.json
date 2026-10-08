@@ -1,14 +1,14 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-04T16:34:23Z",
-  "sleeve_as_of": "2026-10-08T05:21:18+00:00",
+  "sleeve_as_of": "2026-10-08T05:26:41+00:00",
   "book_usd": 421.18,
   "signal_book_usd": 775.0,
   "day_pnl_usd": -0.25,
-  "running_balance_usd": 767.81,
+  "running_balance_usd": 768.34,
   "realized_pnl_usd": 4.1,
-  "unrealized_pnl_usd": 1.65,
-  "running_pnl_usd": -32.19,
+  "unrealized_pnl_usd": 2.12,
+  "running_pnl_usd": -31.66,
   "day_realized_gross_usd": 0.22,
   "day_sell_fees_usd": 0.47,
   "positions": [
@@ -26,34 +26,34 @@
       "sleeve": "crypto",
       "ticker": "FET",
       "qty": "431.4",
-      "mark": "0.23215",
-      "value_usd": 100.15,
+      "mark": "0.23252",
+      "value_usd": 100.31,
       "avg_cost": "0.22943856",
-      "unrealized_pnl_usd": 1.17,
-      "running_pnl_usd": 1.17
+      "unrealized_pnl_usd": 1.33,
+      "running_pnl_usd": 1.33
     },
     {
       "sleeve": "crypto",
       "ticker": "STRK",
       "qty": "1017.9",
-      "mark": "0.04904",
-      "value_usd": 49.92,
+      "mark": "0.04902",
+      "value_usd": 49.9,
       "avg_cost": "0.049075",
-      "unrealized_pnl_usd": -0.04,
-      "running_pnl_usd": -0.21
+      "unrealized_pnl_usd": -0.06,
+      "running_pnl_usd": -0.23
     },
     {
       "sleeve": "crypto",
       "ticker": "VVV",
       "qty": "3.905",
-      "mark": "24.926",
-      "value_usd": 97.34,
+      "mark": "25.0262",
+      "value_usd": 97.73,
       "avg_cost": "25.10328",
-      "unrealized_pnl_usd": -0.69,
-      "running_pnl_usd": -2.54
+      "unrealized_pnl_usd": -0.3,
+      "running_pnl_usd": -2.15
     }
   ],
-  "kill_remaining_usd": 76.53,
+  "kill_remaining_usd": 76.58,
   "holdings": [
     {
       "ticker": "USD",
