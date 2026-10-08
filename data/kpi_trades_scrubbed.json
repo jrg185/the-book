@@ -1416,6 +1416,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T22:27:15+00:00",
+    "ticker": "ARB",
+    "side": "sell",
+    "notional_frac_of_book": 0.174667,
+    "pnl_frac_of_book": 0.008088,
+    "why": "+5% profit-take: ARB half-scale at +5.9% vs avg cost 0.163874 (fill 0.173565); per the 2:09pm entry plan, scale 50% at +5% vs cost then trail the leftover.",
+    "running_pnl_frac": 0.006361,
+    "running_balance_frac": 1.006361,
+    "fee_frac_of_book": 0.001667
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T22:28:18+00:00",
+    "ticker": "QNT",
+    "side": "buy",
+    "notional_frac_of_book": 0.3254,
+    "pnl_frac_of_book": 0.0,
+    "why": "Desk gate: QNT p_up 0.547 (unrounded 0.5474549; artifact 5ae5eec generated 2026-10-08T21:21:12Z) >= temp 0.50 live gate; best unheld clear; $100 slot funded from ARB half proceeds + USDC convert.",
+    "running_pnl_frac": 0.006361,
+    "running_balance_frac": 1.006361,
+    "fee_frac_of_book": 0.0031
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
