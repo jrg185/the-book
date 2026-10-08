@@ -65,14 +65,14 @@ function roundCents(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-// Combined seed the export subtracts from cash + lots. Read from the writer,
-// not a second copy of the dollar figure.
+// Combined seed the export subtracts from cash + lots. Read from the canonical
+// config, the same file the writer and derive.js load.
 function exportCombinedSeed() {
-  const text = readFileSync(new URL("./export_kpi.py", import.meta.url), "utf8");
-  const body = text.split("BOOK_SEEDS = {")[1]?.split("}")[0] ?? "";
-  const match = body.match(/"combined"\s*:\s*Decimal\("(-?\d+(?:\.\d+)?)"\)/);
-  assert.ok(match, "export BOOK_SEEDS combined");
-  return Number(match[1]);
+  const config = JSON.parse(readFileSync(new URL("../config/book_seeds.json", import.meta.url), "utf8"));
+  const rows = (config.seeds || []).filter((row) => String(row.sleeve).toLowerCase() === "combined");
+  assert.ok(rows.length > 0, "combined book seed");
+  rows.sort((a, b) => String(a.effective_from).localeCompare(String(b.effective_from)));
+  return Number(rows[rows.length - 1].seed_usd);
 }
 
 const combinedSeed = exportCombinedSeed();

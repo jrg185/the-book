@@ -15,7 +15,7 @@ The card also shows day P&L (`day_pnl_usd`), the −10% day kill and +2.5% day t
 
 Open positions on that file are net size from `public.kpi_trades` (`sleeve`, `ticker`, `side`, `qty`, `avg_price`, `pnl_trade_usd`, `timestamp_et`). A non-zero net is open. The mark is the same quote the snapshot uses for `unrealized_pnl_usd`. Each open row's `running_pnl_usd` is that ticker's close `pnl_trade_usd` plus `qty * (mark - avg)`, the same two terms the combined snapshot adds into `realized_pnl_usd` and `unrealized_pnl_usd`. Export writes each open net onto `positions` with `value_usd` = qty × mark and that running figure. There is no positions table. USD and USDC stay the cash lines, with no P&L on those rows. A flat name stays off the list. Equities are not a second book.
 
-`SEEDS_USD` in `derive.js` ($300 crypto, $500 equities, $800 combined) turns scrubbed fill fractions back into trade dollars. The $800 combined figure is also the seed the card subtracts from the RH balance. It is not the account book. The crypto curve is that old fraction history, not a second dollar book. Tape running P&L is still the sleeve seed fraction and is not this card.
+`config/book_seeds.json` is the only seed table. `derive.js` loads it as `SEEDS_USD`. Those seeds turn scrubbed fill fractions back into trade dollars. The combined seed is also what the card subtracts from the RH balance. It is not the account book. The crypto curve is that old fraction history, not a second dollar book. Tape running P&L is still the sleeve seed fraction and is not this card.
 
 ## Data path
 
@@ -59,8 +59,9 @@ Order:
 
 1. The hourly poll, or a desk-sent fill, inserts Robinhood fills into `kpi_trades`. The mark-refresh crons skip this step.
 2. Refresh inserts `kpi_sleeve_snapshots`.
-3. Export reads `kpi_summary` and `kpi_trades_scrubbed` and commits JSON only if `as_of` is within 15 minutes.
-4. Pages shows that `as_of` on the book card and the status line. It does not use signal `generated_at` as the sleeve age. When `data/live_book.json` has no `sleeve_as_of` yet, the page uses the combined `kpi_summary` `as_of`.
+3. Seed sync upserts `config/book_seeds.json` into `public.book_seeds`.
+4. Export reads `kpi_summary` and `kpi_trades_scrubbed` and commits JSON only if `as_of` is within 15 minutes. The scrubbed view divides by the joined seed, so the sync has to finish first.
+5. Pages shows that `as_of` on the book card and the status line. It does not use signal `generated_at` as the sleeve age. When `data/live_book.json` has no `sleeve_as_of` yet, the page uses the combined `kpi_summary` `as_of`.
 
 If the INSERT fails because the database is read-only (25006) or the disk is full, the script leaves the KPI numbers alone and stamps `meta.warehouse_status`. The chip reads **Warehouse read-only** or **Warehouse disk full**, with copy `snapshot frozen at` the last committed sleeve time. The Action publishes that meta file and stays red.
 
@@ -98,7 +99,7 @@ Optional divisor override on a scrubbed row: `start`, `seed`, `start_usd`, `seed
 | `side` | `buy` or `sell` |
 | `qty` | Quantity |
 | `pnl_frac` | Trade P&L ÷ sleeve seed |
-| `running_pnl_frac` | Cumulative realized P&L through that fill ÷ sleeve seed. Export regenerates this per sleeve in timestamp order. Crypto seed $300, equities seed $500. |
+| `running_pnl_frac` | Cumulative realized P&L through that fill ÷ sleeve seed. Export regenerates this per sleeve in timestamp order. The sleeve seed is the row in `config/book_seeds.json`. |
 | `running_balance_frac` | Book at that fill ÷ sleeve seed, where book = start + cumulative realized P&L. Not cash leftover and not open-position mark-to-market. |
 | `why` | Full note. No `left()` truncation. No PII. A machine `RH Agentic backfill order <uuid>` or `RH Agentic sync order <uuid>` string is not the human note. New fills leave `why` empty unless the payload has a human note. |
 | `fee_frac_of_book` | Fill fee ÷ sleeve seed, when the warehouse row had `fee_usd`. The page shows seed × this fraction. Raw `fee_usd` dollars and order ids are not written. |
@@ -286,6 +287,18 @@ limit 1;
 ```
 
 The migration does not write `kpi_trades` and does not place orders. It does not change `scripts/sync_rh_kpi_trades.py`.
+
+## Book seeds
+
+`config/book_seeds.json` is the only seed table. Python loads it through `scripts/book_seeds.py`. The page loads it through `book_seeds.js`. `public.book_seeds` is a copy of that file, not a second source.
+
+Apply order on agentic-signals:
+
+1. Migration: [`scripts/migrations/20261008_book_seeds.sql`](scripts/migrations/20261008_book_seeds.sql) creates `public.book_seeds` and redefines `kpi_trades_scrubbed` to divide by the joined seed. It does not insert rows. Eng applies it after merge. Do not apply it from a checkout.
+2. Seed sync: Export KPI runs `scripts/sync_book_seeds.py`, which upserts the config into `public.book_seeds`.
+3. View use: the export reads `kpi_trades_scrubbed` only after that sync. An empty seed table makes the view fractions null.
+
+`--book 300` in `jrg185/agentic-crypto-signals` is a follow-up. This repo does not change that refresh command.
 
 ## Notes backfill
 
