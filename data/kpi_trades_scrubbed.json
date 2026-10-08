@@ -1404,6 +1404,18 @@
     "fee_frac_of_book": 0.003133
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T18:35:47+00:00",
+    "ticker": "INJ",
+    "side": "buy",
+    "notional_frac_of_book": 0.330033,
+    "pnl_frac_of_book": 0.0,
+    "why": "Joe asked 2:34pm to take top skipped signal; p_up 0.5596 (artifact 7493b36f, generated 2026-10-08T18:07:58Z; INJ flat side, cleared temp 0.50 live gate); not held; $99 slot funded from USD cash, no USDC convert.",
+    "running_pnl_frac": -0.001727,
+    "running_balance_frac": 0.998273,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
