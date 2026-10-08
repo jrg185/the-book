@@ -1,0 +1,814 @@
+{
+  "note": "PLANNED ONLY - do not apply until Eng and Wags approve.",
+  "fractions_of": "export_kpi.LEDGER_SEEDS for the row sleeve",
+  "counts": {
+    "UPDATE": 43,
+    "NO_CHANGE": 10,
+    "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL": 7
+  },
+  "rows": [
+    {
+      "kpi_trades_id": "646dbe0a-9228-4e32-9c1d-2ad1e85e0d2a",
+      "timestamp_et": "2026-09-26T14:22:00-04:00",
+      "ticker": "AVAX",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.001833",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "55061ca2-60d4-46e2-8add-9ac9329d23bf",
+      "timestamp_et": "2026-09-26T14:22:00-04:00",
+      "ticker": "AVAX",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.001033",
+      "new_pnl_frac_of_book": "-0.001800",
+      "delta_frac": "-0.000767",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "69661c7b-d966-49ea-b516-32663b2aba98",
+      "timestamp_et": "2026-09-26T16:49:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000833",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "ab3b9868-07cc-44a6-a9c7-68fa113db379",
+      "timestamp_et": "2026-09-26T16:49:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000067",
+      "new_pnl_frac_of_book": "-0.000800",
+      "delta_frac": "-0.000733",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "c510bc2c-d237-44ec-bbf5-a503fb829d00",
+      "timestamp_et": "2026-09-27T09:58:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.013267",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "1b03abf6-2f15-415d-907c-ac69a7c69ddd",
+      "timestamp_et": "2026-09-27T09:58:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.013833",
+      "new_pnl_frac_of_book": "0.013267",
+      "delta_frac": "-0.000566",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "5fb9eab3-204c-43d0-ba3d-2b6e99cafe3c",
+      "timestamp_et": "2026-09-27T12:50:00-04:00",
+      "ticker": "W",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.007700",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "f96d124e-5994-4a72-a289-bbab8d503de8",
+      "timestamp_et": "2026-09-27T12:50:00-04:00",
+      "ticker": "W",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.007367",
+      "new_pnl_frac_of_book": "0.007733",
+      "delta_frac": "0.000366",
+      "reasons": [
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "378d2f98-79cc-4b19-8d89-5c37c89855fe",
+      "timestamp_et": "2026-09-27T17:56:00-04:00",
+      "ticker": "ORCA",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.001033",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "394d4754-e501-40d5-849a-43fad41a715e",
+      "timestamp_et": "2026-09-27T17:56:00-04:00",
+      "ticker": "GRT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.006133",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "c58bb222-6b93-436d-af25-b3a6f9647cf4",
+      "timestamp_et": "2026-09-27T17:56:00-04:00",
+      "ticker": "GRT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.006667",
+      "new_pnl_frac_of_book": "0.006167",
+      "delta_frac": "-0.000500",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "935f8b35-9b8e-4845-b6cf-f295b09faf20",
+      "timestamp_et": "2026-09-27T17:56:00-04:00",
+      "ticker": "ORCA",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.001933",
+      "new_pnl_frac_of_book": "0.001100",
+      "delta_frac": "-0.000833",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "c24dcaad-a27c-4ffe-80e1-71887d328084",
+      "timestamp_et": "2026-09-27T18:53:00-04:00",
+      "ticker": "VVV",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004667",
+      "new_pnl_frac_of_book": null,
+      "delta_frac": null,
+      "reasons": [
+        "legacy_duplicate"
+      ],
+      "action": "EXCLUDE_LEGACY_DUPLICATE_PENDING_APPROVAL"
+    },
+    {
+      "kpi_trades_id": "9f3bdbc2-bcee-4629-9941-07e1d6d9fba0",
+      "timestamp_et": "2026-09-27T18:53:00-04:00",
+      "ticker": "VVV",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004000",
+      "new_pnl_frac_of_book": "-0.004633",
+      "delta_frac": "-0.000633",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "a840abfa-c215-40cb-b36b-2e043117d560",
+      "timestamp_et": "2026-09-27T21:03:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.046267",
+      "new_pnl_frac_of_book": "0.046333",
+      "delta_frac": "0.000066",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "c4c3a966-dbbe-4144-b8c1-28db91c53ae1",
+      "timestamp_et": "2026-09-27T21:26:00-04:00",
+      "ticker": "W",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.005867",
+      "new_pnl_frac_of_book": "0.005933",
+      "delta_frac": "0.000066",
+      "reasons": [
+        "phantom_lots_from_legacy_duplicates",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "53fa6f78-a392-4d34-b8f0-1c3c5ad107ab",
+      "timestamp_et": "2026-09-27T21:26:00-04:00",
+      "ticker": "SEI",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.003933",
+      "new_pnl_frac_of_book": "0.004300",
+      "delta_frac": "0.000367",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "19956953-306e-478c-af18-f53d8ae826b1",
+      "timestamp_et": "2026-09-27T21:26:00-04:00",
+      "ticker": "IMX",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.001733",
+      "new_pnl_frac_of_book": "0.002133",
+      "delta_frac": "0.000400",
+      "reasons": [
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "2f9d9412-fb8f-4098-a85a-dc8bea053f91",
+      "timestamp_et": "2026-09-27T22:06:00-04:00",
+      "ticker": "GRT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.003033",
+      "new_pnl_frac_of_book": "0.003067",
+      "delta_frac": "0.000034",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "da36eaed-8c7c-4ca8-9111-68da4bdf84b8",
+      "timestamp_et": "2026-09-27T23:50:00-04:00",
+      "ticker": "CRV",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.003033",
+      "new_pnl_frac_of_book": "-0.003700",
+      "delta_frac": "-0.000667",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "09e0edc4-73a4-48a9-b8e9-ba07bccebdbd",
+      "timestamp_et": "2026-09-28T01:58:00-04:00",
+      "ticker": "COMP",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004833",
+      "new_pnl_frac_of_book": "-0.005567",
+      "delta_frac": "-0.000734",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "278f10b4-7003-44d1-8985-3c2e3c28f98d",
+      "timestamp_et": "2026-09-28T02:47:00-04:00",
+      "ticker": "RENDER",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.005500",
+      "new_pnl_frac_of_book": "-0.005500",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "c18402c4-db88-403e-8242-59541c553f4d",
+      "timestamp_et": "2026-09-28T03:57:00-04:00",
+      "ticker": "LDO",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.003933",
+      "new_pnl_frac_of_book": "-0.004467",
+      "delta_frac": "-0.000534",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "aa627515-a0f6-4ec7-9eaa-d9e80065c036",
+      "timestamp_et": "2026-09-28T03:57:00-04:00",
+      "ticker": "SEI",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.001200",
+      "new_pnl_frac_of_book": "0.000233",
+      "delta_frac": "-0.000967",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "9b5e1080-135d-4005-861f-f49030ef55f2",
+      "timestamp_et": "2026-09-28T04:47:00-04:00",
+      "ticker": "HBAR",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.008033",
+      "new_pnl_frac_of_book": "0.007633",
+      "delta_frac": "-0.000400",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "2ddd6d16-cbb3-4981-908b-31c4e7e6cd13",
+      "timestamp_et": "2026-09-28T06:48:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.012133",
+      "new_pnl_frac_of_book": "0.003967",
+      "delta_frac": "-0.008166",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "730d27d3-644b-43a4-a5a1-71b1107663df",
+      "timestamp_et": "2026-09-28T07:52:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.015367",
+      "new_pnl_frac_of_book": "0.007167",
+      "delta_frac": "-0.008200",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "e0568c83-7bbe-49eb-a349-4ee8303f5d5a",
+      "timestamp_et": "2026-09-28T08:57:00-04:00",
+      "ticker": "SUI",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004200",
+      "new_pnl_frac_of_book": "-0.005033",
+      "delta_frac": "-0.000833",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "0cbaf4fe-4895-45eb-ada9-aa21d8662dc7",
+      "timestamp_et": "2026-09-28T10:10:00-04:00",
+      "ticker": "DOT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.003867",
+      "new_pnl_frac_of_book": "-0.004400",
+      "delta_frac": "-0.000533",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "033a8da5-655e-4c33-aed7-94449bb40357",
+      "timestamp_et": "2026-09-28T10:10:00-04:00",
+      "ticker": "ALGO",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.002100",
+      "new_pnl_frac_of_book": "0.002100",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "57a06bb7-5b70-4718-a808-1d47d7e5f3bc",
+      "timestamp_et": "2026-09-28T10:10:00-04:00",
+      "ticker": "BONK",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.005433",
+      "new_pnl_frac_of_book": "-0.006133",
+      "delta_frac": "-0.000700",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "c1f7b9c0-82d2-4c54-85fa-f8067470fbce",
+      "timestamp_et": "2026-09-28T11:07:00-04:00",
+      "ticker": "ALGO",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.001033",
+      "new_pnl_frac_of_book": "0.001033",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "f20a4c95-7999-473e-b38f-808a49740e43",
+      "timestamp_et": "2026-09-28T11:07:00-04:00",
+      "ticker": "PYTH",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.005233",
+      "new_pnl_frac_of_book": "-0.006133",
+      "delta_frac": "-0.000900",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "3291f420-a79a-4243-baa0-46c15d078e30",
+      "timestamp_et": "2026-09-28T11:07:00-04:00",
+      "ticker": "ZEC",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.007967",
+      "new_pnl_frac_of_book": "-0.008767",
+      "delta_frac": "-0.000800",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "3b0d9c57-8753-485b-ae65-ca6051a0eb2a",
+      "timestamp_et": "2026-09-28T11:07:00-04:00",
+      "ticker": "UNI",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.008367",
+      "new_pnl_frac_of_book": "-0.008900",
+      "delta_frac": "-0.000533",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "f4477512-1911-4e2b-8360-c849b4ff475c",
+      "timestamp_et": "2026-09-28T11:59:00-04:00",
+      "ticker": "HBAR",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.006133",
+      "new_pnl_frac_of_book": "0.008500",
+      "delta_frac": "0.002367",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "21900633-90e3-45d0-8432-aa78395acf24",
+      "timestamp_et": "2026-09-28T11:59:00-04:00",
+      "ticker": "NEAR",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.009600",
+      "new_pnl_frac_of_book": "-0.010367",
+      "delta_frac": "-0.000767",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "5890a470-be87-4238-83ee-6d097645c3a9",
+      "timestamp_et": "2026-09-28T17:50:00-04:00",
+      "ticker": "HBAR",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.004867",
+      "new_pnl_frac_of_book": "0.007233",
+      "delta_frac": "0.002366",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "2134327f-4605-4b11-a099-02690e2b120a",
+      "timestamp_et": "2026-09-28T20:55:00-04:00",
+      "ticker": "LINK",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.002167",
+      "new_pnl_frac_of_book": "0.001767",
+      "delta_frac": "-0.000400",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "139225e0-0db2-4f17-861e-8bd4e6dd7a03",
+      "timestamp_et": "2026-09-28T22:49:00-04:00",
+      "ticker": "LINK",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.000767",
+      "new_pnl_frac_of_book": "0.000400",
+      "delta_frac": "-0.000367",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "b5730bf0-b07b-47fe-baa7-9104ba16e9fb",
+      "timestamp_et": "2026-09-29T13:00:00-04:00",
+      "ticker": "HBAR",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000767",
+      "new_pnl_frac_of_book": "-0.007233",
+      "delta_frac": "-0.006466",
+      "reasons": [
+        "fee_not_netted",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "628f736a-872c-44f1-9fae-5a84b56d7ce8",
+      "timestamp_et": "2026-09-30T20:56:00-04:00",
+      "ticker": "XCN",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.012933",
+      "new_pnl_frac_of_book": "-0.012933",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "5702dd4a-1ad0-4623-a8ff-abc339d4176c",
+      "timestamp_et": "2026-09-30T21:50:00-04:00",
+      "ticker": "IMX",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004300",
+      "new_pnl_frac_of_book": "-0.004833",
+      "delta_frac": "-0.000533",
+      "reasons": [
+        "phantom_lots_from_legacy_duplicates",
+        "avg_cost_not_fifo"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "8db62226-b7de-4d8e-a729-4c60ba060a91",
+      "timestamp_et": "2026-09-30T21:50:00-04:00",
+      "ticker": "AVAX",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.001967",
+      "new_pnl_frac_of_book": "-0.002667",
+      "delta_frac": "-0.000700",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "08456a8a-d6c7-4b5d-a8f9-2df30173d1dd",
+      "timestamp_et": "2026-09-30T21:50:00-04:00",
+      "ticker": "XLM",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000100",
+      "new_pnl_frac_of_book": "-0.000900",
+      "delta_frac": "-0.000800",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "f8589795-1f12-449f-b4bb-f4763c5903d3",
+      "timestamp_et": "2026-09-30T22:53:00-04:00",
+      "ticker": "ALGO",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004000",
+      "new_pnl_frac_of_book": "-0.004000",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "68521acb-f0cf-417d-9c26-02eebf10964b",
+      "timestamp_et": "2026-09-30T22:53:00-04:00",
+      "ticker": "GRT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.009300",
+      "new_pnl_frac_of_book": "-0.010833",
+      "delta_frac": "-0.001533",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "ef7608b7-9d49-4064-bd29-45394ec599bb",
+      "timestamp_et": "2026-09-30T23:48:00-04:00",
+      "ticker": "OP",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.006700",
+      "new_pnl_frac_of_book": "-0.007200",
+      "delta_frac": "-0.000500",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "6dfc23b4-d4d2-405c-a0c6-90cc23d91a38",
+      "timestamp_et": "2026-10-01T02:49:00-04:00",
+      "ticker": "SEI",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.004567",
+      "new_pnl_frac_of_book": "-0.006900",
+      "delta_frac": "-0.002333",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "ce540663-fe2c-4136-a2fb-f6e219df0f0b",
+      "timestamp_et": "2026-10-01T05:56:00-04:00",
+      "ticker": "STRK",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000600",
+      "new_pnl_frac_of_book": "-0.000600",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "666d5cba-f338-42d8-a09f-b6a19d008a8e",
+      "timestamp_et": "2026-10-01T08:48:00-04:00",
+      "ticker": "ORCA",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.003200",
+      "new_pnl_frac_of_book": "-0.003733",
+      "delta_frac": "-0.000533",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "2f9091c8-b935-4119-8a65-715a977f46e5",
+      "timestamp_et": "2026-10-06T20:56:00-04:00",
+      "ticker": "WIF",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.000967",
+      "new_pnl_frac_of_book": "-0.004100",
+      "delta_frac": "-0.003133",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "2513754b-b067-425e-8504-73a722a22f22",
+      "timestamp_et": "2026-10-06T22:52:00-04:00",
+      "ticker": "CRV",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.003400",
+      "new_pnl_frac_of_book": "-0.008333",
+      "delta_frac": "-0.004933",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "f303ece7-c8e2-4f4a-8839-b38d4c45e2a9",
+      "timestamp_et": "2026-10-07T01:56:00-04:00",
+      "ticker": "VVV",
+      "side": "sell",
+      "old_pnl_frac_of_book": "-0.002167",
+      "new_pnl_frac_of_book": "-0.005267",
+      "delta_frac": "-0.003100",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "1d51a76c-2176-4bd3-aa6b-563ef776c086",
+      "timestamp_et": "2026-10-07T04:52:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.021667",
+      "new_pnl_frac_of_book": "-0.005700",
+      "delta_frac": "-0.027367",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "60b9200e-7c14-4f2b-9980-6075ef8a2d74",
+      "timestamp_et": "2026-10-07T14:54:00-04:00",
+      "ticker": "QNT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.009167",
+      "new_pnl_frac_of_book": "0.007067",
+      "delta_frac": "-0.002100",
+      "reasons": [
+        "fee_not_netted",
+        "phantom_lots_from_legacy_duplicates"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "63c5de46-28b5-49b4-834b-12f45daf4409",
+      "timestamp_et": "2026-10-07T15:53:00-04:00",
+      "ticker": "BAT",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.000433",
+      "new_pnl_frac_of_book": "0.000433",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "f1773a0f-0999-4d8c-8b6f-87ce958c786f",
+      "timestamp_et": "2026-10-07T18:53:00-04:00",
+      "ticker": "AXS",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.006967",
+      "new_pnl_frac_of_book": "0.006967",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    },
+    {
+      "kpi_trades_id": "105029b7-b59f-4993-9a5f-eba44c9ac43b",
+      "timestamp_et": "2026-10-07T21:52:00-04:00",
+      "ticker": "AERO",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.010000",
+      "new_pnl_frac_of_book": "0.006800",
+      "delta_frac": "-0.003200",
+      "reasons": [
+        "fee_not_netted"
+      ],
+      "action": "UPDATE"
+    },
+    {
+      "kpi_trades_id": "ab35386b-041d-4d7a-a28e-b70d7b90e691",
+      "timestamp_et": "2026-10-07T22:53:00-04:00",
+      "ticker": "AXS",
+      "side": "sell",
+      "old_pnl_frac_of_book": "0.002467",
+      "new_pnl_frac_of_book": "0.002467",
+      "delta_frac": "0.000000",
+      "reasons": [
+        "rounding"
+      ],
+      "action": "NO_CHANGE"
+    }
+  ]
+}

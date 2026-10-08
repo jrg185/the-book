@@ -60,6 +60,11 @@ jobs:
       - name: RH fill mapper
         run: python3 scripts/sync_rh_kpi_trades.py --self-test
 
+      - name: Realized FIFO and recon
+        run: |
+          python3 -m pip install --disable-pip-version-check --break-system-packages pytest
+          python3 -m pytest scripts/test_kpi_realized.py -q
+
       - name: Export scrub
         run: |
           python3 scripts/export_kpi.py --self-test
