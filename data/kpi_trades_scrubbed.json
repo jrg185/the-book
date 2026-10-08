@@ -1368,6 +1368,18 @@
     "fee_frac_of_book": 0.003133
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T13:57:10+00:00",
+    "ticker": "RAY",
+    "side": "buy",
+    "notional_frac_of_book": 0.332867,
+    "pnl_frac_of_book": 0.0,
+    "why": "Artifact 032a9dce RAY p_up 0.5460 (unrounded, LGBM v1 calibrated) >= desk temp 0.50 gate; not held; half-normal $100 cap; funded from USD cash, no USDC convert. Short-hold.",
+    "running_pnl_frac": -0.001727,
+    "running_balance_frac": 0.998273,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
