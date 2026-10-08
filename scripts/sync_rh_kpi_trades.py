@@ -113,6 +113,9 @@ pnl_trade_usd 0. A closing sell stores FIFO P&L: lots for that sleeve and
 ticker are consumed oldest-first, and pnl_trade_usd is the sum of
 (sell price - lot price) x lot qty, minus that sell's fee. The fee comes
 from the fill payload via fee_of(), never a hardcoded rate. Buys stay 0.
+A later poll that fills a null or zero fee on a stored closing sell writes
+that fee and subtracts it from the stored pnl_trade_usd. An opening sell
+keeps the pnl it already has.
 Replay skips a NULL order_id row when an order_id twin has the same sleeve,
 ticker, side, qty, and avg_price and a timestamp within a couple of seconds,
 and it skips a repeated order_id. Those legacy twins are not inventory.
@@ -297,7 +300,8 @@ where (excluded.why is not null and {WHY_OPEN_SQL})
 """
 FEE_BACKFILL_SQL = """
 update public.kpi_trades
-set fee_usd = %(fee_usd)s
+set fee_usd = %(fee_usd)s,
+    pnl_trade_usd = coalesce(%(pnl_trade_usd)s::numeric, pnl_trade_usd)
 where order_id = %(order_id)s
   and %(fee_usd)s::numeric > 0
   and (fee_usd is null or fee_usd = 0)
@@ -709,7 +713,14 @@ def _open_qty(lots: list[dict]) -> Decimal:
     return total
 
 
-def apply_fill(book: dict, row: dict, assign: bool, *, net_fee: bool = True) -> None:
+def apply_fill(
+    book: dict,
+    row: dict,
+    assign: bool,
+    *,
+    net_fee: bool = True,
+    close_ids: set[str] | None = None,
+) -> None:
     """FIFO lots per (sleeve, ticker). Oldest lots are consumed first.
 
     A closing sell's pnl_trade_usd is sum((sell px - lot px) x qty) minus
@@ -740,6 +751,10 @@ def apply_fill(book: dict, row: dict, assign: bool, *, net_fee: bool = True) -> 
         return
     if abs(signed) - abs(open_qty) > DUST:
         raise SyncError(f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}")
+    if close_ids is not None and side == "sell":
+        closed_id = order_id_of(row)
+        if closed_id:
+            close_ids.add(closed_id)
     remaining = abs(signed)
     pnl = Decimal("0")
     while remaining > DUST:
@@ -770,6 +785,7 @@ def _walk_book(
     net_fee: bool = True,
     skip_legacy: bool = True,
     mark_skips: bool = False,
+    close_ids: set[str] | None = None,
 ) -> dict:
     """Apply events in the order given. assign is the bool on each event."""
     rows = [row for _assign, row in events]
@@ -788,7 +804,7 @@ def _walk_book(
                     row["replay_skip"] = "duplicate_order_id"
                 continue
             seen.add(order_id)
-        apply_fill(book, row, assign, net_fee=net_fee)
+        apply_fill(book, row, assign, net_fee=net_fee, close_ids=close_ids)
     return book
 
 
@@ -876,17 +892,62 @@ def rows_from_orders(orders: list[dict], existing: list[dict]) -> list[dict]:
     return fresh
 
 
+def _can_replay(row: dict) -> bool:
+    if str(row.get("side") or "").lower() not in {"buy", "sell"}:
+        return False
+    if not str(row.get("sleeve") or "").strip() or not str(row.get("ticker") or "").strip():
+        return False
+    qty = dec(row.get("qty"))
+    price = dec(row.get("avg_price"))
+    if qty is None or qty <= 0 or price is None or price <= 0:
+        return False
+    try:
+        parse_ts(row["timestamp_et"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
+
+
+def closing_sell_ids(rows: list[dict]) -> set[str]:
+    """Order ids of sells that reduced a long.
+
+    Fee is subtracted from pnl only on those closes. An opening sell keeps
+    its stored pnl. A book that cannot be replayed yields no ids, so the fee
+    is still filled and the stored pnl is left alone.
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for row in rows:
+        if not _can_replay(row):
+            continue
+        key = (
+            str(row.get("sleeve") or "").strip().lower(),
+            str(row.get("ticker") or "").strip().upper(),
+        )
+        groups.setdefault(key, []).append(row)
+    closes: set[str] = set()
+    for grouped in groups.values():
+        try:
+            events = [(False, dict(row)) for row in grouped]
+            _walk_book(_timed(events), net_fee=False, skip_legacy=True, mark_skips=False, close_ids=closes)
+        except SyncError:
+            continue
+    return closes
+
+
 def fee_backfill_for(mapped: list[dict], existing: list[dict]) -> list[dict]:
     """Positive explicit fees for stored rows whose fee_usd is null or zero.
 
     Does not touch why or notes. A payload with no fee field is skipped.
-    A stored positive fee is left in place.
+    A stored positive fee is left in place. A closing sell also subtracts the
+    new fee from its stored pnl_trade_usd, which was priced when the fee was
+    still missing. Opening sells and buys are not re-priced.
     """
     index: dict[str, dict] = {}
     for row in existing:
         order_id = str(row.get("order_id") or "").strip().lower()
         if order_id and order_id not in index:
             index[order_id] = row
+    closes = closing_sell_ids(existing)
     patches = []
     seen: set[str] = set()
     for row in mapped:
@@ -899,10 +960,16 @@ def fee_backfill_for(mapped: list[dict], existing: list[dict]) -> list[dict]:
         incoming = dec(row.get("fee_usd"))
         if incoming is None or incoming <= 0:
             continue
-        stored = dec(index[order_id].get("fee_usd"))
+        stored_row = index[order_id]
+        stored = dec(stored_row.get("fee_usd"))
         if stored is not None and stored != 0:
             continue
-        patches.append({"order_id": order_id, "fee_usd": num_text(incoming)})
+        patch = {"order_id": order_id, "fee_usd": num_text(incoming)}
+        if order_id in closes:
+            stored_pnl = dec(stored_row.get("pnl_trade_usd"))
+            if stored_pnl is not None:
+                patch["pnl_trade_usd"] = num_text(stored_pnl - incoming)
+        patches.append(patch)
     return patches
 
 
@@ -1379,7 +1446,11 @@ def apply_note_fills(env: dict[str, str], fills: list[dict], source: str) -> int
 
 
 def apply_fee_backfill_rest(base_url: str, key: str, patches: list[dict]) -> int:
-    """PATCH fee_usd only while the stored fee is still null or zero."""
+    """PATCH fee_usd while the stored fee is still null or zero.
+
+    A closing-sell patch also writes the fee-net pnl_trade_usd. The fee
+    filter keeps a second poll from subtracting that fee again.
+    """
     written = 0
     for patch in patches:
         order_id = str(patch.get("order_id") or "")
@@ -1388,12 +1459,15 @@ def apply_fee_backfill_rest(base_url: str, key: str, patches: list[dict]) -> int
         filt = "order_id=eq." + urllib.parse.quote(order_id, safe="")
         filt += "&or=(fee_usd.is.null,fee_usd.eq.0)"
         path = "/rest/v1/kpi_trades?" + filt
+        body = {"fee_usd": patch["fee_usd"]}
+        if patch.get("pnl_trade_usd") is not None:
+            body["pnl_trade_usd"] = patch["pnl_trade_usd"]
         returned = rest_call(
             base_url,
             key,
             path,
             method="PATCH",
-            body={"fee_usd": patch["fee_usd"]},
+            body=body,
             extra_headers={"Prefer": "return=representation"},
         )
         rows = returned if isinstance(returned, list) else []
@@ -1412,7 +1486,14 @@ def apply_fee_backfill_db(db_url: str, patches: list[dict]) -> int:
                     order_id = str(patch.get("order_id") or "")
                     if not UUID_RE.fullmatch(order_id):
                         raise SyncError("fee backfill order_id is not a uuid")
-                    cur.execute(FEE_BACKFILL_SQL, {"order_id": order_id, "fee_usd": patch["fee_usd"]})
+                    cur.execute(
+                        FEE_BACKFILL_SQL,
+                        {
+                            "order_id": order_id,
+                            "fee_usd": patch["fee_usd"],
+                            "pnl_trade_usd": patch.get("pnl_trade_usd"),
+                        },
+                    )
                     if cur.rowcount > 1:
                         raise SyncError(f"fee backfill matched {cur.rowcount} rows")
                     written += cur.rowcount
@@ -1980,8 +2061,59 @@ def self_test() -> int:
         raise SyncError(f"explicit zero fee was invented or dropped {explicit_zero}")
     if fee_backfill_for(explicit_zero, [zero_stored]):
         raise SyncError("explicit zero replaced a stored fee")
+    opening_sell = {
+        "order_id": sell["order_id"],
+        "why": "keep this thesis",
+        "fee_usd": "0",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "sell",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T11:00:00+00:00",
+        "pnl_trade_usd": "0",
+    }
+    if fee_backfill_for(priced, [opening_sell]) != [{"order_id": sell["order_id"], "fee_usd": "0.2"}]:
+        raise SyncError("opening sell fee backfill changed pnl")
+    flat_buy = {
+        "order_id": "11111111-1111-4111-8111-111111111111",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "buy",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T09:00:00+00:00",
+        "fee_usd": "0",
+        "pnl_trade_usd": "0",
+    }
+    flat_sell = {
+        "order_id": sell["order_id"],
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "sell",
+        "qty": "4",
+        "avg_price": "5",
+        "timestamp_et": "2026-09-28T11:00:00+00:00",
+        "fee_usd": "0",
+        "pnl_trade_usd": "0",
+    }
+    flat_patch = fee_backfill_for(priced, [flat_buy, flat_sell])
+    if flat_patch != [{"order_id": sell["order_id"], "fee_usd": "0.2", "pnl_trade_usd": "-0.2"}]:
+        raise SyncError(f"breakeven close kept a gross pnl {flat_patch}")
     if note_fills_for(priced, [zero_stored]):
         raise SyncError("fee backfill changed a human why")
+    stored_open = {
+        "order_id": "11111111-1111-4111-8111-111111111111",
+        "why": "open lot",
+        "fee_usd": "0.10",
+        "sleeve": "crypto",
+        "ticker": "AAA",
+        "side": "buy",
+        "qty": "10",
+        "avg_price": "2",
+        "timestamp_et": "2026-09-28T09:00:00+00:00",
+        "pnl_trade_usd": "0",
+    }
     stored_book = {
         "order_id": sell["order_id"],
         "why": "keep this thesis",
@@ -2007,9 +2139,11 @@ def self_test() -> int:
                 "created_at": "2026-09-28T11:00:00Z",
             }
         ],
-        [stored_book],
+        [stored_open, stored_book],
     )
-    if fresh_plan or note_plan or fee_plan != [{"order_id": sell["order_id"], "fee_usd": "0.2"}]:
+    if fresh_plan or note_plan or fee_plan != [
+        {"order_id": sell["order_id"], "fee_usd": "0.2", "pnl_trade_usd": "11.8"}
+    ]:
         raise SyncError(f"known order was reinserted instead of a fee backfill {fresh_plan} {note_plan} {fee_plan}")
     ledger_id = "12121212-1212-4121-8121-121212121212"
     with_why = map_order(
@@ -2148,6 +2282,8 @@ def self_test() -> int:
         raise SyncError("notes-less conflict update does not refresh fee_usd")
     if "fee_usd is null or fee_usd = 0" not in FEE_BACKFILL_SQL.lower():
         raise SyncError("fee backfill can overwrite a stored positive fee")
+    if "pnl_trade_usd" not in FEE_BACKFILL_SQL.lower():
+        raise SyncError("fee backfill leaves a gross close")
     if "rh agentic (backfill|sync) order" not in UPSERT_SQL.lower():
         raise SyncError("conflict update does not recognize a machine why")
     if "notes" not in UPSERT_SQL or "do update" not in UPSERT_SQL_NO_NOTES.lower():
