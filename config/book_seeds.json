@@ -1,0 +1,19 @@
+{
+  "seeds": [
+    {
+      "sleeve": "crypto",
+      "seed_usd": "300",
+      "effective_from": "2020-01-01"
+    },
+    {
+      "sleeve": "equities",
+      "seed_usd": "500",
+      "effective_from": "2020-01-01"
+    },
+    {
+      "sleeve": "combined",
+      "seed_usd": "800",
+      "effective_from": "2020-01-01"
+    }
+  ]
+}

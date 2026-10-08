@@ -5,7 +5,7 @@ public.kpi_summary is a view over the latest snapshot, and scripts/export_kpi.py
 only SELECTs that view. Re-export cannot move as_of. This script reads fills from
 public.kpi_trades (qty and price), marks what is still open, and INSERTs.
 
-Seeds: crypto 300, equities 500, combined 800.
+Seeds come from config/book_seeds.json.
 running_pnl = realized + unrealized
 running_balance = start + running_pnl
 realized = sum of pnl_trade_usd on closing legs
@@ -71,14 +71,12 @@ from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from book_seeds import current_seeds
+
 DEFAULT_URL = "https://bsnqwgbshwszbjncglqx.supabase.co"
 SLEEVES = ("crypto", "equities", "combined")
 TRADE_SLEEVES = ("crypto", "equities")
-START = {
-    "crypto": Decimal("300"),
-    "equities": Decimal("500"),
-    "combined": Decimal("800"),
-}
+START = current_seeds()
 DUST = Decimal("0.00000001")
 # fifo_gross - stored within this of fee_usd means that fee is already in the
 # stored close, so the leftover stays on the FIFO lots.
@@ -1183,7 +1181,7 @@ def self_test() -> int:
         raise RefreshError("combined unrealized")
     if by["combined"]["running_balance_usd"] != "845.000000":
         raise RefreshError("combined balance")
-    if by["combined"]["start_balance_usd"] != "800":
+    if by["combined"]["start_balance_usd"] != num_text(START["combined"]):
         raise RefreshError("combined seed")
     if len(opens) != 2:
         raise RefreshError("open count")

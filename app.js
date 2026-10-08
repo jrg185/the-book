@@ -19,6 +19,7 @@ import {
   mergeLiveBook,
   shownBooks,
   warehouseSleeveAsOf,
+  SEEDS_USD,
   sleeveKey,
   tone,
   winStats,
@@ -269,7 +270,7 @@ function renderLiveBook(view, trades) {
   grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));
   grid.append(pnlMetric("Unrealized P&L", view.unrealizedPnl, view.unrealizedPnlFrac));
   const running = pnlMetric("Running P&L", view.runningPnl, view.runningPnlFrac);
-  running.append(el("p", "fine", "RH book versus the $800 seed."));
+  running.append(el("p", "fine", `RH book versus the $${SEEDS_USD.combined} seed.`));
   grid.append(running);
 
   const kill = metric("Day kill rail");
