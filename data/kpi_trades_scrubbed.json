@@ -1692,6 +1692,18 @@
     "fee_frac_of_book": 0.001567
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T07:52:12+00:00",
+    "ticker": "ORCA",
+    "side": "buy",
+    "notional_frac_of_book": 0.329733,
+    "pnl_frac_of_book": 0.0,
+    "why": "Top eligible not-held name: artifact ee16e799 ORCA p_up 0.5206 (unrounded, LGBM v1 calibrated) >= 0.50 temp gate; $99 under $100 half-normal cap; funded from USD cash, no USDC convert. Short-hold.",
+    "running_pnl_frac": 0.08815,
+    "running_balance_frac": 1.08815,
+    "fee_frac_of_book": 0.003133
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
