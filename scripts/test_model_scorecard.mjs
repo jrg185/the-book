@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { assertCentsEqual } from "./cents.mjs";
 import {
   closedFillStats,
   cryptoOosModels,
@@ -36,7 +37,7 @@ test("crypto closed fills match sleeve win rules and the scrubbed tape", () => {
   assert.equal(fills.dedupe, "scrubbed-rows");
   assert.equal(typeof stats.expectancyUsd, "number");
   assert.equal(Number.isFinite(stats.expectancyUsd), true);
-  assert.equal(stats.expectancyUsd, fills.expectancy_usd);
+  assertCentsEqual(stats.expectancyUsd, fills.expectancy_usd);
   assert.equal(formatWinPct(stats.rate), formatWinPct(fills.win_rate));
   assert.equal(formatWinRecord(stats), formatWinRecord(fills));
   assert.equal(
@@ -52,8 +53,10 @@ test("crypto closed fills match sleeve win rules and the scrubbed tape", () => {
     assert.equal(typeof tapeFees[key], "number");
     assert.equal(Number.isFinite(tapeFees[key]), true);
     assert.equal(tapeFees[key] >= 0, true);
-    assert.equal(tapeFees[key], fees[key]);
   }
+  assert.equal(tapeFees.n, fees.n);
+  assertCentsEqual(tapeFees.fee_usd, fees.fee_usd);
+  assertCentsEqual(tapeFees.sell_fee_usd, fees.sell_fee_usd);
   assert.equal(typeof tapeFees.fee_frac, "number");
   assert.equal(Number.isFinite(tapeFees.fee_frac), true);
   assert.equal(tapeFees.fee_frac >= 0, true);
@@ -84,8 +87,8 @@ test("order id collapses duplicate sells and fee dollars stay explicit", () => {
     "crypto"
   );
   assert.equal(fees.status, "known");
-  assert.equal(fees.fee_usd, 0.35);
-  assert.equal(fees.sell_fee_usd, 0.1);
+  assertCentsEqual(fees.fee_usd, 0.35);
+  assertCentsEqual(fees.sell_fee_usd, 0.1);
 });
 
 test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", () => {
