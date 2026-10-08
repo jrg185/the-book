@@ -10,6 +10,8 @@ running_pnl = realized + unrealized
 running_balance = start + running_pnl
 realized = sum of pnl_trade_usd on closing legs
 unrealized = open_qty * (mark - avg_cost)
+avg_cost is the cost of lots still open. A close consumes the oldest lots
+first, the same order as the FIFO pnl stored on a new sell.
 
 Do not read public.kpi_trades_scrubbed. That view has no qty or price and joins
 the latest snapshot, so it cannot refresh mark-to-market.
@@ -450,10 +452,29 @@ def open_lots_note(collapsed: int, hidden: list[str], open_names: list[str]) -> 
     return " ".join(bits)
 
 
+def _open_lots(lots: list[dict] | None) -> tuple[list[dict], Decimal]:
+    kept = [lot for lot in (lots or []) if abs(lot["qty"]) > DUST]
+    qty = Decimal("0")
+    for lot in kept:
+        qty += lot["qty"]
+    return kept, qty
+
+
+def _lots_position(lots: list[dict]) -> dict | None:
+    """Signed qty and the cost of whatever lots the FIFO close did not consume."""
+    kept, qty = _open_lots(lots)
+    if abs(qty) <= DUST:
+        return None
+    cost = Decimal("0")
+    for lot in kept:
+        cost += abs(lot["qty"]) * lot["px"]
+    return {"qty": qty, "avg": cost / abs(qty)}
+
+
 def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, str], dict]]:
     realized = {sleeve: Decimal("0") for sleeve in TRADE_SLEEVES}
     realized_by_ticker: dict[tuple[str, str], Decimal] = {}
-    book: dict[tuple[str, str], dict] = {}
+    book: dict[tuple[str, str], list] = {}
     ordered = sorted(enumerate(fills), key=lambda item: (parse_ts(item[1]["timestamp_et"]), item[0]))
     for _, fill in ordered:
         sleeve = str(fill.get("sleeve") or "").strip().lower()
@@ -474,20 +495,14 @@ def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str
         pnl = dec(fill.get("pnl_trade_usd")) or Decimal("0")
         signed = qty if side == "buy" else -qty
         key = (sleeve, ticker)
-        pos = book.get(key)
-        open_qty = pos["qty"] if pos else Decimal("0")
+        lots, open_qty = _open_lots(book.get(key))
         increasing = (signed > 0 and open_qty >= 0) or (signed < 0 and open_qty <= 0)
         if increasing:
             if price is None or price <= 0:
                 raise RefreshError(f"{sleeve} {ticker}: opening fill is missing avg_price")
-            new_qty = open_qty + signed
-            if abs(open_qty) <= DUST:
-                avg = price
-            else:
-                avg = (abs(open_qty) * pos["avg"] + abs(signed) * price) / abs(new_qty)
-            book[key] = {"qty": new_qty, "avg": avg}
+            lots.append({"qty": signed, "px": price})
+            book[key] = lots
             continue
-        close_qty = min(abs(open_qty), abs(signed))
         excess = abs(signed) - abs(open_qty)
         if excess > DUST:
             raise RefreshError(
@@ -495,15 +510,30 @@ def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str
             )
         realized[sleeve] += pnl
         realized_by_ticker[key] = realized_by_ticker.get(key, Decimal("0")) + pnl
-        remain = abs(open_qty) - close_qty
-        if remain <= DUST:
+        remaining = abs(signed)
+        while remaining > DUST:
+            if not lots:
+                raise RefreshError(f"{sleeve} {ticker}: close qty {qty} exceeds open {abs(open_qty)}")
+            lot = lots[0]
+            take = min(abs(lot["qty"]), remaining)
+            if lot["qty"] > 0:
+                lot["qty"] -= take
+            else:
+                lot["qty"] += take
+            remaining -= take
+            if abs(lot["qty"]) <= DUST:
+                lots.pop(0)
+        if _lots_position(lots) is None:
             book.pop(key, None)
         else:
-            sign = Decimal("1") if open_qty > 0 else Decimal("-1")
-            book[key] = {"qty": sign * remain, "avg": pos["avg"]}
-    open_book = {key: pos for key, pos in book.items() if abs(pos["qty"]) > DUST}
-    for key, pos in open_book.items():
+            book[key] = lots
+    open_book: dict[tuple[str, str], dict] = {}
+    for key, lots in book.items():
+        pos = _lots_position(lots)
+        if pos is None:
+            continue
         pos["realized"] = realized_by_ticker.get(key, Decimal("0"))
+        open_book[key] = pos
     return realized, open_book
 
 
@@ -512,7 +542,9 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
 
     Sleeve realized is the sum of those close dollars. Each open position
     also keeps that ticker's own close dollars, including closes from before
-    a later reopen. Opening fills do not add realized.
+    a later reopen. Opening fills do not add realized. Leftover avg_cost is
+    the cost of the oldest lots the close did not consume, so a FIFO partial
+    and the open mark describe the same shares.
 
     Duplicate fills are collapsed first. Replaying both copies leaves the
     later exit covering only one of them, so a closed name stays on the book.
@@ -1041,7 +1073,7 @@ def self_test() -> int:
             "side": "sell",
             "qty": "5",
             "avg_price": "5",
-            "pnl_trade_usd": "10",
+            "pnl_trade_usd": "15",
             "timestamp_et": "2026-09-03T00:00:00Z",
         },
         {
@@ -1058,10 +1090,11 @@ def self_test() -> int:
     priors = {"crypto": {"day_kill_pct": Decimal("-0.10"), "day_target_pct": Decimal("0.025")}}
     rows, opens = build_rows(fills, marks, priors, "2026-09-28T01:00:00Z")
     by = {row["sleeve"]: row for row in rows}
-    # Opening buys ignore pnl_trade_usd. Avg cost (10*2 + 10*4) / 20 = 3. Sell 5 leaves 15.
-    if by["crypto"]["realized_pnl_usd"] != "10.000000":
+    # Opening buys ignore pnl_trade_usd. FIFO sells 5 of the $2 lot at $5 (realized 15).
+    # Leftover is 5 @ 2 and 10 @ 4, cost 50. Mark 4 unrealized is 10, not 15 at the old blend of 3.
+    if by["crypto"]["realized_pnl_usd"] != "15.000000":
         raise RefreshError(f"crypto realized {by['crypto']['realized_pnl_usd']}")
-    if by["crypto"]["unrealized_pnl_usd"] != "15.000000":
+    if by["crypto"]["unrealized_pnl_usd"] != "10.000000":
         raise RefreshError(f"crypto unrealized {by['crypto']['unrealized_pnl_usd']}")
     if by["crypto"]["running_pnl_usd"] != "25.000000":
         raise RefreshError("crypto running")
@@ -1077,9 +1110,9 @@ def self_test() -> int:
         raise RefreshError("equities balance")
     if by["equities"]["day_kill_pct"] is not None:
         raise RefreshError("missing prior rail should stay null")
-    if by["combined"]["realized_pnl_usd"] != "10.000000":
+    if by["combined"]["realized_pnl_usd"] != "15.000000":
         raise RefreshError("combined realized")
-    if by["combined"]["unrealized_pnl_usd"] != "35.000000":
+    if by["combined"]["unrealized_pnl_usd"] != "30.000000":
         raise RefreshError("combined unrealized")
     if by["combined"]["running_balance_usd"] != "845.000000":
         raise RefreshError("combined balance")
@@ -1087,6 +1120,9 @@ def self_test() -> int:
         raise RefreshError("combined seed")
     if len(opens) != 2:
         raise RefreshError("open count")
+    aaa = next(row for row in opens if row["ticker"] == "AAA")
+    if Decimal(aaa["qty"]) != Decimal("15") or Decimal(aaa["avg_cost"]) != Decimal("50") / Decimal("15"):
+        raise RefreshError(f"fifo leftover was blended {aaa}")
     try:
         build_rows(fills, {("crypto", "AAA"): Decimal("4")}, priors, "2026-09-28T01:00:00Z")
     except RefreshError as exc:
