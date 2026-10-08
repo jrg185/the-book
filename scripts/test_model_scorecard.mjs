@@ -2,17 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { assertCentsEqual } from "./cents.mjs";
+import { approxFrac, assertCentsEqual, assertFracEqual, FRAC_TOL } from "./cents.mjs";
 import {
   closedFillStats,
   cryptoOosModels,
   feeDragFromTrades,
-  formatPct,
   deriveSleeve,
-  formatUsd,
-  formatWinPct,
   formatWinRecord,
   inferLiveBackend,
+  LIVE_RAILS,
+  money,
 } from "../derive.js";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../data/${name}`, import.meta.url), "utf8"));
@@ -38,13 +37,10 @@ test("crypto closed fills match sleeve win rules and the scrubbed tape", () => {
   assert.equal(typeof stats.expectancyUsd, "number");
   assert.equal(Number.isFinite(stats.expectancyUsd), true);
   assertCentsEqual(stats.expectancyUsd, fills.expectancy_usd);
-  assert.equal(formatWinPct(stats.rate), formatWinPct(fills.win_rate));
+  assertFracEqual(stats.rate, fills.win_rate);
   assert.equal(formatWinRecord(stats), formatWinRecord(fills));
-  assert.equal(
-    formatPct(stats.expectancyFrac, { signed: true, digits: 2 }),
-    formatPct(fills.expectancy_frac, { signed: true, digits: 2 })
-  );
-  assert.equal(formatUsd(stats.expectancyUsd, { signed: true }), formatUsd(fills.expectancy_usd, { signed: true }));
+  // Scorecard expectancy is q6 of the same tape. That can sit on x.xx5%.
+  assertFracEqual(stats.expectancyFrac, fills.expectancy_frac);
   const tapeFees = feeDragFromTrades(trades, "crypto");
   const fees = read("model_scorecard.json").fee_drag;
   assert.equal(tapeFees.status, "known");
@@ -60,6 +56,7 @@ test("crypto closed fills match sleeve win rules and the scrubbed tape", () => {
   assert.equal(typeof tapeFees.fee_frac, "number");
   assert.equal(Number.isFinite(tapeFees.fee_frac), true);
   assert.equal(tapeFees.fee_frac >= 0, true);
+  assertFracEqual(tapeFees.fee_frac, fees.fee_frac);
 });
 
 test("order id collapses duplicate sells and fee dollars stay explicit", () => {
@@ -105,12 +102,23 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   const crypto = summary.find((row) => row.sleeve === "crypto");
   const derived = deriveSleeve(crypto);
   const scorecard = read("model_scorecard.json");
-  assert.equal(formatPct(derived.killHeadroomFrac), formatPct(scorecard.kill.kill_headroom_frac));
-  assert.equal(formatUsd(derived.killHeadroom), formatUsd(scorecard.kill.kill_headroom_usd));
+  assertFracEqual(derived.killHeadroomFrac, scorecard.kill.kill_headroom_frac);
+  assertCentsEqual(derived.killHeadroom, scorecard.kill.kill_headroom_usd);
   assert.equal(Number.isFinite(scorecard.kill.kill_headroom_usd), true);
-  assert.equal(formatPct(derived.dayKillFrac), "-10.0%");
-  assert.equal(formatUsd(derived.dayKill), "-$30.00");
-  assert.equal(formatPct(derived.dayTargetFrac, { signed: true }), "+2.5%");
+  assertFracEqual(derived.dayKillFrac, scorecard.kill.day_kill_pct);
+  assertFracEqual(derived.dayKillFrac, LIVE_RAILS.dayKillFrac);
+  assertCentsEqual(derived.dayKill, scorecard.kill.day_kill_usd);
+  assertCentsEqual(derived.dayKill, money(derived.seed, LIVE_RAILS.dayKillFrac));
+  assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
+  assertFracEqual(derived.dayTargetFrac, LIVE_RAILS.dayTargetFrac);
+});
+
+test("book-fraction tolerance is half of 0.01 percent", () => {
+  assert.equal(approxFrac(0, FRAC_TOL), false);
+  assert.equal(approxFrac(0, -FRAC_TOL), false);
+  assert.equal(approxFrac(0, FRAC_TOL / 2), true);
+  assertFracEqual(null, null);
+  assert.throws(() => assertFracEqual(0, null));
 });
 
 test("models tab markup loads the scorecard instead of a second page", () => {
