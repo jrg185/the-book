@@ -2980,7 +2980,7 @@ def self_test() -> int:
                 "avg_price": "2",
                 "pnl_trade_usd": "99",
                 "timestamp_et": "2026-09-01T00:00:00Z",
-                "account_id": "546048042",
+                "account_id": "TEST-ACCOUNT",
                 "order_id": "6ab90000-0000-4000-8000-000000000099",
             },
             {
@@ -3027,7 +3027,7 @@ def self_test() -> int:
     if by_ticker["QCOM"]["unrealized_pnl_frac"] != float(q6(Decimal("20") / Decimal("500"))):
         raise RuntimeError(f"QCOM unrealized frac {by_ticker['QCOM']['unrealized_pnl_frac']}")
     public_blob = json.dumps(opens)
-    if "546048042" in public_blob or "unrealized_pnl_usd" in public_blob or "order_id" in public_blob:
+    if "TEST-ACCOUNT" in public_blob or "unrealized_pnl_usd" in public_blob or "order_id" in public_blob:
         raise RuntimeError("open positions JSON leaked an account field")
     if "20.000000" in public_blob or "15.000000" in public_blob:
         raise RuntimeError("open positions JSON wrote raw unrealized dollars")
@@ -3089,7 +3089,7 @@ def self_test() -> int:
                 "realized_pnl_usd": "6.24",
                 "unrealized_pnl_usd": "17.53",
                 "start_balance_usd": "300",
-                "account_id": "546048042",
+                "account_id": "TEST-ACCOUNT",
                 "notes": "realized $6.24; book $323.77",
             },
             {
@@ -3106,7 +3106,7 @@ def self_test() -> int:
         ]
     )
     history_blob = json.dumps(history)
-    if "323.77" in history_blob or "546048042" in history_blob or "joe@example.com" in history_blob:
+    if "323.77" in history_blob or "TEST-ACCOUNT" in history_blob or "joe@example.com" in history_blob:
         raise RuntimeError(f"curve JSON leaked warehouse dollars or an account: {history_blob}")
     if "$" in history_blob or "running_balance_usd" in history_blob or "notes" in history_blob:
         raise RuntimeError("curve JSON kept a dollar column or a note")
