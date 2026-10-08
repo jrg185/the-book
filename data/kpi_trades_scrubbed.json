@@ -1380,6 +1380,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T18:09:16+00:00",
+    "ticker": "ARB",
+    "side": "buy",
+    "notional_frac_of_book": 0.3299,
+    "pnl_frac_of_book": 0.0,
+    "why": "Manual signals artifact 7493b36f (generated 2026-10-08T18:07:58Z): ARB ml p_up 0.599 >= temp 0.50 live gate; not held; half-normal $100 slot; funded from USD cash, no USDC convert.",
+    "running_pnl_frac": -0.001727,
+    "running_balance_frac": 0.998273,
+    "fee_frac_of_book": 0.003133
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-08T18:09:16+00:00",
+    "ticker": "UNI",
+    "side": "buy",
+    "notional_frac_of_book": 0.330033,
+    "pnl_frac_of_book": 0.0,
+    "why": "Manual signals artifact 7493b36f (generated 2026-10-08T18:07:58Z): UNI ml p_up 0.577 >= temp 0.50 live gate; not held; half-normal $100 slot; funded from USD cash, no USDC convert.",
+    "running_pnl_frac": -0.001727,
+    "running_balance_frac": 0.998273,
+    "fee_frac_of_book": 0.003133
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
