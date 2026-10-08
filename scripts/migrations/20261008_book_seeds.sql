@@ -1,23 +1,84 @@
 -- Book seeds for public.kpi_trades_scrubbed.
 --
 -- Apply order on Supabase project agentic-signals (bsnqwgbshwszbjncglqx):
---   1. This migration. It creates public.book_seeds and redefines the view.
---      It does not insert seed rows.
+--   1. This migration. It creates public.book_seeds, inserts the same rows as
+--      config/book_seeds.json, and redefines the view to divide by the join.
 --   2. Seed sync. Export KPI runs scripts/sync_book_seeds.py, which upserts
---      config/book_seeds.json into public.book_seeds. That file is the source.
---   3. View use. The export reads public.kpi_trades_scrubbed only after the sync.
---      The view divides by the joined seed. An empty book_seeds table makes
---      those fractions null, so do not read the view between steps 1 and 2.
+--      config/book_seeds.json again. That file stays the source.
+--   3. View use. The export reads public.kpi_trades_scrubbed after the sync.
 --
 -- Do not apply this file from a laptop. Eng applies it after merge.
 -- This does not insert fills, does not place orders, and does not read a sheet.
 --
--- If this script created public.kpi_trades_scrubbed_prev and the new view is
--- wrong, restore with (prev is the old SELECT, not a wrapper of the new view):
---   drop view public.kpi_trades_scrubbed;
---   alter view public.kpi_trades_scrubbed_prev rename to kpi_trades_scrubbed;
---   notify pgrst, 'reload schema';
--- A failure inside this transaction rolls back. The live view stays as it was.
+-- public.kpi_trades_scrubbed_prev already exists from 20260928. Renaming it
+-- back would restore the pre-ledger view, not the view this migration replaces.
+-- Rollback recreates that pre-20261008 definition, then drops public.book_seeds:
+--
+-- begin;
+--     create or replace view public.kpi_trades_scrubbed as
+--     with fills as (
+--       select
+--         t.sleeve,
+--         t.timestamp_et,
+--         t.ticker,
+--         t.side,
+--         case lower(btrim(t.sleeve))
+--           when 'crypto' then 300::numeric
+--           when 'equities' then 500::numeric
+--         end as seed,
+--         (%s)::numeric as notional_usd,
+--         coalesce(t.pnl_trade_usd, 0)::numeric as pnl_usd,
+--         (%s)::text as why,
+--         t.ctid as row_ctid
+--       from public.kpi_trades t
+--     ),
+--     ledger as (
+--       select
+--         sleeve,
+--         timestamp_et,
+--         ticker,
+--         side,
+--         case
+--           when seed is null or seed = 0 or notional_usd is null then null
+--           else round(notional_usd / seed, 6)
+--         end as notional_frac_of_book,
+--         case
+--           when seed is null or seed = 0 then null
+--           else round(pnl_usd / seed, 6)
+--         end as pnl_frac_of_book,
+--         why,
+--         seed,
+--         sum(pnl_usd) over (
+--           partition by lower(btrim(sleeve))
+--           order by timestamp_et asc, ticker asc, side asc, row_ctid asc
+--           rows between unbounded preceding and current row
+--         ) as running_pnl_usd
+--       from fills
+--     )
+--     select
+--       sleeve,
+--       timestamp_et,
+--       ticker,
+--       side,
+--       notional_frac_of_book,
+--       pnl_frac_of_book,
+--       why,
+--       case
+--         when seed is null or seed = 0 then null
+--         else round(running_pnl_usd / seed, 6)
+--       end as running_pnl_frac,
+--       case
+--         when seed is null or seed = 0 then null
+--         else round((seed + running_pnl_usd) / seed, 6)
+--       end as running_balance_frac
+--     from ledger;
+-- drop table public.book_seeds;
+-- notify pgrst, 'reload schema';
+-- commit;
+--
+-- The two %s placeholders are the notional and why expressions from
+-- scripts/migrations/20260928_kpi_trades_running_ledger.sql. A failure inside
+-- this transaction rolls back. The live view stays as it was.
 
 begin;
 
@@ -29,8 +90,21 @@ create table if not exists public.book_seeds (
   constraint book_seeds_seed_positive check (seed_usd > 0)
 );
 
+alter table public.book_seeds enable row level security;
+
+revoke all on public.book_seeds from anon, authenticated;
+
 comment on table public.book_seeds is
   'Per-sleeve book seeds. config/book_seeds.json is the source. Apply this migration, run scripts/sync_book_seeds.py, then read public.kpi_trades_scrubbed.';
+
+-- Same rows as config/book_seeds.json. sync_book_seeds.py upserts that file
+-- on Export KPI so a later edit stays the source.
+insert into public.book_seeds (sleeve, seed_usd, effective_from) values
+  ('crypto', 300, date '2020-01-01'),
+  ('equities', 500, date '2020-01-01'),
+  ('combined', 800, date '2020-01-01')
+on conflict (sleeve, effective_from) do update
+set seed_usd = excluded.seed_usd;
 
 do $mig$
 declare

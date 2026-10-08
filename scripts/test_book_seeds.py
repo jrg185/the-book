@@ -20,6 +20,11 @@ import sync_book_seeds
 
 # Already-applied view. The live definition is 20261008_book_seeds.sql.
 HISTORICAL_VIEW = Path("scripts/migrations/20260928_kpi_trades_running_ledger.sql")
+NEW_MIGRATION = Path("scripts/migrations/20261008_book_seeds.sql")
+INSERT_ROW = re.compile(
+    r"\('([a-z]+)',\s*(\d+(?:\.\d+)?),\s*date\s*'(\d{4}-\d{2}-\d{2})'\)",
+    re.IGNORECASE,
+)
 
 MONEY_SEED = re.compile(
     r"""(?x)
@@ -37,6 +42,25 @@ SKIP_DIRS = {".git", "data", "fixtures", "node_modules", "__pycache__"}
 
 def money_seed_hits(text: str) -> list[int]:
     return [match.start() for match in MONEY_SEED.finditer(text)]
+
+
+def strip_sql_comments(text: str) -> str:
+    kept = []
+    for line in text.splitlines():
+        code = line.split("--", 1)[0]
+        if code.strip():
+            kept.append(code)
+    return "\n".join(kept)
+
+
+def without_seed_insert(text: str) -> str:
+    return re.sub(
+        r"insert\s+into\s+public\.book_seeds\b.*?;",
+        "",
+        text,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
 
 
 def production_files() -> list[Path]:
@@ -97,12 +121,31 @@ class BookSeedLoaderTests(unittest.TestCase):
             self.assertEqual(sync_book_seeds.main(["--self-test"]), 0)
         self.assertIn("on conflict (sleeve, effective_from)", sync_book_seeds.UPSERT_SQL.lower())
 
-    def test_migration_joins_the_seed_table_and_does_not_insert(self):
-        text = (ROOT / "scripts/migrations/20261008_book_seeds.sql").read_text(encoding="utf-8")
-        self.assertIn("public.book_seeds", text)
+    def test_migration_insert_matches_config(self):
+        text = (ROOT / NEW_MIGRATION).read_text(encoding="utf-8")
+        self.assertIn("alter table public.book_seeds enable row level security;", text)
+        self.assertIn("revoke all on public.book_seeds from anon, authenticated;", text)
         self.assertIn("left join lateral", text)
-        self.assertNotIn("insert into public.book_seeds", text.lower())
-        self.assertEqual(money_seed_hits(text), [])
+        self.assertIn("on conflict (sleeve, effective_from) do update", text.lower())
+        self.assertIn("drop table public.book_seeds;", text)
+        self.assertNotIn("rename to kpi_trades_scrubbed", text.lower())
+        code = strip_sql_comments(text)
+        self.assertEqual(money_seed_hits(without_seed_insert(code)), [])
+        found = set(INSERT_ROW.findall(code))
+        config = json.loads((ROOT / "config/book_seeds.json").read_text(encoding="utf-8"))
+        expected = {
+            (row["sleeve"], str(row["seed_usd"]), row["effective_from"])
+            for row in config["seeds"]
+        }
+        self.assertEqual(found, expected)
+        prior = (ROOT / HISTORICAL_VIEW).read_text(encoding="utf-8")
+        prior_view = prior[
+            prior.index("    create or replace view public.kpi_trades_scrubbed as") : prior.index("  $view$")
+        ].rstrip()
+        marker = "--     create or replace view public.kpi_trades_scrubbed as\n"
+        comment = text[text.index(marker) : text.index("--     from ledger;\n") + len("--     from ledger;")]
+        restored = "\n".join(line[3:] for line in comment.splitlines())
+        self.assertEqual(restored, prior_view + ";")
 
     def test_scorecard_seed_comes_from_config(self):
         crypto = book_seeds.current_seeds()["crypto"]
@@ -118,6 +161,8 @@ class BookSeedLoaderTests(unittest.TestCase):
         hits = []
         for rel in production_files():
             text = (ROOT / rel).read_text(encoding="utf-8")
+            if rel == NEW_MIGRATION:
+                text = without_seed_insert(strip_sql_comments(text))
             for lineno, line in enumerate(text.splitlines(), start=1):
                 if MONEY_SEED.search(line):
                     hits.append(f"{rel}:{lineno}: {line.strip()}")

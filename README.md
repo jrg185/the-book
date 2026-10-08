@@ -39,7 +39,7 @@ Pages serves that committed JSON. The browser only fetches `data/*.json`.
 Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml) (same bytes as [`scripts/export-kpi.yml`](scripts/export-kpi.yml)).
 
 - `workflow_dispatch`, `repository_dispatch` type `rh-fill`, pull requests (position math and the RH fill mapper), and pushes to `main` other than `data/**`
-- schedule: `0 * * * *` is the Robinhood poll and skips when `RH_API_KEY` or `RH_BASE64_PRIVATE_KEY` is unset. Mark refresh stays every 15 minutes on weekdays from 13:00–21:45 UTC, and hourly outside that window including weekends. Those mark crons do not call Robinhood
+- schedule: `0 * * * *` is the Robinhood poll and skips when `RH_API_KEY` or `RH_BASE64_PRIVATE_KEY` is unset. When the poll runs, it reads `RH_AGENTIC_ACCOUNT` and fails if that secret is unset. Mark refresh stays every 15 minutes on weekdays from 13:00–21:45 UTC, and hourly outside that window including weekends. Those mark crons do not call Robinhood
 - A fill payload, or a secrets-backed hourly poll, upserts `public.kpi_trades`, then the same run refreshes `kpi_sleeve_snapshots` and exports. A bad requested payload, or a failed refresh, does not commit KPI JSON
 - Reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `SUPABASE_DB_URL` is optional
 - Crypto marks: public Coinbase ticker, then Yahoo `{SYMBOL}-USD`. Equities marks: Finnhub when `FINNHUB_API_KEY` is set, then Yahoo chart. CoinStats and Alpha Vantage are later fallbacks when those keys are set
@@ -128,14 +128,15 @@ Add these repository secrets (Settings → Secrets and variables → Actions). D
 | `FINNHUB_API_KEY` | Optional equities mark. Yahoo chart is the public fallback. |
 | `COINSTATS_API_KEY` | Optional crypto mark after Coinbase and Yahoo. |
 | `ALPHA_VANTAGE_API_KEY` | Optional equities mark after Finnhub and Yahoo. |
+| `RH_AGENTIC_ACCOUNT` | Agentic account for the hourly poll and for signed cash REST. Set this repository secret before merge. The poll and the cash read fail if it is unset. |
 
-Public Coinbase and Yahoo marks do not need those quote keys. `ROBINHOOD_TOKEN` is not used. Optional later, not required to merge: `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` turn on the Actions hourly poll. `RH_AGENTIC_ACCOUNT` overrides `546048042` on that poll.
+Public Coinbase and Yahoo marks do not need those quote keys. `ROBINHOOD_TOKEN` is not used. Optional later, not required to merge: `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` turn on the Actions hourly poll. That poll reads the Agentic account from `RH_AGENTIC_ACCOUNT` and fails if the variable is unset.
 
 ### Agentic cash
 
 Export KPI writes the USD and USDC lines on `data/live_book.json` from a cash read, then recomputes `book_usd` as the cash holdings sum. `running_balance_usd` is the agentic total: that cash plus each marked open lot. The day kill and the day target stay fractions of that running balance. Kill headroom (`kill_remaining_usd`) is `max(0, |dayKillFrac| × running balance + min(day_pnl_usd, 0))`, using `LIVE_RAILS.dayKillFrac` from `derive.js`.
 
-The read order is signed Robinhood REST when `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` are both set, otherwise `data/rh_cash.json`, otherwise the cash lines already on the file. Unset keys skip REST. That skip does not fail the export, including when `KPI_REFRESH_EXPECTED=1`. The hourly `0 * * * *` poll stays skip-when-unset and does not call Robinhood. Those secrets stay optional.
+The read order is signed Robinhood REST when `RH_API_KEY` and `RH_BASE64_PRIVATE_KEY` are both set, otherwise `data/rh_cash.json`, otherwise the cash lines already on the file. Unset keys skip REST. That skip does not fail the export, including when `KPI_REFRESH_EXPECTED=1`. When those keys are set, the cash read uses `RH_AGENTIC_ACCOUNT` and fails if it is unset. The hourly `0 * * * *` poll stays skip-when-unset and does not call Robinhood. The API key secrets stay optional.
 
 `data/rh_cash.json` is the desk drop. `USD` and `USDC` are numbers. `as_of` is optional ISO8601. Unknown keys are ignored. A missing or invalid file is not a balance.
 
@@ -143,7 +144,7 @@ The read order is signed Robinhood REST when `RH_API_KEY` and `RH_BASE64_PRIVATE
 
 `day_realized_gross_usd` and `day_sell_fees_usd` are optional audit fields. When they are present, export copies them onto `data/live_book.json`. If all three numbers are present and gross minus sell fees differs from `day_realized_usd` by more than $0.01, export prints a warning and does not fail. The published day stays the net figure.
 
-Desk path: Robinhood MCP on Agentic account `546048042` → write `data/rh_cash.json` → run **Export KPI**. A push that only touches `data/**` does not start the workflow. Do not hardcode live balances in `derive.js`, the rail math, or `scripts/export_kpi.py`. The drop file is the source of truth until Desk replaces it.
+Desk path: Robinhood MCP on the Agentic account named by `RH_AGENTIC_ACCOUNT` → write `data/rh_cash.json` → run **Export KPI**. A push that only touches `data/**` does not start the workflow. Do not hardcode live balances in `derive.js`, the rail math, or `scripts/export_kpi.py`. The drop file is the source of truth until Desk replaces it.
 
 ### RH fill ingest
 
@@ -156,7 +157,7 @@ git pull
 python3 scripts/sync_rh_kpi_trades.py --print-cursor
 ```
 
-Call Robinhood Trading MCP `get_crypto_orders` with `rhs_account_number` `546048042`, `state` `filled`, and `updated_at_gte` set to the printed timestamp. If the response has `next`, call again with `cursor` set to that value until `next` is absent. Save the orders as one JSON document (`{"results":[...]}` or `{"data":{"results":[...]}}` or a list). USDC is skipped by the script. Sleeve is `crypto` or `equities` from asset class.
+Call Robinhood Trading MCP `get_crypto_orders` with `rhs_account_number` set to `RH_AGENTIC_ACCOUNT`, `state` `filled`, and `updated_at_gte` set to the printed timestamp. If the response has `next`, call again with `cursor` set to that value until `next` is absent. Save the orders as one JSON document (`{"results":[...]}` or `{"data":{"results":[...]}}` or a list). USDC is skipped by the script. Sleeve is `crypto` or `equities` from asset class.
 
 ```bash
 gh workflow run export-kpi.yml --repo jrg185/the-book -f sync_rh_json="$(cat fills.json)"
@@ -294,9 +295,9 @@ The migration does not write `kpi_trades` and does not place orders. It does not
 
 Apply order on agentic-signals:
 
-1. Migration: [`scripts/migrations/20261008_book_seeds.sql`](scripts/migrations/20261008_book_seeds.sql) creates `public.book_seeds` and redefines `kpi_trades_scrubbed` to divide by the joined seed. It does not insert rows. Eng applies it after merge. Do not apply it from a checkout.
-2. Seed sync: Export KPI runs `scripts/sync_book_seeds.py`, which upserts the config into `public.book_seeds`.
-3. View use: the export reads `kpi_trades_scrubbed` only after that sync. An empty seed table makes the view fractions null.
+1. Migration: [`scripts/migrations/20261008_book_seeds.sql`](scripts/migrations/20261008_book_seeds.sql) creates `public.book_seeds`, inserts the same rows as `config/book_seeds.json`, and redefines `kpi_trades_scrubbed` to divide by the joined seed. Eng applies it after merge. Do not apply it from a checkout.
+2. Seed sync: Export KPI runs `scripts/sync_book_seeds.py`, which upserts the config into `public.book_seeds` so the file stays the source.
+3. View use: the export reads `kpi_trades_scrubbed` after that sync.
 
 `--book 300` in `jrg185/agentic-crypto-signals` is a follow-up. This repo does not change that refresh command.
 
