@@ -16,7 +16,7 @@ import {
   shownBooks,
   warehouseSleeveAsOf,
 } from "../derive.js";
-import { approxCents, assertCentsDiffer, assertCentsEqual } from "./cents.mjs";
+import { approxCents, approxFrac, assertCentsDiffer, assertCentsEqual, assertFracEqual } from "./cents.mjs";
 
 const live = JSON.parse(readFileSync(new URL("../data/live_book.json", import.meta.url), "utf8"));
 const summary = JSON.parse(readFileSync(new URL("../data/kpi_summary.json", import.meta.url), "utf8"));
@@ -63,6 +63,55 @@ function railDollars(bookUsd, frac) {
 
 function roundCents(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function holdingNonzero(value) {
+  return typeof value === "number" && Number.isFinite(value) && !approxCents(value, 0);
+}
+
+// book_usd is the holdings sum. One nonzero cash line is that sum. Two or
+// more nonzero lines each leave the rest of the sum outside themselves, so
+// none of them is the book. All-zero cash is a zero book.
+function assertHoldingsVersusBook(rows, bookUsd, label = "") {
+  const nonzero = rows.filter((row) => holdingNonzero(row.valueUsd));
+  const tag = (ticker) => (label ? `${label} ${ticker}` : ticker);
+  if (nonzero.length >= 2) {
+    for (const row of rows) assertCentsDiffer(row.valueUsd, bookUsd, tag(row.ticker));
+    return;
+  }
+  if (nonzero.length === 1) {
+    assertCentsEqual(nonzero[0].valueUsd, bookUsd, tag(nonzero[0].ticker));
+    return;
+  }
+  assertCentsEqual(bookUsd, 0, tag("book"));
+  for (const row of rows) assertCentsEqual(row.valueUsd, 0, tag(row.ticker));
+}
+
+// Two dollar readings may land on the same cents. Require a difference only
+// when the sources that produce them are already apart.
+function assertCentsDifferWhen(actual, expected, apart, message) {
+  if (apart) assertCentsDiffer(actual, expected, message);
+  else assertCentsEqual(actual, expected, message);
+}
+
+function assertFracDifferWhen(actual, expected, apart, message) {
+  if (!apart) {
+    if (actual == null || expected == null) {
+      assert.equal(actual, expected, message);
+      return;
+    }
+    assertFracEqual(actual, expected, message);
+    return;
+  }
+  if (actual == null || expected == null) {
+    assert.notEqual(actual, expected, message);
+    return;
+  }
+  assert.equal(
+    approxFrac(actual, expected),
+    false,
+    message ?? `${actual} and ${expected} match as fractions`
+  );
 }
 
 // Combined seed the export subtracts from cash + lots. Read from the canonical
@@ -210,6 +259,7 @@ function assertCashDrop(drop, sources) {
   assertCentsEqual(usd.valueUsd, drop.USD, label);
   assertCentsEqual(usdc.valueUsd, drop.USDC, label);
   assertCentsEqual(view.bookUsd, applied.book_usd, label);
+  assertHoldingsVersusBook(holdingRows(applied), applied.book_usd, label);
   assertLiveRails(view, applied);
   assert.deepEqual(
     (applied.positions || []).map((row) => row.ticker),
@@ -243,24 +293,48 @@ function assertCashDrop(drop, sources) {
 
 function assertLiveRails(view, book) {
   const base = view.runningBalance;
-  assert.ok(base != null && base !== 0);
-  assertCentsEqual(view.dayKill, railDollars(base, LIVE_RAILS.dayKillFrac));
-  assertCentsEqual(view.dayTarget, railDollars(base, LIVE_RAILS.dayTargetFrac));
   const signal = book.signal_book_usd;
+  const account = view.bookUsd;
+  const published = book.book_usd;
+  // Same fallback as cryptoBookView. A zero running balance is not the rail.
+  const rail =
+    base != null && base !== 0
+      ? base
+      : signal != null
+        ? signal
+        : account == null
+          ? published
+          : null;
+  if (rail != null && rail !== 0) {
+    assertCentsEqual(view.dayKill, railDollars(rail, LIVE_RAILS.dayKillFrac));
+    assertCentsEqual(view.dayTarget, railDollars(rail, LIVE_RAILS.dayTargetFrac));
+  } else if (rail === 0) {
+    assertCentsEqual(view.dayKill, 0);
+    assertCentsEqual(view.dayTarget, 0);
+  } else {
+    assert.equal(view.dayKill, null);
+    assert.equal(view.dayTarget, null);
+  }
   // Cents can match a different raw book. Each rail is a mismatch only when
-  // its rounded dollars differ, not when signal !== base.
-  if (signal != null) {
+  // its rounded dollars differ, not when signal !== rail.
+  if (signal != null && rail != null && rail !== 0) {
     const signalKill = railDollars(signal, LIVE_RAILS.dayKillFrac);
-    if (!approxCents(signalKill, railDollars(base, LIVE_RAILS.dayKillFrac))) {
+    if (!approxCents(signalKill, railDollars(rail, LIVE_RAILS.dayKillFrac))) {
       assertCentsDiffer(view.dayKill, signalKill);
     }
     const signalTarget = railDollars(signal, LIVE_RAILS.dayTargetFrac);
-    if (!approxCents(signalTarget, railDollars(base, LIVE_RAILS.dayTargetFrac))) {
+    if (!approxCents(signalTarget, railDollars(rail, LIVE_RAILS.dayTargetFrac))) {
       assertCentsDiffer(view.dayTarget, signalTarget);
     }
   }
-  assertCentsEqual(view.killHeadroom, killRemainingUsd(base, book.day_pnl_usd));
-  assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / base) < 1e-12);
+  if (base != null) {
+    assertCentsEqual(view.killHeadroom, killRemainingUsd(base, book.day_pnl_usd));
+  }
+  if (rail == null || rail === 0 || view.killHeadroom == null) {
+    assert.equal(view.killHeadroomFrac, null);
+  } else {
+    assert.ok(Math.abs(view.killHeadroomFrac - view.killHeadroom / rail) < 1e-12);
+  }
 }
 
 test("rails that round to the same cents still follow the running balance", () => {
@@ -306,21 +380,45 @@ test("the published book is the holdings sum, and the rails use the running bala
     const name = String(row.ticker || "").trim().toUpperCase();
     assert.ok(name !== "USD" && name !== "USDC");
   }
-  // Open lots sit on top of cash. With none, the agentic total is the cash sum.
-  if (cryptoOpen) assertCentsDiffer(books[0].runningBalance, sum);
-  assertCentsDiffer(books[0].runningBalance, live.signal_book_usd);
+  // Open lots sit on top of cash. With none, or with lots worth nothing, the
+  // agentic total is the cash sum. A stored balance can also equal the signal
+  // book, a seed, or a sleeve fraction. Those matches are still the agentic total.
+  if (Array.isArray(live.positions)) {
+    const cryptoLots = openLots.filter((row) => row.sleeve === "crypto");
+    if (cryptoLots.every((row) => typeof row.valueUsd === "number")) {
+      const lotValue = roundCents(cryptoLots.reduce((total, row) => total + row.valueUsd, 0));
+      assertCentsDifferWhen(books[0].runningBalance, sum, !approxCents(lotValue, 0));
+    }
+  }
+  assertCentsDifferWhen(
+    books[0].runningBalance,
+    live.signal_book_usd,
+    !approxCents(agenticTotal(live), live.signal_book_usd)
+  );
   assertCentsEqual(books[0].equitiesUsd, 0);
   assertCentsEqual(books[0].dayPnl, live.day_pnl_usd ?? null);
   assertLiveRails(books[0], live);
-  assertCentsDiffer(books[0].bookUsd, live.signal_book_usd);
+  assertCentsDifferWhen(books[0].bookUsd, live.signal_book_usd, !approxCents(sum, live.signal_book_usd));
   for (const seed of [SEEDS_USD.crypto, SEEDS_USD.equities, SEEDS_USD.combined]) {
-    assertCentsDiffer(books[0].bookUsd, seed);
-    assertCentsDiffer(books[0].runningBalance, seed);
+    assertCentsDifferWhen(books[0].bookUsd, seed, !approxCents(sum, seed));
+    assertCentsDifferWhen(books[0].runningBalance, seed, !approxCents(agenticTotal(live), seed));
   }
-  assertCentsDiffer(books[0].runningBalance, seededBalance("crypto"));
-  assertCentsDiffer(books[0].runningBalance, seededBalance("equities"));
+  assertCentsDifferWhen(
+    books[0].runningBalance,
+    seededBalance("crypto"),
+    !approxCents(agenticTotal(live), seededBalance("crypto"))
+  );
+  assertCentsDifferWhen(
+    books[0].runningBalance,
+    seededBalance("equities"),
+    !approxCents(agenticTotal(live), seededBalance("equities"))
+  );
   if (live.running_balance_usd == null) {
-    assertCentsDiffer(books[0].runningBalance, seededBalance("combined"));
+    assertCentsDifferWhen(
+      books[0].runningBalance,
+      seededBalance("combined"),
+      !approxCents(agenticTotal(live), seededBalance("combined"))
+    );
   }
   assert.equal(books.some((book) => book.sleeve === "equities"), false);
   assert.equal(books.some((book) => book.sleeve === "combined"), false);
@@ -337,7 +435,12 @@ test("the published book is the holdings sum, and the rails use the running bala
   assertCentsEqual(live.running_pnl_usd, expectedRunning);
   assertCentsEqual(live.running_balance_usd, books[0].runningBalance);
   assertCentsEqual(live.kill_remaining_usd, killRemainingUsd(books[0].runningBalance, live.day_pnl_usd));
-  assertCentsDiffer(books[0].realizedPnl, live.realized_pnl_usd);
+  // Reconciled realized can print the same cents as the warehouse field.
+  assertCentsDifferWhen(
+    books[0].realizedPnl,
+    live.realized_pnl_usd,
+    !approxCents(pnl.realized, live.realized_pnl_usd)
+  );
   assert.equal(SEEDS_USD.combined, combinedSeed);
 });
 
@@ -357,7 +460,7 @@ test("open names are the live book holdings, not tape coins", () => {
     rows.map((row) => [row.ticker, row.valueUsd]),
     cashRows(live)
   );
-  for (const row of rows) assertCentsDiffer(row.valueUsd, live.book_usd, row.ticker);
+  assertHoldingsVersusBook(rows, live.book_usd);
   const tapeNames = new Set((openPositions.positions || []).map((row) => row.ticker));
   for (const row of rows) {
     if (row.ticker === "USD" || row.ticker === "USDC") continue;
@@ -373,11 +476,37 @@ test("open names are the live book holdings, not tape coins", () => {
   assert.equal(merged.candidates, undefined);
   assertCentsEqual(merged.book_usd, live.book_usd);
   assertCentsEqual(merged.signal_book_usd, 775);
-  assertCentsDiffer(merged.book_usd, 775);
+  assertCentsDifferWhen(merged.book_usd, 775, !approxCents(live.book_usd, 775));
   assert.deepEqual(
     holdingRows(merged).map((row) => row.ticker),
     ["USD", "USDC"]
   );
+});
+
+test("a single nonzero cash row equals the book and two nonzero rows do not", () => {
+  const shapes = [
+    { name: "USD only", USD: 12.25, USDC: 0 },
+    { name: "USDC only", USD: 0, USDC: 7.8 },
+    { name: "both", USD: 12.25, USDC: 7.8 },
+    { name: "all zero", USD: 0, USDC: 0 },
+  ];
+  for (const shape of shapes) {
+    const book = {
+      holdings: [
+        { ticker: "USD", sleeve: "crypto", value_usd: shape.USD },
+        { ticker: "USDC", sleeve: "crypto", value_usd: shape.USDC, cost_basis_usd: shape.USDC },
+      ],
+      positions: [],
+    };
+    book.book_usd = holdingsSum(book);
+    const rows = holdingRows(book);
+    const view = cryptoBookView(book);
+    assert.equal(view == null, false, shape.name);
+    assertCentsEqual(view.bookUsd, book.book_usd, shape.name);
+    assertCentsEqual(view.runningBalance, book.book_usd, shape.name);
+    assertHoldingsVersusBook(rows, view.bookUsd, shape.name);
+    assertLiveRails(view, book);
+  }
 });
 
 const publicSignal = {
@@ -447,12 +576,15 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
     rows.map((row) => [row.ticker, row.valueUsd]),
     cashRows(live)
   );
-  for (const row of rows) assertCentsDiffer(row.valueUsd, 775, row.ticker);
+  for (const [ticker, value] of cashRows(live)) {
+    const row = rows.find((item) => item.ticker === ticker);
+    assertCentsDifferWhen(row.valueUsd, 775, !approxCents(value, 775), ticker);
+  }
   assert.equal(view.sleeve, "crypto");
   assertCentsEqual(view.equitiesUsd, 0);
   assertCentsEqual(merged.book_usd, sum);
   assertCentsEqual(merged.signal_book_usd, 775);
-  assertCentsDiffer(merged.book_usd, publicSignal.book_usd);
+  assertCentsDifferWhen(merged.book_usd, publicSignal.book_usd, !approxCents(sum, publicSignal.book_usd));
   assertCentsEqual(merged.day_pnl_usd, withPnl.day_pnl_usd);
   assertCentsDiffer(merged.day_pnl_usd, publicSignal.day_pnl_usd);
   const keptKill =
@@ -462,37 +594,74 @@ test("account P&L stays on the card and is not a sleeve-seed fraction", () => {
   assertCentsEqual(merged.unrealized_pnl_usd, withPnl.unrealized_pnl_usd);
   assertCentsEqual(merged.running_pnl_usd, withPnl.running_pnl_usd);
   assertCentsEqual(merged.running_balance_usd, withPnl.running_balance_usd);
-  assertCentsDiffer(merged.running_balance_usd, sum);
+  assertCentsDifferWhen(merged.running_balance_usd, sum, !approxCents(withPnl.running_balance_usd, sum));
   assertCentsDiffer(merged.running_balance_usd, 775);
   assert.equal(merged.candidates, undefined);
   assertCentsEqual(view.bookUsd, sum);
   assertCentsEqual(view.runningBalance, agenticTotal(merged));
-  assertCentsDiffer(view.runningBalance, withPnl.running_balance_usd);
-  if (openPositionRows(merged).some((row) => row.sleeve === "crypto")) {
-    assertCentsDiffer(view.runningBalance, sum);
+  assertCentsDifferWhen(
+    view.runningBalance,
+    withPnl.running_balance_usd,
+    !approxCents(agenticTotal(merged), withPnl.running_balance_usd)
+  );
+  if (Array.isArray(merged.positions)) {
+    const cardLots = openPositionRows(merged).filter((row) => row.sleeve === "crypto");
+    if (cardLots.every((row) => typeof row.valueUsd === "number")) {
+      const lotValue = roundCents(cardLots.reduce((total, row) => total + row.valueUsd, 0));
+      assertCentsDifferWhen(view.runningBalance, sum, !approxCents(lotValue, 0));
+    }
   }
-  assertCentsDiffer(view.runningBalance, 775);
-  assertCentsDiffer(view.bookUsd, 775);
-  assertCentsDiffer(view.bookUsd, publicSignal.book_usd);
+  assertCentsDifferWhen(view.runningBalance, 775, !approxCents(agenticTotal(merged), 775));
+  assertCentsDifferWhen(view.bookUsd, 775, !approxCents(sum, 775));
+  assertCentsDifferWhen(view.bookUsd, publicSignal.book_usd, !approxCents(sum, publicSignal.book_usd));
   assertCentsEqual(view.dayPnl, withPnl.day_pnl_usd);
   assertLiveRails(view, merged);
   const card = reconciledPnl(merged);
   assertCentsEqual(view.realizedPnl, card.realized);
   assertCentsEqual(view.unrealizedPnl, card.unrealized);
   assertCentsEqual(view.runningPnl, card.running);
-  assertCentsDiffer(view.realizedPnl, withPnl.realized_pnl_usd);
-  assertCentsDiffer(view.runningPnl, withPnl.running_pnl_usd);
+  assertCentsDifferWhen(
+    view.realizedPnl,
+    withPnl.realized_pnl_usd,
+    !approxCents(card.realized, withPnl.realized_pnl_usd)
+  );
+  assertCentsDifferWhen(
+    view.runningPnl,
+    withPnl.running_pnl_usd,
+    !approxCents(card.running, withPnl.running_pnl_usd)
+  );
   assert.notEqual(view.realizedPnl, null);
   assert.notEqual(view.runningPnl, null);
   const seedDollars = Math.round((SEEDS_USD.crypto * crypto.realized_pnl_frac + Number.EPSILON) * 100) / 100;
-  assertCentsDiffer(view.realizedPnl, seedDollars);
-  assertCentsDiffer(view.runningPnl, Math.round((SEEDS_USD.crypto * crypto.running_pnl_frac + Number.EPSILON) * 100) / 100);
-  assert.ok(Math.abs(view.realizedPnlFrac - card.realized / card.marked) < 1e-12);
-  assert.notEqual(view.realizedPnlFrac, withPnl.realized_pnl_usd / SEEDS_USD.crypto);
-  assertCentsDiffer(view.runningBalance, snap.runningBalance);
-  assertCentsDiffer(view.realizedPnl, snap.realizedPnl);
-  assertCentsDiffer(view.runningPnl, snap.runningPnl);
-  assertCentsDiffer(view.realizedPnl, deriveSleeve(equities).realizedPnl);
+  const runningSeedDollars =
+    Math.round((SEEDS_USD.crypto * crypto.running_pnl_frac + Number.EPSILON) * 100) / 100;
+  assertCentsDifferWhen(view.realizedPnl, seedDollars, !approxCents(card.realized, seedDollars));
+  assertCentsDifferWhen(view.runningPnl, runningSeedDollars, !approxCents(card.running, runningSeedDollars));
+  if (card.marked) {
+    assert.ok(Math.abs(view.realizedPnlFrac - card.realized / card.marked) < 1e-12);
+  } else {
+    assert.equal(view.realizedPnlFrac, null);
+  }
+  const storedRealizedFrac = withPnl.realized_pnl_usd / SEEDS_USD.crypto;
+  const cardRealizedFrac = card.marked ? card.realized / card.marked : null;
+  const fracApart =
+    cardRealizedFrac == null || storedRealizedFrac == null
+      ? cardRealizedFrac !== storedRealizedFrac
+      : !approxFrac(cardRealizedFrac, storedRealizedFrac);
+  assertFracDifferWhen(view.realizedPnlFrac, storedRealizedFrac, fracApart);
+  assertCentsDifferWhen(
+    view.runningBalance,
+    snap.runningBalance,
+    !approxCents(agenticTotal(merged), snap.runningBalance)
+  );
+  assertCentsDifferWhen(view.realizedPnl, snap.realizedPnl, !approxCents(card.realized, snap.realizedPnl));
+  assertCentsDifferWhen(view.runningPnl, snap.runningPnl, !approxCents(card.running, snap.runningPnl));
+  const equitySnap = deriveSleeve(equities);
+  assertCentsDifferWhen(
+    view.realizedPnl,
+    equitySnap.realizedPnl,
+    !approxCents(card.realized, equitySnap.realizedPnl)
+  );
   const published = JSON.stringify(live);
   const liveCard = cryptoBookView(live);
   const livePnl = reconciledPnl(live);
@@ -669,13 +838,22 @@ test("open nets stay beside cash and the rails follow the running balance", () =
   assertCentsEqual(view.unrealizedPnl, withOpen.positions[0].unrealized_pnl_usd);
   assertCentsEqual(view.realizedPnl, openCard.realized);
   assertCentsEqual(view.realizedPnl + view.unrealizedPnl, view.runningPnl);
-  assertCentsDiffer(view.runningPnl, live.running_pnl_usd ?? null);
+  assertCentsDifferWhen(
+    view.runningPnl,
+    live.running_pnl_usd ?? null,
+    live.running_pnl_usd == null || !approxCents(openCard.running, live.running_pnl_usd)
+  );
   assertCentsEqual(view.dayPnl, live.day_pnl_usd);
   assertLiveRails(view, merged);
   assertCentsEqual(view.runningBalance, sum + lotUsd);
-  assertCentsDiffer(view.dayKill, railDollars(sum, LIVE_RAILS.dayKillFrac));
+  const cashKill = railDollars(sum, LIVE_RAILS.dayKillFrac);
+  assertCentsDifferWhen(
+    view.dayKill,
+    cashKill,
+    !approxCents(railDollars(view.runningBalance, LIVE_RAILS.dayKillFrac), cashKill)
+  );
   assertCentsEqual(view.equitiesUsd, 0);
-  assertCentsDiffer(view.bookUsd, sum + lotUsd);
+  assertCentsDifferWhen(view.bookUsd, sum + lotUsd, !approxCents(lotUsd, 0));
   assertCentsEqual(view.runningBalance, sum + lotUsd);
   assert.deepEqual(
     holdingRows(merged).map((row) => row.ticker),
@@ -812,7 +990,11 @@ test("the book card clock is the warehouse sleeve as_of, not the signal generate
   // A stamp already on the book is the card clock even when the summary is newer.
   assert.equal(warehouseSleeveAsOf(live, summary), live.sleeve_as_of);
   assert.equal(cryptoBookView(live).asOf, live.sleeve_as_of);
-  assert.notEqual(cryptoBookView(live).asOf, live.generated_at);
+  if (live.sleeve_as_of !== live.generated_at) {
+    assert.notEqual(cryptoBookView(live).asOf, live.generated_at);
+  } else {
+    assert.equal(cryptoBookView(live).asOf, live.sleeve_as_of);
+  }
   assert.equal(cryptoBookView(live).signalGeneratedAt, live.generated_at);
 
   const merged = mergeLiveBook(
