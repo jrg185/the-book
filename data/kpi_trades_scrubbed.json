@@ -1488,6 +1488,30 @@
     "fee_frac_of_book": 0.0016
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T09:56:36.657547+00:00",
+    "ticker": "UNI",
+    "side": "sell",
+    "notional_frac_of_book": 0.1727,
+    "pnl_frac_of_book": 0.006073,
+    "why": "Trail exit: UNI scaled leftover breached its cost+5% trail (trail ~7.4036, bid 7.3795); full exit of the lot.",
+    "running_pnl_frac": 0.027719,
+    "running_balance_frac": 1.027719,
+    "fee_frac_of_book": 0.001633
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T09:56:54.932169+00:00",
+    "ticker": "AXS",
+    "side": "buy",
+    "notional_frac_of_book": 0.171533,
+    "pnl_frac_of_book": 0.0,
+    "why": "Rotate UNI proceeds into top unheld gate clear: AXS p_up 0.5296 >= 0.50 temp live gate (artifact 527fdde); $51.50 under $100 cap; no cash reserve per Joe.",
+    "running_pnl_frac": 0.027719,
+    "running_balance_frac": 1.027719,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
