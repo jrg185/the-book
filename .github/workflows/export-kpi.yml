@@ -169,6 +169,9 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           COINSTATS_API_KEY: ${{ secrets.COINSTATS_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          RH_API_KEY: ${{ secrets.RH_API_KEY }}
+          RH_BASE64_PRIVATE_KEY: ${{ secrets.RH_BASE64_PRIVATE_KEY }}
+          RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
         run: python3 scripts/refresh_kpi_snapshots.py
 
       # Apply order: migration, then this seed sync, then the export reads the view.

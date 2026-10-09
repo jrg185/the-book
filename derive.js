@@ -197,13 +197,14 @@ export function warehouseSleeveAsOf(book, summary) {
   return null;
 }
 
-// RH Agentic total: USD and USDC holdings plus each marked crypto open lot.
+// RH Agentic total: USD and USDC holdings plus each marked open lot.
 // USDC stays a cash line, so it is not added again from positions.
-// A missing value leaves the total unknown. No position list means this
-// book has not published lots, and the stored running balance still shows.
+// Crypto and equities lots are both included. A missing value leaves the
+// total unknown. No position list means this book has not published lots,
+// and the stored running balance still shows.
 function agenticBookUsd(book) {
   if (!book || !Array.isArray(book.positions)) return null;
-  const rows = holdingRows(book).concat(openPositionRows(book).filter((row) => row.sleeve === "crypto"));
+  const rows = holdingRows(book).concat(openPositionRows(book));
   if (!rows.length || rows.some((row) => row.valueUsd == null)) return null;
   return roundCents(rows.reduce((sum, row) => sum + row.valueUsd, 0));
 }
@@ -218,9 +219,10 @@ function lotUnrealized(row) {
   return value - qty * avg;
 }
 
-// Open crypto marks versus cost. USD and USDC are cash. A flat name is
-// skipped. An open lot with no unrealized figure and no cost leaves the
-// total unknown so the card does not invent a split.
+// Open lot marks versus cost. USD and USDC are cash. Crypto and equities
+// both count. A flat name is skipped. An open lot with no unrealized
+// figure and no cost leaves the total unknown so the card does not invent
+// a split.
 function openCryptoUnrealized(book) {
   if (!book || !Array.isArray(book.positions)) return null;
   let sum = 0;
@@ -229,7 +231,7 @@ function openCryptoUnrealized(book) {
     const ticker = String(row.ticker).trim().toUpperCase();
     if (ticker === "USD" || ticker === "USDC") continue;
     const sleeve = String(row.sleeve || "crypto").trim().toLowerCase();
-    if (sleeve !== "crypto") continue;
+    if (sleeve !== "crypto" && sleeve !== "equities") continue;
     const qty = num(row.qty);
     if (qty == null || qty === 0) continue;
     const unreal = lotUnrealized(row);

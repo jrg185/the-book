@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Account book shared by the sleeve snapshot and the live-book export.
 
-Balance is cash plus open crypto lots, marked once. Running P&L is that
+Balance is cash plus open crypto and equities lots, marked once. Running P&L is that
 balance minus the combined seed in config/book_seeds.json. Unrealized is
 open quantity times (mark - average cost) on the Robinhood basis, which
 leaves the buy fee out of cost. Realized is running P&L minus unrealized,
@@ -17,10 +17,12 @@ A missing drop does not invent seed + trade P&L + open mark-to-market.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import math
 import os
 import sys
+import uuid
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -65,11 +67,57 @@ def marks_path() -> Path:
     return Path("/tmp") / MARKS_NAME
 
 
+def marks_max_age_seconds(path: Path | None = None) -> int:
+    """How long a saved quote set may be reused. Read from config."""
+    config = path or CONFIG_PATH
+    try:
+        payload = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AccountBookError(f"account tolerance config is unreadable: {config}") from exc
+    if not isinstance(payload, dict) or "marks_max_age_seconds" not in payload:
+        raise AccountBookError("account tolerance config needs marks_max_age_seconds")
+    raw = payload.get("marks_max_age_seconds")
+    try:
+        amount = int(str(raw))
+    except (TypeError, ValueError) as exc:
+        raise AccountBookError("marks_max_age_seconds must be a non-negative integer") from exc
+    if amount < 0:
+        raise AccountBookError("marks_max_age_seconds must be a non-negative integer")
+    return amount
+
+
+def _parse_utc(value) -> dt.datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = dt.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def _marks_are_fresh(payload: dict) -> bool:
+    """A quote file from this run. Missing, old, or future stamps are not reused."""
+    written = _parse_utc(payload.get("written_at"))
+    if written is None:
+        return False
+    age = (dt.datetime.now(dt.timezone.utc) - written).total_seconds()
+    if age < -120:
+        return False
+    return age <= marks_max_age_seconds()
+
+
 def save_marks(marks: dict, as_of: str) -> Path:
     """Persist one quote set so export does not fetch a second set."""
     path = marks_path()
+    run_id = (os.environ.get("KPI_MARKS_RUN_ID") or "").strip() or uuid.uuid4().hex
     payload = {
         "as_of": as_of,
+        "written_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "run_id": run_id,
         "marks": {
             f"{sleeve}:{ticker}": format(price, "f")
             for (sleeve, ticker), price in sorted(marks.items())
@@ -81,7 +129,11 @@ def save_marks(marks: dict, as_of: str) -> Path:
 
 
 def load_marks() -> dict | None:
-    """Marks saved by the refresh step in this run. None when the file is absent or stale-shaped."""
+    """Marks saved by the refresh step in this run.
+
+    None when the file is absent, stale-shaped, older than the configured
+    age, or stamped for a different KPI_MARKS_RUN_ID.
+    """
     path = marks_path()
     if not path.is_file():
         return None
@@ -89,7 +141,16 @@ def load_marks() -> dict | None:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    raw = payload.get("marks") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    if not _marks_are_fresh(payload):
+        print("stale quote set ignored", file=sys.stderr)
+        return None
+    expected_run = (os.environ.get("KPI_MARKS_RUN_ID") or "").strip()
+    if expected_run and str(payload.get("run_id") or "") != expected_run:
+        print("quote set run id does not match this run", file=sys.stderr)
+        return None
+    raw = payload.get("marks")
     if not isinstance(raw, dict) or not raw:
         return None
     marks = {}
@@ -184,13 +245,13 @@ def _refresh():
     return refresh
 
 
-def _crypto_lots(book: dict, marks: dict) -> tuple[Decimal, Decimal, list[tuple[Decimal, Decimal]]]:
-    """Open crypto quantity marked once. Returns exact lots, exact unrealized, and per-lot pairs."""
+def _marked_lots(book: dict, marks: dict) -> tuple[Decimal, Decimal, list[tuple[Decimal, Decimal]]]:
+    """Open crypto and equities lots, one quote set. Returns value, unrealized, and pairs."""
     lots = Decimal("0")
     unreal = Decimal("0")
     pairs: list[tuple[Decimal, Decimal]] = []
     for (sleeve, ticker), pos in book.items():
-        if sleeve != "crypto" or ticker in {"USD", "USDC"}:
+        if sleeve not in {"crypto", "equities"} or ticker in {"USD", "USDC"}:
             continue
         if (sleeve, ticker) not in marks:
             raise AccountBookError(f"open ticker has no mark: {sleeve} {ticker}")
@@ -271,7 +332,7 @@ def statement(
     realized_raw, book = refresh.apply_books(fills)
     trade_pnl = sum(realized_raw.values(), Decimal("0"))
     equities_realized = realized_raw.get("equities", Decimal("0"))
-    lots, unreal_exact, pairs = _crypto_lots(book, marks)
+    lots, unreal_exact, pairs = _marked_lots(book, marks)
     published = publish_identity(
         held,
         [value for value, _gap in pairs],
@@ -419,23 +480,29 @@ def _audit(
     funding = seed + equities_realized - net_funding
     _realized, live_book = refresh.apply_books(fills)
     live_crypto_u = _sleeve_unrealized(live_book, marks, "crypto") if live_book else Decimal("0")
+    live_equity_u = _sleeve_unrealized(live_book, marks, "equities") if live_book else Decimal("0")
     snap = snapshot_marks if snapshot_marks is not None else marks
     snap_crypto_u = _sleeve_unrealized(live_book, snap, "crypto") if live_book else Decimal("0")
     try:
         equity_u = _sleeve_unrealized(live_book, snap, "equities") if live_book else Decimal("0")
     except AccountBookError:
-        equity_u = Decimal("0")
-    mark_drift = snap_crypto_u - live_crypto_u
+        equity_u = live_equity_u
+    mark_drift = (snap_crypto_u - live_crypto_u) + (equity_u - live_equity_u)
+    equity_cost = Decimal("0")
+    for (sleeve, ticker), pos in live_book.items():
+        if sleeve != "equities" or ticker in {"USD", "USDC"}:
+            continue
+        equity_cost += pos["qty"] * pos["avg"]
     balance_exact = cash + sum(
         (pos["qty"] * marks[(sleeve, ticker)])
         for (sleeve, ticker), pos in live_book.items()
-        if sleeve == "crypto" and ticker not in {"USD", "USDC"}
+        if sleeve in {"crypto", "equities"} and ticker not in {"USD", "USDC"}
     )
     cents_gap = balance_exact - published_balance
     warehouse = seed + trade_pnl + snap_crypto_u + equity_u
     gap = warehouse - published_balance
     rounding = buy_rounding + sell_rounding
-    realized_exact = (balance_exact - seed) - live_crypto_u
+    realized_exact = (balance_exact - seed) - live_crypto_u - live_equity_u
     residual = realized_exact - (trade_pnl - buy_fees - rounding)
     return {
         "buy_fees": buy_fees,
@@ -451,7 +518,9 @@ def _audit(
         "equity_unrealized": equity_u,
         "gap": gap,
         "residual": residual,
-        "components_sum": buy_fees + buy_rounding + sell_rounding + basis_gap + funding + mark_drift + cents_gap + equity_u,
+        "components_sum": (
+            buy_fees + buy_rounding + sell_rounding + basis_gap + funding + mark_drift + cents_gap - equity_cost
+        ),
     }
 
 
@@ -479,7 +548,7 @@ def position_identity(positions: list | None, cash: dict | None, seed: Decimal) 
             continue
         ticker = str(row.get("ticker") or "").strip().upper()
         sleeve = str(row.get("sleeve") or "crypto").strip().lower()
-        if not ticker or ticker in {"USD", "USDC"} or sleeve != "crypto":
+        if not ticker or ticker in {"USD", "USDC"} or sleeve not in {"crypto", "equities"}:
             continue
         qty = _dec(row.get("qty"))
         if qty is None or qty == 0:

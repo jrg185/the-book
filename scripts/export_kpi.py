@@ -2129,12 +2129,12 @@ def kill_remaining_usd(running_balance, day_pnl) -> float | None:
 
 
 def agentic_book_usd(book) -> float | None:
-    """Cash holdings plus marked crypto open lots, in cents.
+    """Cash holdings plus marked open lots, in cents.
 
     Same rows as derive.js agenticBookUsd. A missing value leaves the total
     unknown. No position list means the book has not published lots.
-    USD and USDC positions are cash and are not added again. Equities are
-    not added.
+    USD and USDC positions are cash and are not added again. Open equities
+    lots are included.
     """
     if not isinstance(book, dict) or not isinstance(book.get("positions"), list):
         return None
@@ -2160,7 +2160,7 @@ def agentic_book_usd(book) -> float | None:
         if not ticker or ticker in {"USD", "USDC"}:
             continue
         sleeve = str(row.get("sleeve") or "crypto").strip().lower()
-        if sleeve != "crypto":
+        if sleeve not in {"crypto", "equities"}:
             continue
         qty = _decimal_or_none(row.get("qty"))
         if qty is None or qty == 0:
@@ -2731,13 +2731,17 @@ def _drop_number(cash, key: str):
 def apply_published_book(book: dict, cash: dict | None) -> dict:
     """Write the agentic total, the drop's day P&L, and kill headroom.
 
-    When a cash drop and a position list are present, running_balance_usd is
-    cash plus open crypto lots and running_pnl_usd is that total minus the
-    combined seed in BOOK_SEEDS. Realized and unrealized come from that same
-    total and the same marks as positions[].value_usd: unrealized is the open
-    lots, realized is running minus unrealized. A missing cash drop leaves
-    the previous balance and P&L and logs the absence. It does not fall back
-    to seed + trade P&L + open mark-to-market.
+    When a position list is present, running_balance_usd is the cash on the
+    file plus open crypto and equities lots, and running_pnl_usd is that
+    total minus the combined seed in BOOK_SEEDS. When the cash drop is
+    present, realized and unrealized come from that same total and the same
+    marks as positions[].value_usd: unrealized is the open lots, realized is
+    running minus unrealized. A missing cash drop still recomputes the
+    balance, running P&L, and kill from the holdings and lots already on the
+    file, keeps the previous realized and unrealized, and logs the absence.
+    It does not fall back to seed + trade P&L + open mark-to-market. When
+    the split cannot be rebuilt, the previous realized and unrealized stay
+    and a warning is printed.
     day_realized_usd, when present, is copied onto day_pnl_usd as-is. Gross
     and sell-fee audit fields are copied when present. If all three are
     present and gross minus fees differs from the net by more than one cent,
@@ -2746,13 +2750,19 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     kill_remaining_usd uses the running balance and that day.
     """
     out = dict(book) if isinstance(book, dict) else {}
-    if not isinstance(cash, dict):
-        print("cash drop absent; account balance, realized, and unrealized left unchanged")
-        return out
+    cash_missing = not isinstance(cash, dict)
+    if cash_missing:
+        print(
+            "cash drop absent; realized and unrealized left unchanged; "
+            "balance, running P&L, and kill recomputed from holdings and lots",
+            file=sys.stderr,
+        )
     net = _drop_number(cash, "day_realized_usd")
     gross = _drop_number(cash, "day_realized_gross_usd")
     fees = _drop_number(cash, "day_sell_fees_usd")
-    if net is None:
+    if cash_missing:
+        net = None
+    elif net is None:
         print("day_realized_usd absent from the cash drop; day_pnl_usd left unchanged")
     else:
         out["day_pnl_usd"] = net
@@ -2775,14 +2785,29 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
         return out
     out["running_balance_usd"] = marked
     out["running_pnl_usd"] = js_round_cents(Decimal(str(marked)) - BOOK_SEEDS["combined"])
-    import account_book
+    if not cash_missing:
+        import account_book
 
-    identity = account_book.position_identity(out.get("positions"), cash, BOOK_SEEDS["combined"])
-    if identity is not None and identity.get("realized_cents") is not None:
+        identity = account_book.position_identity(out.get("positions"), cash, BOOK_SEEDS["combined"])
         # Same cent round as the card. Realized is the remainder, so the
         # published sum matches running P&L to the cent. Prefer this split
         # over the warehouse row. sleeve_as_of stays the snapshot clock.
-        if usd_equal(identity["balance_cents"], marked):
+        if identity is None:
+            print(
+                "warning: realized and unrealized left unchanged; open lot value is missing",
+                file=sys.stderr,
+            )
+        elif identity.get("realized_cents") is None:
+            print(
+                "warning: realized and unrealized left unchanged; position unrealized is missing",
+                file=sys.stderr,
+            )
+        elif not usd_equal(identity["balance_cents"], marked):
+            print(
+                "warning: realized and unrealized left unchanged; marked balance does not match",
+                file=sys.stderr,
+            )
+        else:
             out["unrealized_pnl_usd"] = float(identity["unrealized_cents"])
             out["realized_pnl_usd"] = float(identity["realized_cents"])
             out["running_pnl_usd"] = float(identity["running_cents"])
@@ -2806,10 +2831,12 @@ def refresh_live_book(
 
     Does nothing when the account file is absent. Does not invent holdings.
     When account_pnl is the latest combined snapshot, sleeve_as_of is that
-    row's as_of. When a cash drop and open lots are present, running balance,
-    running P&L, realized, and unrealized come from cash plus those lots on
-    one mark set. Realized is running minus unrealized. A missing cash drop
-    leaves the previous figures. Day P&L is day_realized_usd from the cash drop when
+    row's as_of. Running balance and running P&L come from the cash lines
+    plus open crypto and equities lots on one mark set. When the cash drop
+    is present, realized and unrealized come from that same total. Realized
+    is running minus unrealized. A missing cash drop recomputes balance,
+    running P&L, and kill from the file's holdings and lots, and keeps the
+    previous realized and unrealized. Day P&L is day_realized_usd from the cash drop when
     that number is present; otherwise the signal copy stays and the absence
     is logged. kill_remaining_usd is the day-kill headroom on the running
     balance. generated_at stays the signal time. A missing snapshot does not
@@ -3843,10 +3870,11 @@ def self_test() -> int:
             ],
             "positions": [
                 {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 50, "unrealized_pnl_usd": 4},
-                {"sleeve": "equities", "ticker": "QQ", "qty": "3", "value_usd": 90},
+                {"sleeve": "equities", "ticker": "QQ", "qty": "3", "value_usd": 90, "unrealized_pnl_usd": 6},
                 {"sleeve": "crypto", "ticker": "USDC", "qty": "1", "value_usd": 9},
             ],
         }
+        agentic_with_equity = 190
         write_json(folder / "live_book.json", synthetic)
         day_cash = {
             "USD": 40,
@@ -3882,20 +3910,23 @@ def self_test() -> int:
             raise RuntimeError(f"audit fields were not copied: {published_day}")
         if not usd_equal(published_day["book_usd"], 50):
             raise RuntimeError(f"book_usd was not the cash sum: {published_day}")
-        if not usd_equal(published_day["running_balance_usd"], 100):
-            raise RuntimeError(f"running balance was not cash plus the crypto lot: {published_day}")
+        if not usd_equal(published_day["running_balance_usd"], agentic_with_equity):
+            raise RuntimeError(f"running balance was not cash plus open lots: {published_day}")
         if not usd_differ(published_day["running_balance_usd"], 804) or not usd_differ(published_day["running_pnl_usd"], 4):
             raise RuntimeError("warehouse running figures replaced the agentic total")
-        if not usd_equal(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["combined"])):
+        if not usd_equal(
+            published_day["running_pnl_usd"],
+            js_round_cents(Decimal(str(agentic_with_equity)) - BOOK_SEEDS["combined"]),
+        ):
             raise RuntimeError(f"running P&L was not the combined seed gap: {published_day}")
         if not usd_differ(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["crypto"])):
             raise RuntimeError("running P&L used the crypto seed")
-        if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(100, -2.5)):
+        if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, -2.5)):
             raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
         if published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
             raise RuntimeError(f"snapshot sleeve clock was dropped: {published_day}")
-        if not usd_equal(published_day.get("unrealized_pnl_usd"), 4):
-            raise RuntimeError(f"unrealized was not the open lot: {published_day}")
+        if not usd_equal(published_day.get("unrealized_pnl_usd"), 10):
+            raise RuntimeError(f"unrealized was not the open lots: {published_day}")
         identity_running = Decimal(str(published_day["running_pnl_usd"]))
         identity_unreal = Decimal(str(published_day["unrealized_pnl_usd"]))
         if not usd_equal(published_day.get("realized_pnl_usd"), identity_running - identity_unreal):
@@ -3920,7 +3951,9 @@ def self_test() -> int:
             sys.stderr = old_err
         if "differs from day_realized_usd" in stderr.getvalue():
             raise RuntimeError("a matching gross minus fees warned")
-        if matched["day_pnl_usd"] != -1.5 or not usd_equal(matched["kill_remaining_usd"], kill_remaining_usd(100, -1.5)):
+        if matched["day_pnl_usd"] != -1.5 or not usd_equal(
+            matched["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, -1.5)
+        ):
             raise RuntimeError(f"matched net was recomputed: {matched}")
         cent_cash = {
             "USD": 40,
@@ -3942,14 +3975,121 @@ def self_test() -> int:
             raise RuntimeError(f"a one-cent gap changed day P&L: {within}")
         profit_cash = {"USD": 40, "USDC": 10, "day_realized_usd": 6}
         profit = refresh_live_book(folder, fetch=False, cash=profit_cash)
-        if profit["day_pnl_usd"] != 6 or not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 0)):
+        if profit["day_pnl_usd"] != 6 or not usd_equal(
+            profit["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, 0)
+        ):
             raise RuntimeError(f"a positive day increased kill headroom: {profit}")
-        if not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 6)):
+        if not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, 6)):
             raise RuntimeError("positive day headroom did not match a flat day")
         stopped_cash = {"USD": 40, "USDC": 10, "day_realized_usd": -40}
         stopped = refresh_live_book(folder, fetch=False, cash=stopped_cash)
         if stopped["day_pnl_usd"] != -40 or not usd_equal(stopped["kill_remaining_usd"], 0):
             raise RuntimeError(f"a day loss past the rail left headroom: {stopped}")
+        marked_before = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "kill_remaining_usd": 1,
+            "running_balance_usd": 40,
+            "running_pnl_usd": 1,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [
+                {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 20, "unrealized_pnl_usd": 3},
+            ],
+        }
+        write_json(folder / "live_book.json", marked_before)
+        moved = {
+            **marked_before,
+            "positions": [
+                {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 80, "unrealized_pnl_usd": 3},
+            ],
+        }
+        write_json(folder / "live_book.json", moved)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            remarked = refresh_live_book(folder, fetch=False, cash=None)
+        finally:
+            sys.stderr = old_err
+        if "cash drop absent" not in stderr.getvalue():
+            raise RuntimeError("a missing cash drop was not logged")
+        if not usd_equal(remarked["running_balance_usd"], 110):
+            raise RuntimeError(f"a moved mark left the balance unchanged: {remarked}")
+        if not usd_differ(remarked["running_balance_usd"], marked_before["running_balance_usd"]):
+            raise RuntimeError("a moved mark did not move the balance")
+        if not usd_equal(remarked["kill_remaining_usd"], kill_remaining_usd(110, 0)):
+            raise RuntimeError(f"a moved mark left kill unchanged: {remarked}")
+        if not usd_differ(remarked["kill_remaining_usd"], marked_before["kill_remaining_usd"]):
+            raise RuntimeError("a moved mark did not move kill headroom")
+        if not usd_equal(remarked.get("realized_pnl_usd"), 2) or not usd_equal(remarked.get("unrealized_pnl_usd"), 3):
+            raise RuntimeError(f"a missing cash drop rebuilt realized: {remarked}")
+        mismatch = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [
+                {
+                    "sleeve": "crypto",
+                    "ticker": "ZZ",
+                    "qty": "2",
+                    "mark": "10",
+                    "avg_cost": "8",
+                    "value_usd": 99,
+                    "unrealized_pnl_usd": 4,
+                }
+            ],
+        }
+        write_json(folder / "live_book.json", mismatch)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            mismatched = refresh_live_book(folder, fetch=False, cash={"USD": 20, "USDC": 10})
+        finally:
+            sys.stderr = old_err
+        if "marked balance does not match" not in stderr.getvalue():
+            raise RuntimeError("a balance mismatch did not warn")
+        if not usd_equal(mismatched.get("realized_pnl_usd"), 2) or not usd_equal(mismatched.get("unrealized_pnl_usd"), 3):
+            raise RuntimeError(f"a balance mismatch rebuilt the split: {mismatched}")
+        if not usd_equal(mismatched.get("running_balance_usd"), 129):
+            raise RuntimeError(f"a balance mismatch left the marked total unchanged: {mismatched}")
+        missing_unreal = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [{"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 20}],
+        }
+        write_json(folder / "live_book.json", missing_unreal)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            unknown_unreal = refresh_live_book(folder, fetch=False, cash={"USD": 20, "USDC": 10})
+        finally:
+            sys.stderr = old_err
+        if "position unrealized is missing" not in stderr.getvalue():
+            raise RuntimeError("a lot without unrealized did not warn")
+        if not usd_equal(unknown_unreal.get("realized_pnl_usd"), 2) or not usd_equal(
+            unknown_unreal.get("unrealized_pnl_usd"), 3
+        ):
+            raise RuntimeError(f"a missing unrealized rebuilt the split: {unknown_unreal}")
+        if not usd_equal(unknown_unreal.get("running_balance_usd"), 50):
+            raise RuntimeError(f"a missing unrealized left the balance unchanged: {unknown_unreal}")
         kept_signal = {
             "generated_at": "2026-01-01T00:00:00Z",
             "book_usd": 50,
