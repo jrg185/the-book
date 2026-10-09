@@ -225,11 +225,18 @@ def residual_tolerance(path: Path | None = None) -> Decimal:
 def read_cash(env: dict | None = None, data_dir: Path | None = None) -> tuple[dict | None, str | None]:
     """Robinhood REST when keys are set, otherwise the desk drop.
 
-    Returns (None, None) when both are absent. Does not invent a balance.
+    A failed or incomplete REST read is missing cash. The snapshot keeps the
+    previous combined row and still writes the sleeve rows. Returns
+    (None, None) when REST failed or both sources are absent. Does not
+    invent a balance.
     """
     import export_kpi
 
-    rest = export_kpi.load_rh_cash(env)
+    try:
+        rest = export_kpi.load_rh_cash(env)
+    except RuntimeError:
+        print("Robinhood cash read failed; treating cash as missing", file=sys.stderr)
+        return None, None
     if rest is not None:
         return rest, "robinhood"
     folder = data_dir if data_dir is not None else export_kpi.DATA
@@ -398,7 +405,9 @@ def _audit(
     piece that left on sells. Rounding is the cent notional versus quantity
     times price. The basis line is the flat-close sliver outside the fee
     tolerance. Funding is the combined seed plus equities realized minus the
-    cash that crypto trades do not explain.
+    cash that crypto trades do not explain. Residual is account realized
+    minus crypto trade P&L, buy fees, and rounding. Equities closes stay
+    out of that residual.
     """
     refresh = _refresh()
     collapsed, _dropped = refresh.collapse_duplicate_fills(fills)
@@ -497,7 +506,7 @@ def _audit(
     gap = warehouse - published_balance
     rounding = buy_rounding + sell_rounding
     realized_exact = (balance_exact - seed) - live_crypto_u
-    residual = realized_exact - (trade_pnl - buy_fees - rounding)
+    residual = realized_exact - (trade_pnl - equities_realized - buy_fees - rounding)
     return {
         "buy_fees": buy_fees,
         "open_buy_fees": open_buy_fees,
