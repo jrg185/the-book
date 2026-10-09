@@ -441,6 +441,7 @@ test("the published book is the holdings sum, and the rails use the running bala
     live.realized_pnl_usd,
     !approxCents(pnl.realized, live.realized_pnl_usd)
   );
+  assertCentsEqual(books[0].realizedPnl + books[0].unrealizedPnl, books[0].runningPnl);
   assert.equal(SEEDS_USD.combined, combinedSeed);
 });
 
@@ -755,6 +756,9 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   const liveDrop = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
   const sources = [
     ["scripts/export_kpi.py", readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8")],
+    ["scripts/account_book.py", readFileSync(new URL("../scripts/account_book.py", import.meta.url), "utf8")],
+    ["scripts/recon_kpi_realized.py", readFileSync(new URL("../scripts/recon_kpi_realized.py", import.meta.url), "utf8")],
+    ["scripts/refresh_kpi_snapshots.py", readFileSync(new URL("../scripts/refresh_kpi_snapshots.py", import.meta.url), "utf8")],
     ["derive.js", readFileSync(new URL("../derive.js", import.meta.url), "utf8")],
     ["app.js", readFileSync(new URL("../app.js", import.meta.url), "utf8")],
     ["index.html", readFileSync(new URL("../index.html", import.meta.url), "utf8")],
@@ -762,10 +766,14 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   for (const drop of [liveDrop, ...CASH_DROP_FIXTURES]) assertCashDrop(drop, sources);
   const exporter = sources[0][1];
   const main = exporter.split("\ndef main(argv")[1];
-  const restAt = main.indexOf("rest_cash = load_rh_cash()");
-  const skipAt = main.indexOf("REST cash skipped");
-  const dropAt = main.indexOf("load_rh_cash_drop(DATA)");
-  assert.ok(restAt >= 0 && restAt < skipAt && skipAt < dropAt);
+  const book = sources[1][1];
+  const readCash = book.split("def read_cash")[1].split("\ndef ")[0];
+  const restAt = readCash.indexOf("load_rh_cash(");
+  const fallAt = readCash.indexOf("falling back to data/rh_cash.json");
+  const dropAt = readCash.indexOf("load_rh_cash_drop(");
+  assert.ok(restAt >= 0 && restAt < fallAt && fallAt < dropAt);
+  assert.ok(main.includes("account_book.read_cash("));
+  assert.equal(main.includes("rest_cash = load_rh_cash()"), false);
   assert.equal(main.includes("Export KPI expected live Robinhood cash"), false);
   assert.equal(main.includes("cash=cash"), true);
   assert.equal(exporter.includes("day_realized_usd"), true);
