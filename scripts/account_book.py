@@ -12,7 +12,9 @@ does not move that column or the lot's average cost.
 
 Cash is the same read the export uses. Signed Robinhood REST when the API
 key and private key are set, otherwise data/rh_cash.json (USD plus USDC).
-A missing drop does not invent seed + trade P&L + open mark-to-market.
+A failed REST read reuses live cash this run already stored on the marks
+file, then the desk drop. A missing drop does not invent seed + trade
+P&L + open mark-to-market.
 """
 
 from __future__ import annotations
@@ -260,24 +262,89 @@ def residual_tolerance(path: Path | None = None) -> Decimal:
     return amount
 
 
+def _cash_lines(cash: dict | None) -> dict | None:
+    """USD and USDC as JSON numbers. Both lines are required."""
+    if not isinstance(cash, dict):
+        return None
+    out = {}
+    for key in CASH_KEYS:
+        raw = cash.get(key)
+        if isinstance(raw, bool) or raw in (None, ""):
+            return None
+        if isinstance(raw, (int, float)):
+            out[key] = raw
+            continue
+        amount = _dec(raw)
+        if amount is None:
+            return None
+        out[key] = float(amount)
+    return out
+
+
+def _remember_cash(cash: dict) -> None:
+    """Store live cash on this run's marks file.
+
+    Refresh writes that file before it reads cash. A later REST miss in
+    export reads it back. A new refresh replaces the file, so an older
+    live read cannot outlive this run's quote set.
+    """
+    lines = _cash_lines(cash)
+    payload = _read_marks_payload()
+    if lines is None or payload is None:
+        return
+    payload["cash"] = lines
+    path = marks_path()
+    try:
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"could not store live cash for this run: {exc}", file=sys.stderr)
+
+
+def _shared_live_cash() -> dict | None:
+    """Live cash stored beside this run's quote set. Stale files are ignored."""
+    path = marks_path()
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if not _marks_are_fresh(payload):
+        if isinstance(payload.get("cash"), dict):
+            print("stale live cash ignored", file=sys.stderr)
+        return None
+    return _cash_lines(payload.get("cash"))
+
+
 def read_cash(env: dict | None = None, data_dir: Path | None = None) -> tuple[dict | None, str | None]:
     """Robinhood REST when keys are set, otherwise the desk drop.
 
-    A failed or incomplete REST read is logged and the desk drop is used.
-    Cash is missing only when that drop fails too. Returns (None, None)
-    in that case. Does not invent a balance.
+    A failed or incomplete REST read reuses live cash this run already
+    stored. Otherwise it is logged and the desk drop is used. Cash is
+    missing only when that drop fails too. Returns (None, None) in that
+    case. Does not invent a balance.
     """
     import export_kpi
 
     try:
         rest = export_kpi.load_rh_cash(env)
     except RuntimeError as exc:
+        shared = _shared_live_cash()
+        if shared is not None:
+            print(
+                f"Robinhood cash read failed ({exc}); using the live cash already read this run",
+                file=sys.stderr,
+            )
+            return shared, "robinhood"
         print(
             f"Robinhood cash read failed ({exc}); falling back to data/rh_cash.json",
             file=sys.stderr,
         )
         rest = None
     if rest is not None:
+        _remember_cash(rest)
         return rest, "robinhood"
     folder = data_dir if data_dir is not None else export_kpi.DATA
     drop = export_kpi.load_rh_cash_drop(folder)

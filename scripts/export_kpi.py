@@ -2562,9 +2562,9 @@ def load_rh_cash(env: dict | None = None) -> dict | None:
 
     None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. That None does
     not fail the caller. A signed GET that fails, or a payload without both
-    lines, raises. account_book.read_cash logs that error and uses
-    data/rh_cash.json, and treats cash as missing only when the drop fails
-    too. This does not place an order.
+    lines, raises. account_book.read_cash logs that error, reuses live
+    cash this run already stored, and otherwise uses data/rh_cash.json.
+    Cash is missing only when that drop fails too. This does not place an order.
     """
     from sync_rh_kpi_trades import SyncError, path_from_next, rh_credentials, rh_get
 
@@ -4330,8 +4330,9 @@ def main(argv: list[str] | None = None) -> int:
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
         # Same path as refresh. Unset keys skip REST. A failed or incomplete
-        # GET is logged and the desk drop is used. Cash is missing only when
-        # that drop fails too, and the lines already on the file stay.
+        # GET reuses live cash this run already stored, otherwise the desk
+        # drop. Cash is missing only when that drop fails too, and the lines
+        # already on the file stay.
         # Live balances are not hardcoded here.
         import account_book
 
