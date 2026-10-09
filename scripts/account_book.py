@@ -263,20 +263,18 @@ def residual_tolerance(path: Path | None = None) -> Decimal:
 def read_cash(env: dict | None = None, data_dir: Path | None = None) -> tuple[dict | None, str | None]:
     """Robinhood REST when keys are set, otherwise the desk drop.
 
-    A failed or incomplete REST read is logged and the desk drop is used.
-    Cash is missing only when that drop fails too. Returns (None, None)
-    in that case. Does not invent a balance.
+    A failed or incomplete REST read is missing cash. The snapshot keeps the
+    previous combined row and still writes the sleeve rows. Returns
+    (None, None) when REST failed or both sources are absent. Does not
+    invent a balance.
     """
     import export_kpi
 
     try:
         rest = export_kpi.load_rh_cash(env)
-    except RuntimeError as exc:
-        print(
-            f"Robinhood cash read failed ({exc}); falling back to data/rh_cash.json",
-            file=sys.stderr,
-        )
-        rest = None
+    except RuntimeError:
+        print("Robinhood cash read failed; treating cash as missing", file=sys.stderr)
+        return None, None
     if rest is not None:
         return rest, "robinhood"
     folder = data_dir if data_dir is not None else export_kpi.DATA
