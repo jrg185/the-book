@@ -1464,6 +1464,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T06:55:19.449113+00:00",
+    "ticker": "UNI",
+    "side": "sell",
+    "notional_frac_of_book": 0.173533,
+    "pnl_frac_of_book": 0.006915,
+    "why": "+5% half-scale profit-take: UNI unscaled lot at +5.2% mark / +5.18% bid vs cost 7.0504; per entry plan, sell 50% at +5% then trail the leftover.",
+    "running_pnl_frac": 0.021646,
+    "running_balance_frac": 1.021646,
+    "fee_frac_of_book": 0.001633
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T06:55:34.707323+00:00",
+    "ticker": "ENA",
+    "side": "buy",
+    "notional_frac_of_book": 0.170033,
+    "pnl_frac_of_book": 0.0,
+    "why": "Rotate UNI half proceeds into top unheld gate clear: ENA p_up 0.5147 >= 0.50 temp live gate (artifact fcba56c); $51.50 under $100 cap; no cash reserve per Joe.",
+    "running_pnl_frac": 0.021646,
+    "running_balance_frac": 1.021646,
+    "fee_frac_of_book": 0.0016
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
