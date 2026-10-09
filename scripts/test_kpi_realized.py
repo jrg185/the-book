@@ -863,6 +863,55 @@ def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
         raise AssertionError("a missing cash drop built a book")
 
 
+def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatch, tmp_path, capsys):
+    (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 4, "USDC": 1}), encoding="utf-8")
+
+    def boom(_env=None):
+        raise RuntimeError("Robinhood cash read failed. Holdings were not refreshed.")
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
+    cash, origin = account_book.read_cash({"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p"}, tmp_path)
+    assert cash is None and origin is None
+    assert "treating cash as missing" in capsys.readouterr().err
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", lambda _env=None: None)
+    cash, origin = account_book.read_cash({}, tmp_path)
+    assert origin == "rh_cash.json"
+    assert account_book.cash_total(cash) == Decimal("5")
+
+
+def test_equities_close_stays_out_of_the_account_residual():
+    fills, marks = _sample_book()
+    closed = list(fills) + [
+        _acct("QCOM", "buy", "2", "100", "2026-04-01T15:10:00Z", sleeve="equities", notional="200"),
+        _acct(
+            "QCOM",
+            "sell",
+            "2",
+            "110",
+            "2026-04-01T16:10:00Z",
+            pnl="20",
+            sleeve="equities",
+            notional="220",
+        ),
+    ]
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    base = account_book.statement(fills, marks, _funded_cash(fills, seed), seed)
+    reading = account_book.statement(closed, marks, cash, seed)
+    assert reading["equities_realized"] == Decimal("20")
+    assert reading["trade_pnl"] == base["trade_pnl"] + Decimal("20")
+    assert reading["residual"] == base["residual"]
+    assert abs(reading["residual"]) <= account_book.residual_tolerance()
+    assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
+    assert account_book.format_note(reading).split("residual ", 1)[1] == account_book.format_note(base).split(
+        "residual ", 1
+    )[1]
+    rows, _opens = refresh.build_rows(closed, marks, {}, "2026-04-02T00:00:00Z", cash=cash)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    assert combined["notes"] == account_book.format_note(reading)
+
+
 def test_account_recon_exits_on_the_tolerance(tmp_path, capsys):
     fills, marks = _sample_book()
     seed = book_seeds.current_seeds()["combined"]
