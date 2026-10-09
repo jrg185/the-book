@@ -441,6 +441,7 @@ test("the published book is the holdings sum, and the rails use the running bala
     live.realized_pnl_usd,
     !approxCents(pnl.realized, live.realized_pnl_usd)
   );
+  assertCentsEqual(books[0].realizedPnl + books[0].unrealizedPnl, books[0].runningPnl);
   assert.equal(SEEDS_USD.combined, combinedSeed);
 });
 
@@ -755,6 +756,9 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   const liveDrop = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
   const sources = [
     ["scripts/export_kpi.py", readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8")],
+    ["scripts/account_book.py", readFileSync(new URL("../scripts/account_book.py", import.meta.url), "utf8")],
+    ["scripts/recon_kpi_realized.py", readFileSync(new URL("../scripts/recon_kpi_realized.py", import.meta.url), "utf8")],
+    ["scripts/refresh_kpi_snapshots.py", readFileSync(new URL("../scripts/refresh_kpi_snapshots.py", import.meta.url), "utf8")],
     ["derive.js", readFileSync(new URL("../derive.js", import.meta.url), "utf8")],
     ["app.js", readFileSync(new URL("../app.js", import.meta.url), "utf8")],
     ["index.html", readFileSync(new URL("../index.html", import.meta.url), "utf8")],

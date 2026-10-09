@@ -10,9 +10,14 @@ Robinhood. It reads local JSON and writes only to stdout or a path you pass.
 
   python3 scripts/recon_kpi_realized.py --kpi-json kpi_trades.json --plan-backfill
 
---dry-run is the default and the only mode. --plan-backfill emits the scrubbed
-item-4 diff (fractions of the sleeve ledger seed, no dollars and no order ids).
+--dry-run is the default. --plan-backfill emits the scrubbed item-4 diff
+(fractions of the sleeve ledger seed, no dollars and no order ids).
 The header note is: PLANNED ONLY - do not apply until Eng and Wags approve.
+
+--account prints the cash-versus-seed gap (buy fees, cent rounding, flat-close
+basis, funding, mark drift, cents). It warns and exits non-zero when the
+unexplained residual exceeds config/account_book.json, or --tolerance.
+It does not write the warehouse.
 
 Matching: a warehouse sell's order_id selects the RH order, and that order
 selects a pnl row with the same symbol and quantity and a timestamp within a
@@ -483,11 +488,85 @@ def _emit(payload: dict, path: str | None) -> None:
         sys.stdout.write(text)
 
 
+def _load_json(path: str):
+    payload = json.loads(Path(path).read_text(encoding="utf-8"), parse_float=Decimal, parse_int=Decimal)
+    return payload
+
+
+def _marks_from_json(payload) -> dict:
+    raw = payload.get("marks") if isinstance(payload, dict) and "marks" in payload else payload
+    if not isinstance(raw, dict):
+        raise ReconError("marks JSON must be an object of sleeve:ticker prices")
+    marks = {}
+    for key, price in raw.items():
+        text = str(key)
+        if ":" not in text:
+            raise ReconError(f"mark key {text!r} needs a sleeve:ticker")
+        sleeve, ticker = text.split(":", 1)
+        amount = sync.dec(price)
+        if amount is None or amount <= 0:
+            raise ReconError(f"mark {text} is not a positive price")
+        marks[(sleeve.strip().lower(), ticker.strip().upper())] = amount
+    return marks
+
+
+def account_report(args) -> int:
+    """Print the A–G gap. Exit 1 when the unexplained residual exceeds tolerance."""
+    import account_book
+
+    if not args.cash_json or not args.marks_json:
+        print("account recon needs --cash-json and --marks-json. Nothing was written.", file=sys.stderr)
+        return 1
+    try:
+        rows = sync.load_row_document(args.kpi_json)
+        cash = _load_json(args.cash_json)
+        marks = _marks_from_json(_load_json(args.marks_json))
+        snapshot_marks = None
+        if args.snapshot_marks_json:
+            snapshot_marks = _marks_from_json(_load_json(args.snapshot_marks_json))
+        tolerance = (
+            Decimal(str(args.tolerance))
+            if args.tolerance not in (None, "")
+            else account_book.residual_tolerance()
+        )
+        reading = account_book.decompose(rows, marks, cash, snapshot_marks=snapshot_marks)
+    except (sync.SyncError, ReconError, account_book.AccountBookError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    payload = account_book.breakdown_payload(reading, tolerance)
+    _emit(payload, args.output)
+    for line in payload["lines"]:
+        print(line, file=sys.stderr)
+    if not payload["ok"]:
+        print(
+            "warning: unexplained residual exceeds tolerance",
+            file=sys.stderr,
+        )
+        return 1
+    print("account recon: residual within tolerance", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--kpi-json", required=True, help="kpi_trades JSON drop (SELECT * rows).")
     parser.add_argument("--rh-pnl-json", help="get_pnl_trade_history trades JSON.")
     parser.add_argument("--rh-orders-json", help="Optional get_crypto_orders JSON, used for fees and the order match.")
+    parser.add_argument(
+        "--account",
+        action="store_true",
+        help="Print the cash-versus-seed gap and warn when the residual exceeds tolerance.",
+    )
+    parser.add_argument("--cash-json", help="USD and USDC cash drop for --account.")
+    parser.add_argument("--marks-json", help="sleeve:ticker marks for --account. One quote set.")
+    parser.add_argument(
+        "--snapshot-marks-json",
+        help="Optional second quote set. Omit it when export reused the snapshot marks.",
+    )
+    parser.add_argument(
+        "--tolerance",
+        help="Residual tolerance in USD. Defaults to config/account_book.json.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -498,6 +577,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--plan-backfill", action="store_true", help="Emit the scrubbed planned diff.")
     parser.add_argument("--plan-output", help="Write the planned diff here instead of stdout.")
     args = parser.parse_args(argv)
+    if args.account:
+        return account_report(args)
     if not args.rh_pnl_json and not args.plan_backfill:
         print("Pass --rh-pnl-json, --plan-backfill, or both. Nothing was written.", file=sys.stderr)
         return 1
