@@ -881,36 +881,60 @@ def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatc
     assert account_book.cash_total(cash) == Decimal("5")
 
 
-def test_equities_close_stays_out_of_the_account_residual():
+def test_past_equities_realized_stays_inside_the_residual_tolerance():
+    """Cash already includes a closed equities round trip, the way the live book does.
+
+    The combined seed and the funding line carry that realized. Residual uses
+    both sleeves, so the amount stays explained. A crypto-only trade P&L would
+    leave it outside tolerance.
+    """
     fills, marks = _sample_book()
+    buy_fee = Decimal("0.04")
+    pnl = Decimal("-4.01")
     closed = list(fills) + [
-        _acct("QCOM", "buy", "2", "100", "2026-04-01T15:10:00Z", sleeve="equities", notional="200"),
         _acct(
-            "QCOM",
+            "EEE",
+            "buy",
+            "2",
+            "15",
+            "2026-04-01T15:10:00Z",
+            sleeve="equities",
+            fee=format(buy_fee, "f"),
+            notional="30",
+        ),
+        _acct(
+            "EEE",
             "sell",
             "2",
-            "110",
+            "13",
             "2026-04-01T16:10:00Z",
-            pnl="20",
             sleeve="equities",
-            notional="220",
+            pnl=format(pnl, "f"),
+            fee="0.01",
+            notional="26",
         ),
     ]
+    equity_cash = Decimal("0")
+    for fill in closed:
+        if fill["sleeve"] != "equities":
+            continue
+        notional = Decimal(fill["notional_usd"])
+        fee = Decimal(fill["fee_usd"])
+        equity_cash += (notional - fee) if fill["side"] == "sell" else -(notional + fee)
     seed = book_seeds.current_seeds()["combined"]
-    cash = _funded_cash(fills, seed)
-    base = account_book.statement(fills, marks, _funded_cash(fills, seed), seed)
+    total = seed + _crypto_flows(closed) + equity_cash
+    cash = {"USD": format(total - Decimal("3.25"), "f"), "USDC": "3.25"}
     reading = account_book.statement(closed, marks, cash, seed)
-    assert reading["equities_realized"] == Decimal("20")
-    assert reading["trade_pnl"] == base["trade_pnl"] + Decimal("20")
-    assert reading["residual"] == base["residual"]
-    assert abs(reading["residual"]) <= account_book.residual_tolerance()
+    tolerance = account_book.residual_tolerance()
+    assert reading["equities_realized"] == pnl
+    assert abs(reading["equities_realized"]) > tolerance
+    assert reading["funding"] == buy_fee
+    assert abs(reading["residual"]) <= tolerance
     assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
-    assert account_book.format_note(reading).split("residual ", 1)[1] == account_book.format_note(base).split(
-        "residual ", 1
-    )[1]
-    rows, _opens = refresh.build_rows(closed, marks, {}, "2026-04-02T00:00:00Z", cash=cash)
-    combined = {row["sleeve"]: row for row in rows}["combined"]
-    assert combined["notes"] == account_book.format_note(reading)
+    crypto_only = reading["realized_exact"] - (
+        (reading["trade_pnl"] - reading["equities_realized"]) - reading["buy_fees"] - reading["rounding"]
+    )
+    assert abs(crypto_only) > tolerance
 
 
 def test_account_recon_exits_on_the_tolerance(tmp_path, capsys):
@@ -1099,28 +1123,55 @@ def test_missing_cash_refresh_still_exports(tmp_path, monkeypatch):
     assert export_kpi.usd_equal(published["unrealized_pnl_usd"], 3)
 
 
-def test_equities_close_leaves_the_residual_unchanged():
+def test_failed_robinhood_read_refresh_and_export_share_the_drop(monkeypatch, tmp_path, capsys):
     fills, marks = _sample_book()
-    seed = book_seeds.current_seeds()["combined"]
-    cash = _funded_cash(fills, seed)
-    before = account_book.statement(fills, marks, cash, seed)
-    closed = fills + [
-        _acct("EEE", "buy", "1", "10", "2026-05-02T15:00:00Z", sleeve="equities", fee="0", notional="10"),
-        _acct(
-            "EEE",
-            "sell",
-            "1",
-            "12",
-            "2026-05-02T16:00:00Z",
-            sleeve="equities",
-            pnl="2",
-            fee="0",
-            notional="12",
+    (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 40.5, "USDC": 9.5}), encoding="utf-8")
+    (tmp_path / "live_book.json").write_text(
+        json.dumps(
+            {
+                "book_usd": 1,
+                "day_pnl_usd": 0,
+                "kill_remaining_usd": 1,
+                "running_balance_usd": 1,
+                "running_pnl_usd": 0,
+                "realized_pnl_usd": 0,
+                "unrealized_pnl_usd": 0,
+                "holdings": [
+                    {"ticker": "USD", "sleeve": "crypto", "value_usd": 1},
+                    {"ticker": "USDC", "sleeve": "crypto", "value_usd": 1},
+                ],
+                "positions": [],
+            }
         ),
-    ]
-    after = account_book.statement(closed, marks, cash, seed)
-    assert after["equities_realized"] == Decimal("2")
-    assert after["residual"] == before["residual"]
-    assert after["funding"] == before["funding"] + Decimal("2")
-    assert abs(after["gap"] - after["components_sum"]) < Decimal("1e-6")
-    assert abs(before["gap"] - before["components_sum"]) < Decimal("1e-6")
+        encoding="utf-8",
+    )
+
+    def boom(_env=None):
+        raise RuntimeError("Robinhood cash read did not include USD buying power and USDC quantity")
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
+    monkeypatch.setattr(export_kpi, "DATA", tmp_path)
+    monkeypatch.setenv("RH_API_KEY", "k")
+    monkeypatch.setenv("RH_BASE64_PRIVATE_KEY", "p")
+    main_src = Path(export_kpi.__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
+    assert "account_book.read_cash(" in main_src
+    assert "rest_cash = load_rh_cash()" not in main_src
+    refresh_cash, refresh_origin = account_book.read_cash(
+        {"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p"},
+        tmp_path,
+    )
+    export_cash, export_origin = account_book.read_cash()
+    err = capsys.readouterr().err
+    assert refresh_origin == export_origin == "rh_cash.json"
+    assert account_book.cash_total(refresh_cash) == account_book.cash_total(export_cash)
+    assert err.count("falling back to data/rh_cash.json") == 2
+    rows, _opens = refresh.build_rows(fills, marks, {}, "2026-06-02T00:00:00Z", cash=refresh_cash)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    positions = export_kpi.card_positions(fills, marks)
+    published = export_kpi.refresh_live_book(
+        tmp_path, fetch=False, cash=export_cash, positions=positions
+    )
+    assert export_kpi.usd_equal(combined["running_balance_usd"], published["running_balance_usd"])
+    assert export_kpi.usd_equal(combined["running_pnl_usd"], published["running_pnl_usd"])
+    assert export_kpi.usd_equal(combined["realized_pnl_usd"], published["realized_pnl_usd"])
+    assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], published["unrealized_pnl_usd"])

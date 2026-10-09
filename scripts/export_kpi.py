@@ -2561,9 +2561,10 @@ def load_rh_cash(env: dict | None = None) -> dict | None:
     """Live USD buying power and USDC quantity for the agentic account.
 
     None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. That None does
-    not fail export; the caller may read data/rh_cash.json. A signed GET
-    that fails, or a payload without both lines, raises so export does not
-    publish fresh lots on a broken cash read. This does not place an order.
+    not fail the caller. A signed GET that fails, or a payload without both
+    lines, raises. account_book.read_cash logs that error and uses
+    data/rh_cash.json, and treats cash as missing only when the drop fails
+    too. This does not place an order.
     """
     from sync_rh_kpi_trades import SyncError, path_from_next, rh_credentials, rh_get
 
@@ -3715,13 +3716,16 @@ def self_test() -> int:
     main_src = Path(__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
     if "Export KPI expected live Robinhood cash" in main_src:
         raise RuntimeError("KPI_REFRESH_EXPECTED still fail-closes when Robinhood keys are unset")
-    rest_at = main_src.find("rest_cash = load_rh_cash()")
-    skip_at = main_src.find("REST cash skipped")
-    drop_at = main_src.find("load_rh_cash_drop(DATA)")
-    if rest_at < 0 or not (rest_at < skip_at < drop_at):
-        raise RuntimeError("main does not soft-skip REST cash onto the drop file")
-    if "cash=cash" not in main_src[drop_at:]:
+    if "account_book.read_cash(" not in main_src:
+        raise RuntimeError("main does not resolve cash through account_book.read_cash")
+    if "cash=cash" not in main_src:
         raise RuntimeError("main does not pass resolved cash into refresh_live_book")
+    reader = Path(__file__).resolve().parent.joinpath("account_book.py").read_text(encoding="utf-8")
+    rest_at = reader.find("load_rh_cash(")
+    fall_at = reader.find("falling back to data/rh_cash.json")
+    drop_at = reader.find("load_rh_cash_drop(")
+    if rest_at < 0 or not (rest_at < fall_at < drop_at):
+        raise RuntimeError("read_cash does not fall back to the desk drop when Robinhood fails")
     seeded = load_rh_cash_drop(DATA)
     if not isinstance(seeded, dict) or "USD" not in seeded or "USDC" not in seeded:
         raise RuntimeError("data/rh_cash.json is not a cash drop")
@@ -4325,23 +4329,26 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"], unchanged=account_book.unchanged_sleeves())
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        # REST when the keys are set. Unset keys skip REST even if
-        # KPI_REFRESH_EXPECTED is set, then the desk drop, then the cash
-        # lines already on the file. Live balances are not hardcoded here.
-        rest_cash = load_rh_cash()
-        if rest_cash is None:
+        # Same path as refresh. Unset keys skip REST. A failed or incomplete
+        # GET is logged and the desk drop is used. Cash is missing only when
+        # that drop fails too, and the lines already on the file stay.
+        # Live balances are not hardcoded here.
+        import account_book
+
+        cash, origin = account_book.read_cash()
+        if origin == "rh_cash.json" and not (
+            (os.environ.get("RH_API_KEY") or "").strip()
+            and (os.environ.get("RH_BASE64_PRIVATE_KEY") or "").strip()
+        ):
             print(
                 "Robinhood REST cash skipped. "
                 "RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset."
             )
-            cash = load_rh_cash_drop(DATA)
-        else:
-            cash = rest_cash
         if cash:
-            origin = "Robinhood" if rest_cash is not None else "data/rh_cash.json"
+            label = "Robinhood" if origin == "robinhood" else "data/rh_cash.json"
             print(
                 "live book cash from "
-                + origin
+                + label
                 + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )

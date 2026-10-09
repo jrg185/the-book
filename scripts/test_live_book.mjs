@@ -766,10 +766,14 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   for (const drop of [liveDrop, ...CASH_DROP_FIXTURES]) assertCashDrop(drop, sources);
   const exporter = sources[0][1];
   const main = exporter.split("\ndef main(argv")[1];
-  const restAt = main.indexOf("rest_cash = load_rh_cash()");
-  const skipAt = main.indexOf("REST cash skipped");
-  const dropAt = main.indexOf("load_rh_cash_drop(DATA)");
-  assert.ok(restAt >= 0 && restAt < skipAt && skipAt < dropAt);
+  const book = sources[1][1];
+  const readCash = book.split("def read_cash")[1].split("\ndef ")[0];
+  const restAt = readCash.indexOf("load_rh_cash(");
+  const fallAt = readCash.indexOf("falling back to data/rh_cash.json");
+  const dropAt = readCash.indexOf("load_rh_cash_drop(");
+  assert.ok(restAt >= 0 && restAt < fallAt && fallAt < dropAt);
+  assert.ok(main.includes("account_book.read_cash("));
+  assert.equal(main.includes("rest_cash = load_rh_cash()"), false);
   assert.equal(main.includes("Export KPI expected live Robinhood cash"), false);
   assert.equal(main.includes("cash=cash"), true);
   assert.equal(exporter.includes("day_realized_usd"), true);
