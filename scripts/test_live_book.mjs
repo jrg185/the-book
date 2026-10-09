@@ -89,6 +89,158 @@ function assertOptionalDayRealized(drop) {
   assert.ok(Math.abs(gap) <= 0.01);
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// A numeric token with no digit, dot, or word character immediately before
+// it, and no digit or dot immediately after it.
+function hasBoundedNumericLiteral(text, literal) {
+  return new RegExp(`(?<![\\d.\\w])${escapeRegExp(literal)}(?![\\d.])`).test(text);
+}
+
+// Printed form plus the two-decimal cents form when that is the same amount
+// (1.8 also matches 1.80). A toFixed result that rounds away is left out.
+function numericLiteralForms(value) {
+  const plain = String(value);
+  const cents = value.toFixed(2);
+  if (cents === plain) return [plain];
+  if (Math.abs(Number(cents) - value) > 1e-9) return [plain];
+  return [plain, cents];
+}
+
+// null: not a cash fingerprint. 0 and amounts inside one dollar are too
+// short to identify a live balance. "0" occurs in almost every source file,
+// and a value under 1 collides with ratios and unrelated literals.
+// true/false: text does or does not contain the amount as a standalone
+// numeric literal, including the cents form.
+function standaloneNumericLiteral(text, value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return false;
+  if (value === 0 || Math.abs(value) < 1) return null;
+  return numericLiteralForms(value).some((literal) => hasBoundedNumericLiteral(text, literal));
+}
+
+function assertCashLiteralAbsent(text, value, message) {
+  const found = standaloneNumericLiteral(text, value);
+  if (found == null) return;
+  assert.equal(found, false, message);
+}
+
+function assertCashLiteralPresent(text, value, message) {
+  const found = standaloneNumericLiteral(text, value);
+  if (found == null) return;
+  assert.equal(found, true, message);
+}
+
+// Decimal quantities stay dotted. String(4.0) is "4", which is not the qty
+// fingerprint, and a qty under one dollar is still specific. The cash
+// fingerprint skip does not apply here.
+function sourceHasLiveDecimal(text, raw) {
+  const value = Number(raw);
+  const forms = [];
+  if (Number.isFinite(value)) {
+    for (const form of numericLiteralForms(value)) {
+      if (form.includes(".")) forms.push(form);
+    }
+  }
+  const printed = String(raw);
+  if (printed.includes(".") && !forms.includes(printed)) forms.push(printed);
+  return forms.some((form) => hasBoundedNumericLiteral(text, form));
+}
+
+// Published cash is checked too. These fixtures keep the same assertions
+// from depending on whatever USD, USDC, and day fields are in rh_cash.json.
+// Amounts are test inputs only. The ordinary USDC line is 27.41 because
+// 14.07 is already a standalone literal in the export self-test.
+const CASH_DROP_FIXTURES = [
+  {
+    name: "new ET day",
+    USD: 20.5,
+    USDC: 31.2,
+    day_realized_usd: 0,
+    day_realized_gross_usd: 0,
+    day_sell_fees_usd: 0,
+    as_of: "2026-10-09T04:00:00Z",
+  },
+  {
+    name: "fractional USD with flat USDC",
+    USD: 1.8,
+    USDC: 0,
+  },
+  {
+    name: "flat cash",
+    USD: 0,
+    USDC: 0,
+  },
+  {
+    name: "ordinary book",
+    USD: 433.10,
+    USDC: 27.41,
+    day_realized_usd: -1.09,
+    day_realized_gross_usd: 1.25,
+    day_sell_fees_usd: 2.34,
+    as_of: "2026-06-01T15:00:00Z",
+  },
+];
+
+function assertCashDrop(drop, sources) {
+  const label = drop.name || "data/rh_cash.json";
+  assert.equal(typeof drop.USD, "number", label);
+  assert.equal(typeof drop.USDC, "number", label);
+  assert.equal(Number.isFinite(drop.USD), true, label);
+  assert.equal(Number.isFinite(drop.USDC), true, label);
+  if (drop.as_of != null) {
+    assert.equal(typeof drop.as_of, "string", label);
+    assert.equal(Number.isNaN(Date.parse(drop.as_of)), false, label);
+  }
+  assertOptionalDayRealized(drop);
+  const applied = {
+    ...live,
+    holdings: (live.holdings || []).map((row) => {
+      if (row.ticker === "USD") return { ...row, value_usd: drop.USD };
+      if (row.ticker === "USDC") return { ...row, value_usd: drop.USDC, cost_basis_usd: drop.USDC };
+      return row;
+    }),
+  };
+  if (Object.hasOwn(drop, "day_realized_usd")) applied.day_pnl_usd = drop.day_realized_usd;
+  applied.book_usd = holdingsSum(applied);
+  const view = cryptoBookView(applied);
+  const usd = holdingRows(applied).find((row) => row.ticker === "USD");
+  const usdc = holdingRows(applied).find((row) => row.ticker === "USDC");
+  assertCentsEqual(usd.valueUsd, drop.USD, label);
+  assertCentsEqual(usdc.valueUsd, drop.USDC, label);
+  assertCentsEqual(view.bookUsd, applied.book_usd, label);
+  assertLiveRails(view, applied);
+  assert.deepEqual(
+    (applied.positions || []).map((row) => row.ticker),
+    (live.positions || []).map((row) => row.ticker),
+    label
+  );
+  if (Object.hasOwn(drop, "day_realized_usd")) {
+    assertOptionalDayRealized({
+      USD: drop.USD,
+      USDC: drop.USDC,
+      day_realized_usd: drop.day_realized_usd,
+    });
+    const balance = agenticTotal(applied);
+    const spent = Math.min(drop.day_realized_usd, 0);
+    assertCentsEqual(view.runningBalance, balance, label);
+    assertCentsEqual(view.bookUsd, holdingsSum(applied), label);
+    assertCentsEqual(view.dayPnl, drop.day_realized_usd, label);
+    assertCentsEqual(view.runningPnl, roundCents(balance - combinedSeed), label);
+    assertCentsEqual(view.killHeadroom, killRemainingUsd(balance, drop.day_realized_usd), label);
+    assertCentsEqual(
+      view.killHeadroom,
+      Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent)),
+      label
+    );
+  }
+  for (const [file, text] of sources) {
+    assertCashLiteralAbsent(text, drop.USD, `${label} ${file} USD`);
+    assertCashLiteralAbsent(text, drop.USDC, `${label} ${file} USDC`);
+  }
+}
+
 function assertLiveRails(view, book) {
   const base = view.runningBalance;
   assert.ok(base != null && base !== 0);
@@ -419,38 +571,27 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(derive.includes("delete base.running_pnl"), false);
 });
 
+test("a cash fingerprint matches only a standalone numeric literal", () => {
+  assert.equal(standaloneNumericLiteral("1.85", 1.8), false);
+  assert.equal(standaloneNumericLiteral("= 1.8\n", 1.8), true);
+  assert.equal(standaloneNumericLiteral("1.80", 1.8), true);
+  assert.equal(standaloneNumericLiteral("1.800", 1.8), false);
+  assert.equal(standaloneNumericLiteral("a1.8", 1.8), false);
+  assert.equal(standaloneNumericLiteral("21.8", 1.8), false);
+  assert.equal(standaloneNumericLiteral("0", 0), null);
+  assert.equal(standaloneNumericLiteral("0.40", 0.4), null);
+});
+
 test("a cash drop replaces USD and USDC and unset REST keys do not fail export", () => {
-  const drop = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
-  assert.equal(typeof drop.USD, "number");
-  assert.equal(typeof drop.USDC, "number");
-  assert.equal(Number.isFinite(drop.USD), true);
-  assert.equal(Number.isFinite(drop.USDC), true);
-  if (drop.as_of != null) {
-    assert.equal(typeof drop.as_of, "string");
-    assert.equal(Number.isNaN(Date.parse(drop.as_of)), false);
-  }
-  assertOptionalDayRealized(drop);
-  const applied = {
-    ...live,
-    holdings: (live.holdings || []).map((row) => {
-      if (row.ticker === "USD") return { ...row, value_usd: drop.USD };
-      if (row.ticker === "USDC") return { ...row, value_usd: drop.USDC, cost_basis_usd: drop.USDC };
-      return row;
-    }),
-  };
-  applied.book_usd = holdingsSum(applied);
-  const view = cryptoBookView(applied);
-  const usd = holdingRows(applied).find((row) => row.ticker === "USD");
-  const usdc = holdingRows(applied).find((row) => row.ticker === "USDC");
-  assertCentsEqual(usd.valueUsd, drop.USD);
-  assertCentsEqual(usdc.valueUsd, drop.USDC);
-  assertCentsEqual(view.bookUsd, applied.book_usd);
-  assertLiveRails(view, applied);
-  assert.deepEqual(
-    (applied.positions || []).map((row) => row.ticker),
-    (live.positions || []).map((row) => row.ticker)
-  );
-  const exporter = readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8");
+  const liveDrop = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
+  const sources = [
+    ["scripts/export_kpi.py", readFileSync(new URL("../scripts/export_kpi.py", import.meta.url), "utf8")],
+    ["derive.js", readFileSync(new URL("../derive.js", import.meta.url), "utf8")],
+    ["app.js", readFileSync(new URL("../app.js", import.meta.url), "utf8")],
+    ["index.html", readFileSync(new URL("../index.html", import.meta.url), "utf8")],
+  ];
+  for (const drop of [liveDrop, ...CASH_DROP_FIXTURES]) assertCashDrop(drop, sources);
+  const exporter = sources[0][1];
   const main = exporter.split("\ndef main(argv")[1];
   const restAt = main.indexOf("rest_cash = load_rh_cash()");
   const skipAt = main.indexOf("REST cash skipped");
@@ -458,7 +599,6 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   assert.ok(restAt >= 0 && restAt < skipAt && skipAt < dropAt);
   assert.equal(main.includes("Export KPI expected live Robinhood cash"), false);
   assert.equal(main.includes("cash=cash"), true);
-  assert.equal(exporter.includes(String(drop.USD)), false);
   assert.equal(exporter.includes("day_realized_usd"), true);
   assert.equal(exporter.includes("day_realized_gross_usd"), true);
   assert.equal(exporter.includes("day_sell_fees_usd"), true);
@@ -466,11 +606,6 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
   const killSrc = exporter.split("def kill_remaining_usd")[1].split("\ndef ")[0];
   assert.equal(killSrc.includes("0.10"), false);
   assert.equal(killSrc.includes("0.1"), false);
-  for (const file of ["derive.js", "app.js", "index.html"]) {
-    const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-    assert.equal(text.includes(String(drop.USD)), false, file);
-    assert.equal(text.includes(String(drop.USDC)), false, file);
-  }
   for (const file of [".github/workflows/export-kpi.yml", "scripts/export-kpi.yml"]) {
     const workflow = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
     assert.match(workflow, /Hourly Actions poll skipped/, file);
@@ -482,42 +617,16 @@ test("a cash drop replaces USD and USDC and unset REST keys do not fail export",
 });
 
 test("a cash drop may include day realized net, gross, and sell fees", () => {
-  const published = JSON.parse(readFileSync(new URL("../data/rh_cash.json", import.meta.url), "utf8"));
-  assertOptionalDayRealized(published);
-  const drop = {
-    USD: published.USD,
-    USDC: published.USDC,
-    day_realized_usd: -1.09,
-    day_realized_gross_usd: 1.25,
-    day_sell_fees_usd: 2.34,
-  };
-  assertOptionalDayRealized(drop);
+  const ordinary = CASH_DROP_FIXTURES.find((drop) => drop.name === "ordinary book");
+  const rolled = CASH_DROP_FIXTURES.find((drop) => drop.name === "new ET day");
+  assertOptionalDayRealized(ordinary);
+  assertOptionalDayRealized(rolled);
   assertOptionalDayRealized({
-    USD: published.USD,
-    USDC: published.USDC,
-    day_realized_usd: drop.day_realized_usd,
+    USD: ordinary.USD,
+    USDC: ordinary.USDC,
+    day_realized_usd: ordinary.day_realized_usd,
   });
   assert.throws(() => assertOptionalDayRealized({ day_realized_usd: Number.NaN }));
-
-  const book = {
-    ...live,
-    day_pnl_usd: drop.day_realized_usd,
-    holdings: (live.holdings || []).map((row) => {
-      if (row.ticker === "USD") return { ...row, value_usd: drop.USD };
-      if (row.ticker === "USDC") return { ...row, value_usd: drop.USDC, cost_basis_usd: drop.USDC };
-      return row;
-    }),
-  };
-  book.book_usd = holdingsSum(book);
-  const view = cryptoBookView(book);
-  const balance = agenticTotal(book);
-  const spent = Math.min(drop.day_realized_usd, 0);
-  assertCentsEqual(view.runningBalance, balance);
-  assertCentsEqual(view.bookUsd, holdingsSum(book));
-  assertCentsEqual(view.dayPnl, drop.day_realized_usd);
-  assertCentsEqual(view.runningPnl, roundCents(balance - combinedSeed));
-  assertCentsEqual(view.killHeadroom, killRemainingUsd(balance, drop.day_realized_usd));
-  assertCentsEqual(view.killHeadroom, Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent)));
 });
 
 test("open nets stay beside cash and the rails follow the running balance", () => {
@@ -668,7 +777,7 @@ test("the page does not hardcode live open quantities", () => {
   const files = ["app.js", "derive.js", "index.html", "scripts/test_live_book.mjs"];
   for (const file of files) {
     const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-    for (const qty of qtys) assert.equal(text.includes(qty), false, `${file} ${qty}`);
+    for (const qty of qtys) assert.equal(sourceHasLiveDecimal(text, qty), false, `${file} ${qty}`);
   }
 });
 
@@ -682,7 +791,7 @@ test("the page does not hardcode the holdings sum in place of the writer", () =>
     assert.equal(text.includes("774.71"), false, file);
   }
   const published = readFileSync(new URL("../data/live_book.json", import.meta.url), "utf8");
-  assert.equal(published.includes(String(sum)), true);
+  assertCashLiteralPresent(published, sum);
   assert.equal(deriveSourceHasSeedRebuild(published), false);
   for (const banned of ["789.60", "-1.17", "-9.23", "-10.40"]) {
     for (const file of ["derive.js", "app.js", "index.html"]) {
