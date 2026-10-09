@@ -1440,6 +1440,30 @@
     "fee_frac_of_book": 0.0031
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T05:54:03.407762+00:00",
+    "ticker": "INJ",
+    "side": "sell",
+    "notional_frac_of_book": 0.173233,
+    "pnl_frac_of_book": 0.00837,
+    "why": "+5% half-scale profit-take: INJ unscaled lot at +6.4% mark / +5.3% bid vs cost 6.6494; per entry plan, sell 50% at +5% then trail the leftover.",
+    "running_pnl_frac": 0.014731,
+    "running_balance_frac": 1.014731,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T05:54:32.081526+00:00",
+    "ticker": "XCN",
+    "side": "buy",
+    "notional_frac_of_book": 0.176467,
+    "pnl_frac_of_book": 0.0,
+    "why": "Rotate INJ half proceeds into top unheld gate clear: XCN p_up 0.5279 >= 0.50 temp live gate (artifact ad44cc7); $53 under $100 cap; no cash reserve per Joe.",
+    "running_pnl_frac": 0.014731,
+    "running_balance_frac": 1.014731,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
