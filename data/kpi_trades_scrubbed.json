@@ -1572,6 +1572,18 @@
     "fee_frac_of_book": 0.0016
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T17:56:10.625983+00:00",
+    "ticker": "PYTH",
+    "side": "buy",
+    "notional_frac_of_book": 0.164933,
+    "pnl_frac_of_book": 0.0,
+    "why": "Deploy freed QNT cash into the only gate clear: PYTH p_up 0.5159 >= 0.50 temp live gate (artifact ef169c3); sized to available cash (~$50, under $100 cap); no cash reserve per Joe.",
+    "running_pnl_frac": 0.046221,
+    "running_balance_frac": 1.046221,
+    "fee_frac_of_book": 0.001567
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
