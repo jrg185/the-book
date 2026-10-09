@@ -14,8 +14,8 @@ in place, stamps data/meta.json with export_status "stale", and exits 0,
 unless KPI_REFRESH_EXPECTED=1. In that case a missing Supabase credential
 or a crypto or equities kpi_summary.as_of older than 15 minutes exits
 non-zero, stamps meta.json, and does not rewrite KPI numbers. Combined
-may keep its previous clock when cash was missing. Older snapshots for
-the same sleeve are ignored. It does not rewrite data/models.json.
+may keep its previous clock when refresh recorded that it kept that clock.
+Older snapshots for the same sleeve are ignored. It does not rewrite data/models.json.
 
 Robinhood cash is separate. Unset RH_API_KEY or RH_BASE64_PRIVATE_KEY skips
 the signed REST read and does not fail the run, even when KPI_REFRESH_EXPECTED
@@ -1122,33 +1122,27 @@ def latest_summary_rows(rows: list) -> list:
     return latest
 
 
-def assert_summary_fresh(rows: list, *, now: dt.datetime | None = None) -> None:
+def assert_summary_fresh(rows: list, *, now: dt.datetime | None = None, unchanged=None) -> None:
     """Refuse to write JSON when the latest sleeve snapshot is still pre-refresh.
 
     Pass rows from latest_summary_rows. Empty input, a missing as_of, or an
-    as_of outside the window fails. Combined may keep its previous clock when
-    cash was missing; crypto and equities still have to be inside the window.
+    as_of outside the window fails. Combined is not age-checked when refresh
+    recorded that it kept that clock. Crypto and equities are always checked.
     A summary with no other sleeve still checks combined.
     """
     if not rows:
         raise RuntimeError("kpi_summary is empty after refresh; not writing JSON")
+    kept_combined = "combined" in {str(name).strip().lower() for name in (unchanged or ())}
     current = now or dt.datetime.now(dt.timezone.utc)
-    trade_rows = [
-        row
-        for row in rows
-        if str(row.get("sleeve") if isinstance(row, dict) else "").strip().lower() != "combined"
-    ]
     for row in rows:
-        sleeve = str(row.get("sleeve") if isinstance(row, dict) else "").strip().lower()
+        sleeve = str(row.get("sleeve") or "").strip().lower() if isinstance(row, dict) else ""
         as_of = row.get("as_of") if isinstance(row, dict) else None
         if not as_of:
             raise RuntimeError("kpi_summary row is missing as_of after refresh; not writing JSON")
         moment = parse_as_of(as_of)
-        too_old = current - moment > dt.timedelta(minutes=15)
-        too_new = moment - current > dt.timedelta(minutes=5)
-        if sleeve == "combined" and trade_rows and too_old and not too_new:
+        if sleeve == "combined" and kept_combined:
             continue
-        if too_old or too_new:
+        if current - moment > dt.timedelta(minutes=15) or moment - current > dt.timedelta(minutes=5):
             raise RuntimeError(
                 f"kpi_summary as_of {moment.strftime('%Y-%m-%dT%H:%M:%SZ')} is stale after refresh; "
                 "not writing JSON"
@@ -2929,7 +2923,29 @@ def self_test() -> int:
         {"sleeve": "equities", "as_of": fresh},
         {"sleeve": "combined", "as_of": stale},
     ]
-    assert_summary_fresh(latest_summary_rows(kept_clock), now=now)
+    assert_summary_fresh(latest_summary_rows(kept_clock), now=now, unchanged={"combined"})
+    try:
+        assert_summary_fresh(latest_summary_rows(kept_clock), now=now)
+    except RuntimeError as exc:
+        if "stale" not in str(exc):
+            raise
+    else:
+        raise RuntimeError("an old combined clock passed without the refresh stamp")
+    try:
+        assert_summary_fresh(
+            [
+                {"sleeve": "crypto", "as_of": stale},
+                {"sleeve": "equities", "as_of": fresh},
+                {"sleeve": "combined", "as_of": stale},
+            ],
+            now=now,
+            unchanged={"combined", "crypto"},
+        )
+    except RuntimeError as exc:
+        if "stale" not in str(exc):
+            raise
+    else:
+        raise RuntimeError("a stale crypto row was skipped")
     try:
         assert_summary_fresh([{"sleeve": "combined", "as_of": stale}], now=now)
     except RuntimeError as exc:
@@ -4304,7 +4320,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         bundle = export_live(base_url, key, db_url)
         if refresh_expected:
-            assert_summary_fresh(bundle["kpi_summary"])
+            import account_book
+
+            assert_summary_fresh(bundle["kpi_summary"], unchanged=account_book.unchanged_sleeves())
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
         # REST when the keys are set. Unset keys skip REST even if
