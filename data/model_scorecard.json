@@ -10,13 +10,13 @@
     "note": "The CLI is still --backend rules. lgbm is promoted on after-cost mean and is not the live backend."
   },
   "closed_fills": {
-    "wins": 29,
+    "wins": 30,
     "losses": 32,
     "flats": 0,
-    "decided": 61,
-    "win_rate": 0.47541,
-    "expectancy_frac": 0.000454,
-    "expectancy_usd": 0.14,
+    "decided": 62,
+    "win_rate": 0.483871,
+    "expectancy_frac": 0.000554,
+    "expectancy_usd": 0.17,
     "seed_usd": 300,
     "deduped": 0,
     "order_id_available": false,
@@ -29,15 +29,15 @@
     "fee_usd": 32.67,
     "sell_fee_usd": 14.56,
     "fee_frac": 0.1089,
-    "n": 126,
+    "n": 128,
     "seed_usd": 300,
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-09T11:17:49+00:00",
-    "kill_headroom_stored": 1.074397,
-    "kill_headroom_frac": 0.01074397,
-    "kill_headroom_usd": 3.22,
+    "as_of": "2026-10-09T11:22:23+00:00",
+    "kill_headroom_stored": 1.024605,
+    "kill_headroom_frac": 0.01024605,
+    "kill_headroom_usd": 3.07,
     "day_kill_pct": -0.1,
     "day_kill_usd": -30.0,
     "day_target_pct": 0.025,
@@ -95,7 +95,7 @@
     "artifacts_table": "signal_artifacts",
     "outcomes_table": "signal_trade_outcomes",
     "artifact_count": 396,
-    "outcome_count": 45,
+    "outcome_count": 47,
     "last_generated_at": "2026-10-09T10:38:39+00:00",
     "note": "Counts only. The artifact payload stays in the warehouse."
   }

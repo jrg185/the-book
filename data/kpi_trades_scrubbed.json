@@ -1512,6 +1512,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T10:55:03.07748+00:00",
+    "ticker": "INJ",
+    "side": "sell",
+    "notional_frac_of_book": 0.171733,
+    "pnl_frac_of_book": 0.006646,
+    "why": "Trail exit: INJ scaled leftover breached its cost+5% trail (trail ~6.982, bid 6.924); full exit of the lot.",
+    "running_pnl_frac": 0.034365,
+    "running_balance_frac": 1.034365,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T10:55:12.090951+00:00",
+    "ticker": "ALGO",
+    "side": "buy",
+    "notional_frac_of_book": 0.1716,
+    "pnl_frac_of_book": 0.0,
+    "why": "Rotate INJ proceeds into top unheld gate clear: ALGO p_up 0.5426 >= 0.50 temp live gate (artifact a070615); $51.50 under $100 cap; no cash reserve per Joe.",
+    "running_pnl_frac": 0.034365,
+    "running_balance_frac": 1.034365,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
