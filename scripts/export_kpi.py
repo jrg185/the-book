@@ -718,11 +718,14 @@ def load_open_positions(base_url: str, key: str | None, db_url: str | None, as_o
         env.get("COINSTATS_API_KEY", ""),
         env.get("ALPHA_VANTAGE_API_KEY", ""),
     ]
+    import account_book
+
     try:
-        quotes = refresh.resolve_marks(sorted(book), env)
+        marks, origin = account_book.resolve_or_reuse(sorted(book), refresh.resolve_marks, env)
     except refresh.RefreshError as exc:
         raise RuntimeError(refresh.redact(str(exc), secrets)) from None
-    marks = {pair: price for pair, (price, _source) in quotes.items()}
+    if origin == "refresh":
+        print("open marks reused from the refresh run", file=sys.stderr)
     scrubbed = scrub_open_positions(fills, marks, as_of)
     scrubbed["card_positions"] = card_positions(fills, marks)
     return scrubbed
@@ -2728,9 +2731,13 @@ def _drop_number(cash, key: str):
 def apply_published_book(book: dict, cash: dict | None) -> dict:
     """Write the agentic total, the drop's day P&L, and kill headroom.
 
-    When holdings and a position list are present, running_balance_usd is
+    When a cash drop and a position list are present, running_balance_usd is
     cash plus open crypto lots and running_pnl_usd is that total minus the
-    combined seed in BOOK_SEEDS. Those two replace the warehouse snapshot.
+    combined seed in BOOK_SEEDS. Realized and unrealized come from that same
+    total and the same marks as positions[].value_usd: unrealized is the open
+    lots, realized is running minus unrealized. A missing cash drop leaves
+    the previous balance and P&L and logs the absence. It does not fall back
+    to seed + trade P&L + open mark-to-market.
     day_realized_usd, when present, is copied onto day_pnl_usd as-is. Gross
     and sell-fee audit fields are copied when present. If all three are
     present and gross minus fees differs from the net by more than one cent,
@@ -2739,6 +2746,9 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     kill_remaining_usd uses the running balance and that day.
     """
     out = dict(book) if isinstance(book, dict) else {}
+    if not isinstance(cash, dict):
+        print("cash drop absent; account balance, realized, and unrealized left unchanged")
+        return out
     net = _drop_number(cash, "day_realized_usd")
     gross = _drop_number(cash, "day_realized_gross_usd")
     fees = _drop_number(cash, "day_sell_fees_usd")
@@ -2765,6 +2775,17 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
         return out
     out["running_balance_usd"] = marked
     out["running_pnl_usd"] = js_round_cents(Decimal(str(marked)) - BOOK_SEEDS["combined"])
+    import account_book
+
+    identity = account_book.position_identity(out.get("positions"), cash, BOOK_SEEDS["combined"])
+    if identity is not None and identity.get("realized_cents") is not None:
+        # Same cent round as the card. Realized is the remainder, so the
+        # published sum matches running P&L to the cent. Prefer this split
+        # over the warehouse row. sleeve_as_of stays the snapshot clock.
+        if usd_equal(identity["balance_cents"], marked):
+            out["unrealized_pnl_usd"] = float(identity["unrealized_cents"])
+            out["realized_pnl_usd"] = float(identity["realized_cents"])
+            out["running_pnl_usd"] = float(identity["running_cents"])
     day = _finite_number(out.get("day_pnl_usd"))
     kill = kill_remaining_usd(marked, day)
     if kill is not None:
@@ -2784,11 +2805,11 @@ def refresh_live_book(
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
     Does nothing when the account file is absent. Does not invent holdings.
-    When account_pnl is the latest combined snapshot, realized and unrealized
-    are written through, and sleeve_as_of is that row's as_of. When holdings
-    and a position list are present, running_balance_usd and running_pnl_usd
-    are the agentic total and that total minus the combined seed, not the
-    warehouse figures. Day P&L is day_realized_usd from the cash drop when
+    When account_pnl is the latest combined snapshot, sleeve_as_of is that
+    row's as_of. When a cash drop and open lots are present, running balance,
+    running P&L, realized, and unrealized come from cash plus those lots on
+    one mark set. Realized is running minus unrealized. A missing cash drop
+    leaves the previous figures. Day P&L is day_realized_usd from the cash drop when
     that number is present; otherwise the signal copy stays and the absence
     is logged. kill_remaining_usd is the day-kill headroom on the running
     balance. generated_at stays the signal time. A missing snapshot does not
@@ -3871,8 +3892,16 @@ def self_test() -> int:
             raise RuntimeError("running P&L used the crypto seed")
         if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(100, -2.5)):
             raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
-        if published_day.get("realized_pnl_usd") != 3.4 or published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
-            raise RuntimeError(f"snapshot realized or sleeve clock was dropped: {published_day}")
+        if published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
+            raise RuntimeError(f"snapshot sleeve clock was dropped: {published_day}")
+        if not usd_equal(published_day.get("unrealized_pnl_usd"), 4):
+            raise RuntimeError(f"unrealized was not the open lot: {published_day}")
+        identity_running = Decimal(str(published_day["running_pnl_usd"]))
+        identity_unreal = Decimal(str(published_day["unrealized_pnl_usd"]))
+        if not usd_equal(published_day.get("realized_pnl_usd"), identity_running - identity_unreal):
+            raise RuntimeError(f"realized was not running minus unrealized: {published_day}")
+        if not usd_equal(identity_running, identity_unreal + Decimal(str(published_day["realized_pnl_usd"]))):
+            raise RuntimeError("published realized plus unrealized left running")
         if published_day.get("signal_book_usd") != 400:
             raise RuntimeError("signal book moved")
         matched_cash = {

@@ -16,8 +16,11 @@ ROOT = SCRIPTS.parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+import account_book
+import book_seeds
 import export_kpi
 import recon_kpi_realized as recon
+import refresh_kpi_snapshots as refresh
 import sync_rh_kpi_trades as sync
 
 BUY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
@@ -672,3 +675,262 @@ def test_committed_backfill_diff_is_scrubbed():
         assert delta == export_kpi.q6(new - old)
         assert abs(old) < 1
         assert abs(new) < 1
+
+
+def _acct(
+    ticker,
+    side,
+    qty,
+    price,
+    stamp,
+    pnl="0",
+    fee="0",
+    notional=None,
+    sleeve="crypto",
+):
+    row = {
+        "sleeve": sleeve,
+        "ticker": ticker,
+        "side": side,
+        "qty": qty,
+        "avg_price": price,
+        "pnl_trade_usd": pnl,
+        "fee_usd": fee,
+        "timestamp_et": stamp,
+        "order_id": f"fixture-{sleeve}-{ticker}-{stamp}-{side}",
+    }
+    if notional is not None:
+        row["notional_usd"] = notional
+    return row
+
+
+def _crypto_flows(fills) -> Decimal:
+    total = Decimal("0")
+    for fill in fills:
+        if str(fill.get("sleeve") or "crypto") != "crypto":
+            continue
+        qty = Decimal(fill["qty"])
+        price = Decimal(fill["avg_price"])
+        fee = Decimal(fill["fee_usd"])
+        notional = Decimal(fill["notional_usd"]) if fill.get("notional_usd") not in (None, "") else qty * price
+        if fill["side"] == "buy":
+            total -= notional + fee
+        else:
+            total += notional - fee
+    return total
+
+
+def _funded_cash(fills, seed: Decimal) -> dict:
+    """Cash that matches the combined seed plus crypto trade flows. Split across USD and USDC."""
+    total = seed + _crypto_flows(fills)
+    usdc = Decimal("3.25")
+    return {"USD": format(total - usdc, "f"), "USDC": format(usdc, "f")}
+
+
+def _sample_book():
+    """Three buys, one partial sell, one full close. Cent notionals. Not a live book."""
+    sells_aaa = (Decimal("11") - Decimal("10")) * Decimal("4") - Decimal("0.10")
+    sells_bbb = (Decimal("6") - Decimal("5")) * Decimal("2") - Decimal("0.05")
+    fills = [
+        _acct("AAA", "buy", "4", "10", "2026-04-01T15:00:00Z", fee="0.40", notional="40.01"),
+        _acct("BBB", "buy", "2", "5", "2026-04-01T15:01:00Z", fee="0.25", notional="10.00"),
+        _acct("AAA", "buy", "4", "12", "2026-04-01T15:02:00Z", fee="0.48", notional="48.02"),
+        _acct("AAA", "sell", "4", "11", "2026-04-01T16:00:00Z", pnl=format(sells_aaa, "f"), fee="0.10", notional="43.99"),
+        _acct("BBB", "sell", "2", "6", "2026-04-01T16:05:00Z", pnl=format(sells_bbb, "f"), fee="0.05", notional="12.00"),
+    ]
+    marks = {("crypto", "AAA"): Decimal("13")}
+    return fills, marks
+
+
+def test_account_balance_is_cash_plus_lots_and_buy_fees_hit_realized():
+    fills, marks = _sample_book()
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    reading = account_book.statement(fills, marks, cash, seed)
+    lots = Decimal("4") * Decimal("13")
+    assert reading["balance_exact"] == account_book.cash_total(cash) + lots
+    assert reading["realized_exact"] + reading["unrealized_exact"] == reading["running_exact"]
+    assert reading["running_exact"] == reading["balance_exact"] - seed
+    assert reading["realized_cents"] + reading["unrealized_cents"] == reading["running_cents"]
+    assert reading["buy_fees"] == Decimal("0.40") + Decimal("0.25") + Decimal("0.48")
+    assert reading["open_buy_fees"] == Decimal("0.48")
+    assert reading["closed_buy_fees"] == Decimal("0.65")
+    assert reading["realized_exact"] < reading["trade_pnl"]
+    assert reading["trade_pnl"] - reading["realized_exact"] == reading["buy_fees"] + reading["rounding"]
+    positions = export_kpi.card_positions(fills, marks)
+    exact = sum(
+        (
+            Decimal(row["qty"]) * (Decimal(row["mark"]) - Decimal(row["avg_cost"]))
+            for row in positions
+            if row["sleeve"] == "crypto"
+        ),
+        Decimal("0"),
+    )
+    assert reading["unrealized_exact"] == exact
+    for row in positions:
+        mark = marks[(row["sleeve"], row["ticker"])]
+        assert Decimal(row["mark"]) == mark
+        assert Decimal(row["qty"]) * mark == Decimal(row["qty"]) * Decimal(row["mark"])
+
+
+def test_refresh_and_export_share_one_balance():
+    fills, marks = _sample_book()
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    rows, _opens = refresh.build_rows(fills, marks, {}, "2026-04-02T00:00:00Z", cash=cash)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    positions = export_kpi.card_positions(fills, marks)
+    identity = account_book.position_identity(positions, cash, seed)
+    assert identity is not None
+    assert export_kpi.usd_equal(combined["running_balance_usd"], identity["balance_cents"])
+    assert export_kpi.usd_equal(combined["running_pnl_usd"], identity["running_cents"])
+    assert export_kpi.usd_equal(combined["realized_pnl_usd"], identity["realized_cents"])
+    assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], identity["unrealized_cents"])
+    assert "not the account" in {row["sleeve"]: row for row in rows}["crypto"]["notes"]
+
+
+def test_average_cost_full_close_gap_sums_to_the_cent_sliver():
+    fifo_gross = Decimal("10")
+    fee = Decimal("0.30")
+    stored = fifo_gross - Decimal("0.302122")
+    fills = [
+        _acct("GRT", "buy", "10", "1", "2026-04-03T15:00:00Z", fee=format(fee, "f"), notional="10"),
+        _acct(
+            "GRT",
+            "sell",
+            "10",
+            "2",
+            "2026-04-03T18:00:00Z",
+            pnl=format(stored, "f"),
+            fee=format(fee, "f"),
+            notional="20",
+        ),
+    ]
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    reading = account_book.decompose(fills, {}, cash, seed)
+    assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
+    assert reading["basis_gap"] == -(Decimal("0.302122") - fee)
+    assert reading["buy_fees"] == fee
+    # Flat book: a second quote set does not move an open mark.
+    same = account_book.decompose(fills, {}, cash, seed, snapshot_marks={})
+    assert same["mark_drift"] == 0
+    assert abs(same["gap"] - same["components_sum"]) < Decimal("1e-6")
+
+
+def test_open_mark_drift_is_in_the_gap():
+    fills, marks = _sample_book()
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    other = {("crypto", "AAA"): Decimal("13.5")}
+    reading = account_book.decompose(fills, marks, cash, seed, snapshot_marks=other)
+    assert reading["mark_drift"] != 0
+    assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
+
+
+def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
+    assert account_book.cash_total({"USD": "6"}) == Decimal("6")
+    assert account_book.cash_total({"USDC": "4.5"}) == Decimal("4.5")
+    assert account_book.cash_total({}) is None
+    assert account_book.cash_total(None) is None
+    fills, marks = _sample_book()
+    usd_only = account_book.statement(fills, marks, {"USD": "20"})
+    usdc_only = account_book.statement(fills, marks, {"USDC": "20"})
+    assert usd_only["cash"] == Decimal("20")
+    assert usdc_only["cash"] == Decimal("20")
+    prior = {
+        "combined": {
+            "realized_pnl_usd": "1.25",
+            "unrealized_pnl_usd": "0.50",
+            "running_pnl_usd": "1.75",
+            "running_balance_usd": "9.25",
+        }
+    }
+    rows, _opens = refresh.build_rows(fills, marks, prior, "2026-04-04T00:00:00Z")
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    assert combined["running_balance_usd"] == "9.250000"
+    assert combined["realized_pnl_usd"] == "1.250000"
+    assert "cash drop absent" in capsys.readouterr().err
+    assert "not a seed+realized+unrealized fallback" in combined["notes"]
+    try:
+        account_book.statement(fills, marks, None)
+    except account_book.AccountBookError as exc:
+        assert "missing" in str(exc)
+    else:
+        raise AssertionError("a missing cash drop built a book")
+
+
+def test_account_recon_exits_on_the_tolerance(tmp_path, capsys):
+    fills, marks = _sample_book()
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    kpi = tmp_path / "kpi.json"
+    cash_path = tmp_path / "cash.json"
+    marks_path = tmp_path / "marks.json"
+    kpi.write_text(json.dumps(fills), encoding="utf-8")
+    cash_path.write_text(json.dumps({key: str(value) for key, value in cash.items()}), encoding="utf-8")
+    marks_path.write_text(
+        json.dumps({f"{sleeve}:{ticker}": str(price) for (sleeve, ticker), price in marks.items()}),
+        encoding="utf-8",
+    )
+    code = recon.main(
+        [
+            "--account",
+            "--kpi-json",
+            str(kpi),
+            "--cash-json",
+            str(cash_path),
+            "--marks-json",
+            str(marks_path),
+        ]
+    )
+    assert code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["ok"] is True
+    assert "A buy fees" in "\n".join(report["lines"])
+    assert abs(Decimal(report["gap_usd"]) - Decimal(report["components_sum_usd"])) < Decimal("1e-6")
+    skewed = dict(cash)
+    skewed["USD"] = str(Decimal(skewed["USD"]) + Decimal("5"))
+    cash_path.write_text(json.dumps(skewed), encoding="utf-8")
+    code = recon.main(
+        [
+            "--account",
+            "--kpi-json",
+            str(kpi),
+            "--cash-json",
+            str(cash_path),
+            "--marks-json",
+            str(marks_path),
+            "--tolerance",
+            "0.01",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "warning: unexplained residual exceeds tolerance" in err
+
+
+def test_export_reuses_the_refresh_marks(tmp_path, monkeypatch):
+    fills, marks = _sample_book()
+    path = tmp_path / "marks.json"
+    monkeypatch.setenv("KPI_MARKS_PATH", str(path))
+    account_book.save_marks(marks, "2026-04-05T00:00:00Z")
+
+    def explode(_keys, _env):
+        raise AssertionError("export fetched a second quote set")
+
+    reused, origin = account_book.resolve_or_reuse([("crypto", "AAA")], explode, {})
+    assert origin == "refresh"
+    assert reused[("crypto", "AAA")] == Decimal("13")
+    monkeypatch.delenv("KPI_MARKS_PATH")
+    calls = []
+
+    def once(keys, _env):
+        calls.append(list(keys))
+        return {key: (Decimal("13"), "fixture") for key in keys}
+
+    fetched, origin = account_book.resolve_or_reuse([("crypto", "AAA")], once, {})
+    assert origin == "quotes"
+    assert calls == [[("crypto", "AAA")]]
+    assert fetched[("crypto", "AAA")] == Decimal("13")
+    _ = fills
