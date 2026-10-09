@@ -12,9 +12,10 @@ applied by scripts/refresh_kpi_snapshots.py before this export.
 With no service role key, the script leaves the committed KPI JSON
 in place, stamps data/meta.json with export_status "stale", and exits 0,
 unless KPI_REFRESH_EXPECTED=1. In that case a missing Supabase credential
-or the latest kpi_summary.as_of per sleeve older than 15 minutes exits
-non-zero, stamps meta.json, and does not rewrite KPI numbers. Older
-snapshots for the same sleeve are ignored. It does not rewrite data/models.json.
+or a crypto or equities kpi_summary.as_of older than 15 minutes exits
+non-zero, stamps meta.json, and does not rewrite KPI numbers. Combined
+may keep its previous clock when refresh recorded that it kept that clock.
+Older snapshots for the same sleeve are ignored. It does not rewrite data/models.json.
 
 Robinhood cash is separate. Unset RH_API_KEY or RH_BASE64_PRIVATE_KEY skips
 the signed REST read and does not fail the run, even when KPI_REFRESH_EXPECTED
@@ -718,11 +719,14 @@ def load_open_positions(base_url: str, key: str | None, db_url: str | None, as_o
         env.get("COINSTATS_API_KEY", ""),
         env.get("ALPHA_VANTAGE_API_KEY", ""),
     ]
+    import account_book
+
     try:
-        quotes = refresh.resolve_marks(sorted(book), env)
+        marks, origin = account_book.resolve_or_reuse(sorted(book), refresh.resolve_marks, env)
     except refresh.RefreshError as exc:
         raise RuntimeError(refresh.redact(str(exc), secrets)) from None
-    marks = {pair: price for pair, (price, _source) in quotes.items()}
+    if origin == "refresh":
+        print("open marks reused from the refresh run", file=sys.stderr)
     scrubbed = scrub_open_positions(fills, marks, as_of)
     scrubbed["card_positions"] = card_positions(fills, marks)
     return scrubbed
@@ -1118,20 +1122,26 @@ def latest_summary_rows(rows: list) -> list:
     return latest
 
 
-def assert_summary_fresh(rows: list, *, now: dt.datetime | None = None) -> None:
+def assert_summary_fresh(rows: list, *, now: dt.datetime | None = None, unchanged=None) -> None:
     """Refuse to write JSON when the latest sleeve snapshot is still pre-refresh.
 
     Pass rows from latest_summary_rows. Empty input, a missing as_of, or an
-    as_of outside the window fails.
+    as_of outside the window fails. Combined is not age-checked when refresh
+    recorded that it kept that clock. Crypto and equities are always checked.
+    A summary with no other sleeve still checks combined.
     """
     if not rows:
         raise RuntimeError("kpi_summary is empty after refresh; not writing JSON")
+    kept_combined = "combined" in {str(name).strip().lower() for name in (unchanged or ())}
     current = now or dt.datetime.now(dt.timezone.utc)
     for row in rows:
+        sleeve = str(row.get("sleeve") or "").strip().lower() if isinstance(row, dict) else ""
         as_of = row.get("as_of") if isinstance(row, dict) else None
         if not as_of:
             raise RuntimeError("kpi_summary row is missing as_of after refresh; not writing JSON")
         moment = parse_as_of(as_of)
+        if sleeve == "combined" and kept_combined:
+            continue
         if current - moment > dt.timedelta(minutes=15) or moment - current > dt.timedelta(minutes=5):
             raise RuntimeError(
                 f"kpi_summary as_of {moment.strftime('%Y-%m-%dT%H:%M:%SZ')} is stale after refresh; "
@@ -2551,9 +2561,10 @@ def load_rh_cash(env: dict | None = None) -> dict | None:
     """Live USD buying power and USDC quantity for the agentic account.
 
     None when RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset. That None does
-    not fail export; the caller may read data/rh_cash.json. A signed GET
-    that fails, or a payload without both lines, raises so export does not
-    publish fresh lots on a broken cash read. This does not place an order.
+    not fail the caller. A signed GET that fails, or a payload without both
+    lines, raises. account_book.read_cash logs that error and uses
+    data/rh_cash.json, and treats cash as missing only when the drop fails
+    too. This does not place an order.
     """
     from sync_rh_kpi_trades import SyncError, path_from_next, rh_credentials, rh_get
 
@@ -2728,9 +2739,17 @@ def _drop_number(cash, key: str):
 def apply_published_book(book: dict, cash: dict | None) -> dict:
     """Write the agentic total, the drop's day P&L, and kill headroom.
 
-    When holdings and a position list are present, running_balance_usd is
-    cash plus open crypto lots and running_pnl_usd is that total minus the
-    combined seed in BOOK_SEEDS. Those two replace the warehouse snapshot.
+    When a position list is present, running_balance_usd is the cash on the
+    file plus open crypto lots, and running_pnl_usd is that
+    total minus the combined seed in BOOK_SEEDS. When the cash drop is
+    present, realized and unrealized come from that same total and the same
+    marks as positions[].value_usd: unrealized is the open lots, realized is
+    running minus unrealized. A missing cash drop still recomputes the
+    balance, running P&L, and kill from the holdings and lots already on the
+    file, keeps the previous realized and unrealized, and logs the absence.
+    It does not fall back to seed + trade P&L + open mark-to-market. When
+    the split cannot be rebuilt, the previous realized and unrealized stay
+    and a warning is printed.
     day_realized_usd, when present, is copied onto day_pnl_usd as-is. Gross
     and sell-fee audit fields are copied when present. If all three are
     present and gross minus fees differs from the net by more than one cent,
@@ -2739,10 +2758,19 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     kill_remaining_usd uses the running balance and that day.
     """
     out = dict(book) if isinstance(book, dict) else {}
+    cash_missing = not isinstance(cash, dict)
+    if cash_missing:
+        print(
+            "cash drop absent; realized and unrealized left unchanged; "
+            "balance, running P&L, and kill recomputed from holdings and lots",
+            file=sys.stderr,
+        )
     net = _drop_number(cash, "day_realized_usd")
     gross = _drop_number(cash, "day_realized_gross_usd")
     fees = _drop_number(cash, "day_sell_fees_usd")
-    if net is None:
+    if cash_missing:
+        net = None
+    elif net is None:
         print("day_realized_usd absent from the cash drop; day_pnl_usd left unchanged")
     else:
         out["day_pnl_usd"] = net
@@ -2765,6 +2793,32 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
         return out
     out["running_balance_usd"] = marked
     out["running_pnl_usd"] = js_round_cents(Decimal(str(marked)) - BOOK_SEEDS["combined"])
+    if not cash_missing:
+        import account_book
+
+        identity = account_book.position_identity(out.get("positions"), cash, BOOK_SEEDS["combined"])
+        # Same cent round as the card. Realized is the remainder, so the
+        # published sum matches running P&L to the cent. Prefer this split
+        # over the warehouse row. sleeve_as_of stays the snapshot clock.
+        if identity is None:
+            print(
+                "warning: realized and unrealized left unchanged; open lot value is missing",
+                file=sys.stderr,
+            )
+        elif identity.get("realized_cents") is None:
+            print(
+                "warning: realized and unrealized left unchanged; position unrealized is missing",
+                file=sys.stderr,
+            )
+        elif not usd_equal(identity["balance_cents"], marked):
+            print(
+                "warning: realized and unrealized left unchanged; marked balance does not match",
+                file=sys.stderr,
+            )
+        else:
+            out["unrealized_pnl_usd"] = float(identity["unrealized_cents"])
+            out["realized_pnl_usd"] = float(identity["realized_cents"])
+            out["running_pnl_usd"] = float(identity["running_cents"])
     day = _finite_number(out.get("day_pnl_usd"))
     kill = kill_remaining_usd(marked, day)
     if kill is not None:
@@ -2784,11 +2838,13 @@ def refresh_live_book(
     """Rewrite data/live_book.json so book_usd is the holdings sum.
 
     Does nothing when the account file is absent. Does not invent holdings.
-    When account_pnl is the latest combined snapshot, realized and unrealized
-    are written through, and sleeve_as_of is that row's as_of. When holdings
-    and a position list are present, running_balance_usd and running_pnl_usd
-    are the agentic total and that total minus the combined seed, not the
-    warehouse figures. Day P&L is day_realized_usd from the cash drop when
+    When account_pnl is the latest combined snapshot, sleeve_as_of is that
+    row's as_of. Running balance and running P&L come from the cash lines
+    plus open crypto lots on one mark set. When the cash drop
+    is present, realized and unrealized come from that same total. Realized
+    is running minus unrealized. A missing cash drop recomputes balance,
+    running P&L, and kill from the file's holdings and lots, and keeps the
+    previous realized and unrealized. Day P&L is day_realized_usd from the cash drop when
     that number is present; otherwise the signal copy stays and the absence
     is logged. kill_remaining_usd is the day-kill headroom on the running
     balance. generated_at stays the signal time. A missing snapshot does not
@@ -2863,6 +2919,41 @@ def self_test() -> int:
     if len(latest) != 3 or any(row.get("note") != "new" for row in latest):
         raise RuntimeError(f"latest-as_of filter kept the wrong rows: {latest}")
     assert_summary_fresh(latest, now=now)
+    kept_clock = [
+        {"sleeve": "crypto", "as_of": fresh},
+        {"sleeve": "equities", "as_of": fresh},
+        {"sleeve": "combined", "as_of": stale},
+    ]
+    assert_summary_fresh(latest_summary_rows(kept_clock), now=now, unchanged={"combined"})
+    try:
+        assert_summary_fresh(latest_summary_rows(kept_clock), now=now)
+    except RuntimeError as exc:
+        if "stale" not in str(exc):
+            raise
+    else:
+        raise RuntimeError("an old combined clock passed without the refresh stamp")
+    try:
+        assert_summary_fresh(
+            [
+                {"sleeve": "crypto", "as_of": stale},
+                {"sleeve": "equities", "as_of": fresh},
+                {"sleeve": "combined", "as_of": stale},
+            ],
+            now=now,
+            unchanged={"combined", "crypto"},
+        )
+    except RuntimeError as exc:
+        if "stale" not in str(exc):
+            raise
+    else:
+        raise RuntimeError("a stale crypto row was skipped")
+    try:
+        assert_summary_fresh([{"sleeve": "combined", "as_of": stale}], now=now)
+    except RuntimeError as exc:
+        if "stale" not in str(exc):
+            raise
+    else:
+        raise RuntimeError("a stale combined-only summary did not fail freshness")
 
     older = (now - dt.timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
     all_stale = [
@@ -3625,13 +3716,16 @@ def self_test() -> int:
     main_src = Path(__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
     if "Export KPI expected live Robinhood cash" in main_src:
         raise RuntimeError("KPI_REFRESH_EXPECTED still fail-closes when Robinhood keys are unset")
-    rest_at = main_src.find("rest_cash = load_rh_cash()")
-    skip_at = main_src.find("REST cash skipped")
-    drop_at = main_src.find("load_rh_cash_drop(DATA)")
-    if rest_at < 0 or not (rest_at < skip_at < drop_at):
-        raise RuntimeError("main does not soft-skip REST cash onto the drop file")
-    if "cash=cash" not in main_src[drop_at:]:
+    if "account_book.read_cash(" not in main_src:
+        raise RuntimeError("main does not resolve cash through account_book.read_cash")
+    if "cash=cash" not in main_src:
         raise RuntimeError("main does not pass resolved cash into refresh_live_book")
+    reader = Path(__file__).resolve().parent.joinpath("account_book.py").read_text(encoding="utf-8")
+    rest_at = reader.find("load_rh_cash(")
+    fall_at = reader.find("falling back to data/rh_cash.json")
+    drop_at = reader.find("load_rh_cash_drop(")
+    if rest_at < 0 or not (rest_at < fall_at < drop_at):
+        raise RuntimeError("read_cash does not fall back to the desk drop when Robinhood fails")
     seeded = load_rh_cash_drop(DATA)
     if not isinstance(seeded, dict) or "USD" not in seeded or "USDC" not in seeded:
         raise RuntimeError("data/rh_cash.json is not a cash drop")
@@ -3871,8 +3965,16 @@ def self_test() -> int:
             raise RuntimeError("running P&L used the crypto seed")
         if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(100, -2.5)):
             raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
-        if published_day.get("realized_pnl_usd") != 3.4 or published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
-            raise RuntimeError(f"snapshot realized or sleeve clock was dropped: {published_day}")
+        if published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
+            raise RuntimeError(f"snapshot sleeve clock was dropped: {published_day}")
+        if not usd_equal(published_day.get("unrealized_pnl_usd"), 4):
+            raise RuntimeError(f"unrealized was not the open lot: {published_day}")
+        identity_running = Decimal(str(published_day["running_pnl_usd"]))
+        identity_unreal = Decimal(str(published_day["unrealized_pnl_usd"]))
+        if not usd_equal(published_day.get("realized_pnl_usd"), identity_running - identity_unreal):
+            raise RuntimeError(f"realized was not running minus unrealized: {published_day}")
+        if not usd_equal(identity_running, identity_unreal + Decimal(str(published_day["realized_pnl_usd"]))):
+            raise RuntimeError("published realized plus unrealized left running")
         if published_day.get("signal_book_usd") != 400:
             raise RuntimeError("signal book moved")
         matched_cash = {
@@ -3921,6 +4023,111 @@ def self_test() -> int:
         stopped = refresh_live_book(folder, fetch=False, cash=stopped_cash)
         if stopped["day_pnl_usd"] != -40 or not usd_equal(stopped["kill_remaining_usd"], 0):
             raise RuntimeError(f"a day loss past the rail left headroom: {stopped}")
+        marked_before = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "kill_remaining_usd": 1,
+            "running_balance_usd": 40,
+            "running_pnl_usd": 1,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [
+                {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 20, "unrealized_pnl_usd": 3},
+            ],
+        }
+        write_json(folder / "live_book.json", marked_before)
+        moved = {
+            **marked_before,
+            "positions": [
+                {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 80, "unrealized_pnl_usd": 3},
+            ],
+        }
+        write_json(folder / "live_book.json", moved)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            remarked = refresh_live_book(folder, fetch=False, cash=None)
+        finally:
+            sys.stderr = old_err
+        if "cash drop absent" not in stderr.getvalue():
+            raise RuntimeError("a missing cash drop was not logged")
+        if not usd_equal(remarked["running_balance_usd"], 110):
+            raise RuntimeError(f"a moved mark left the balance unchanged: {remarked}")
+        if not usd_differ(remarked["running_balance_usd"], marked_before["running_balance_usd"]):
+            raise RuntimeError("a moved mark did not move the balance")
+        if not usd_equal(remarked["kill_remaining_usd"], kill_remaining_usd(110, 0)):
+            raise RuntimeError(f"a moved mark left kill unchanged: {remarked}")
+        if not usd_differ(remarked["kill_remaining_usd"], marked_before["kill_remaining_usd"]):
+            raise RuntimeError("a moved mark did not move kill headroom")
+        if not usd_equal(remarked.get("realized_pnl_usd"), 2) or not usd_equal(remarked.get("unrealized_pnl_usd"), 3):
+            raise RuntimeError(f"a missing cash drop rebuilt realized: {remarked}")
+        mismatch = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [
+                {
+                    "sleeve": "crypto",
+                    "ticker": "ZZ",
+                    "qty": "2",
+                    "mark": "10",
+                    "avg_cost": "8",
+                    "value_usd": 99,
+                    "unrealized_pnl_usd": 4,
+                }
+            ],
+        }
+        write_json(folder / "live_book.json", mismatch)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            mismatched = refresh_live_book(folder, fetch=False, cash={"USD": 20, "USDC": 10})
+        finally:
+            sys.stderr = old_err
+        if "marked balance does not match" not in stderr.getvalue():
+            raise RuntimeError("a balance mismatch did not warn")
+        if not usd_equal(mismatched.get("realized_pnl_usd"), 2) or not usd_equal(mismatched.get("unrealized_pnl_usd"), 3):
+            raise RuntimeError(f"a balance mismatch rebuilt the split: {mismatched}")
+        if not usd_equal(mismatched.get("running_balance_usd"), 129):
+            raise RuntimeError(f"a balance mismatch left the marked total unchanged: {mismatched}")
+        missing_unreal = {
+            "book_usd": 30,
+            "day_pnl_usd": 0,
+            "realized_pnl_usd": 2,
+            "unrealized_pnl_usd": 3,
+            "holdings": [
+                {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+            ],
+            "positions": [{"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 20}],
+        }
+        write_json(folder / "live_book.json", missing_unreal)
+        stderr = io.StringIO()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            unknown_unreal = refresh_live_book(folder, fetch=False, cash={"USD": 20, "USDC": 10})
+        finally:
+            sys.stderr = old_err
+        if "position unrealized is missing" not in stderr.getvalue():
+            raise RuntimeError("a lot without unrealized did not warn")
+        if not usd_equal(unknown_unreal.get("realized_pnl_usd"), 2) or not usd_equal(
+            unknown_unreal.get("unrealized_pnl_usd"), 3
+        ):
+            raise RuntimeError(f"a missing unrealized rebuilt the split: {unknown_unreal}")
+        if not usd_equal(unknown_unreal.get("running_balance_usd"), 50):
+            raise RuntimeError(f"a missing unrealized left the balance unchanged: {unknown_unreal}")
         kept_signal = {
             "generated_at": "2026-01-01T00:00:00Z",
             "book_usd": 50,
@@ -4117,26 +4324,31 @@ def main(argv: list[str] | None = None) -> int:
     try:
         bundle = export_live(base_url, key, db_url)
         if refresh_expected:
-            assert_summary_fresh(bundle["kpi_summary"])
+            import account_book
+
+            assert_summary_fresh(bundle["kpi_summary"], unchanged=account_book.unchanged_sleeves())
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        # REST when the keys are set. Unset keys skip REST even if
-        # KPI_REFRESH_EXPECTED is set, then the desk drop, then the cash
-        # lines already on the file. Live balances are not hardcoded here.
-        rest_cash = load_rh_cash()
-        if rest_cash is None:
+        # Same path as refresh. Unset keys skip REST. A failed or incomplete
+        # GET is logged and the desk drop is used. Cash is missing only when
+        # that drop fails too, and the lines already on the file stay.
+        # Live balances are not hardcoded here.
+        import account_book
+
+        cash, origin = account_book.read_cash()
+        if origin == "rh_cash.json" and not (
+            (os.environ.get("RH_API_KEY") or "").strip()
+            and (os.environ.get("RH_BASE64_PRIVATE_KEY") or "").strip()
+        ):
             print(
                 "Robinhood REST cash skipped. "
                 "RH_API_KEY or RH_BASE64_PRIVATE_KEY is unset."
             )
-            cash = load_rh_cash_drop(DATA)
-        else:
-            cash = rest_cash
         if cash:
-            origin = "Robinhood" if rest_cash is not None else "data/rh_cash.json"
+            label = "Robinhood" if origin == "robinhood" else "data/rh_cash.json"
             print(
                 "live book cash from "
-                + origin
+                + label
                 + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )

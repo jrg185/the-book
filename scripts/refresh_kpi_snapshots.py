@@ -6,13 +6,21 @@ only SELECTs that view. Re-export cannot move as_of. This script reads fills fro
 public.kpi_trades (qty and price), marks what is still open, and INSERTs.
 
 Seeds come from config/book_seeds.json.
-running_pnl = realized + unrealized
-running_balance = start + running_pnl
-realized = sum of pnl_trade_usd on closing legs
-unrealized = open_qty * (mark - avg_cost)
-avg_cost is the open cost that matches those stored close dollars. A FIFO
-close leaves the oldest lots. A close still stored at the older average
-cost leaves that blend, so realized + unrealized stays one book.
+Crypto and equities sleeve rows stay seed-anchored so the old sleeve curves
+still have a start. They are not the account. The combined row is the
+account in scripts/account_book.py: cash plus open crypto lots, one mark
+set. Running P&L is that balance minus the combined seed. Equities lots
+stay on the equities sleeve row and are not in this balance.
+Unrealized keeps the Robinhood basis (buy fee stays out of average cost).
+Realized is running P&L minus unrealized, so buy fees land there through
+cash. A failed Robinhood cash read falls back to the desk drop. When cash
+is still missing, the previous combined dollars and the previous combined
+as_of stay. It does not insert a new combined clock, and it does not fall
+back to seed + trade P&L + open mark-to-market.
+Per-trade pnl_trade_usd is still the close leg only. avg_cost is the open
+cost that matches those stored close dollars. A FIFO close leaves the
+oldest lots. A close still stored at the older average cost leaves that
+blend on the sleeve row.
 
 Do not read public.kpi_trades_scrubbed. That view has no qty or price and joins
 the latest snapshot, so it cannot refresh mark-to-market.
@@ -634,12 +642,8 @@ apply_books.exits_hidden_by_duplicates = []
 
 
 def note_for(sleeve: str, realized: Decimal, unrealized: Decimal) -> str:
-    if sleeve == "combined":
-        return (
-            f"crypto+equities; realized {money(realized)}; unrealized {money(unrealized)}; "
-            "book=start+realized+unrealized"
-        )
     return (
+        f"sleeve curve only; not the account. "
         f"realized {money(realized)} closed exits; unrealized {money(unrealized)} open MTM; "
         "book=start+realized+unrealized"
     )
@@ -651,11 +655,31 @@ def prior_rail(prior: dict | None, key: str) -> Decimal | None:
     return dec(prior.get(key))
 
 
+def _kept_account(prior: dict | None) -> dict[str, str | None]:
+    """Previous combined dollars. Missing cash must not invent a new book."""
+    import account_book
+
+    keys = (
+        "realized_pnl_usd",
+        "unrealized_pnl_usd",
+        "running_pnl_usd",
+        "running_balance_usd",
+    )
+    kept = {}
+    for key in keys:
+        raw = None if not prior else prior.get(key)
+        amount = dec(raw) if raw not in (None, "") else None
+        kept[key] = None if amount is None else num_text(q6(amount))
+    kept["notes"] = account_book.absent_note()
+    return kept
+
+
 def build_rows(
     fills: list[dict],
     marks: dict[tuple[str, str], Decimal],
     priors: dict[str, dict],
     as_of: str,
+    cash: dict | None = None,
 ) -> tuple[list[dict], list[dict]]:
     realized_raw, book = apply_books(fills)
     missing = [f"{sleeve} {ticker}" for sleeve, ticker in sorted(book) if (sleeve, ticker) not in marks]
@@ -681,23 +705,57 @@ def build_rows(
     unrealized = {sleeve: q6(unrealized_raw[sleeve]) for sleeve in TRADE_SLEEVES}
     realized["combined"] = realized["crypto"] + realized["equities"]
     unrealized["combined"] = unrealized["crypto"] + unrealized["equities"]
+    import account_book
+
     rows = []
+    account = None
+    held = account_book.cash_total(cash)
+    if held is None:
+        print(
+            "cash drop absent; combined account figures left unchanged",
+            file=sys.stderr,
+        )
+    else:
+        account = account_book.statement(fills, marks, cash, START["combined"])
     for sleeve in SLEEVES:
         start = START[sleeve]
         running = realized[sleeve] + unrealized[sleeve]
         prior = priors.get(sleeve) or {}
+        if sleeve == "combined" and account is not None:
+            row_realized = account["realized_cents"]
+            row_unreal = account["unrealized_cents"]
+            row_running = account["running_cents"]
+            row_balance = account["balance_cents"]
+            notes = account_book.format_note(account)
+        elif sleeve == "combined":
+            kept = _kept_account(prior)
+            row_realized = dec(kept["realized_pnl_usd"]) if kept["realized_pnl_usd"] else None
+            row_unreal = dec(kept["unrealized_pnl_usd"]) if kept["unrealized_pnl_usd"] else None
+            row_running = dec(kept["running_pnl_usd"]) if kept["running_pnl_usd"] else None
+            row_balance = dec(kept["running_balance_usd"]) if kept["running_balance_usd"] else None
+            notes = kept["notes"]
+        else:
+            row_realized = realized[sleeve]
+            row_unreal = unrealized[sleeve]
+            row_running = running
+            row_balance = start + running
+            notes = note_for(sleeve, realized[sleeve], unrealized[sleeve])
+        row_as_of = as_of
+        if sleeve == "combined" and account is None:
+            raw_as_of = prior.get("as_of") if prior else None
+            row_as_of = iso_z(parse_ts(raw_as_of)) if raw_as_of not in (None, "") else None
         rows.append(
             {
                 "sleeve": sleeve,
-                "as_of": as_of,
-                "realized_pnl_usd": num_text(realized[sleeve]),
-                "unrealized_pnl_usd": num_text(unrealized[sleeve]),
-                "running_pnl_usd": num_text(running),
-                "running_balance_usd": num_text(start + running),
+                "as_of": row_as_of,
+                "realized_pnl_usd": num_text(q6(row_realized)) if row_realized is not None else None,
+                "unrealized_pnl_usd": num_text(q6(row_unreal)) if row_unreal is not None else None,
+                "running_pnl_usd": num_text(q6(row_running)) if row_running is not None else None,
+                "running_balance_usd": num_text(q6(row_balance)) if row_balance is not None else None,
                 "start_balance_usd": num_text(start),
                 "day_kill_pct": num_text(prior_rail(prior, "day_kill_pct")),
                 "day_target_pct": num_text(prior_rail(prior, "day_target_pct")),
-                "notes": note_for(sleeve, realized[sleeve], unrealized[sleeve]),
+                "notes": notes,
             }
         )
     return rows, opens
@@ -711,6 +769,9 @@ def env_values() -> dict[str, str]:
         "FINNHUB_API_KEY",
         "COINSTATS_API_KEY",
         "ALPHA_VANTAGE_API_KEY",
+        "RH_API_KEY",
+        "RH_BASE64_PRIVATE_KEY",
+        "RH_AGENTIC_ACCOUNT",
     )
     return {name: (os.environ.get(name) or "").strip() for name in names}
 
@@ -778,7 +839,7 @@ def fetch_trades_rest(base_url: str, key: str) -> list[dict]:
     for offset in range(0, page * 20, page):
         path = (
             "/rest/v1/kpi_trades"
-            "?select=sleeve,ticker,side,qty,avg_price,pnl_trade_usd,fee_usd,timestamp_et,order_id"
+            "?select=sleeve,ticker,side,qty,avg_price,notional_usd,pnl_trade_usd,fee_usd,timestamp_et,order_id"
             "&order=timestamp_et.asc"
             f"&limit={page}&offset={offset}"
         )
@@ -875,7 +936,7 @@ def db_error(exc, secrets: list[str]) -> RefreshError:
 
 def fetch_trades_db(db_url: str, secrets: list[str]) -> list[dict]:
     sql = """
-        select sleeve, ticker, side, qty, avg_price, pnl_trade_usd, fee_usd, timestamp_et, order_id
+        select sleeve, ticker, side, qty, avg_price, notional_usd, pnl_trade_usd, fee_usd, timestamp_et, order_id
         from public.kpi_trades
         order by timestamp_et asc
     """
@@ -977,14 +1038,27 @@ def summary_as_of_db(db_url: str, secrets: list[str]) -> dict[str, dt.datetime]:
         raise db_error(exc, secrets) from None
 
 
-def assert_fresh(found: dict[str, dt.datetime], floor: dt.datetime) -> None:
+def sleeves_left_unchanged(rows: list[dict], as_of: str) -> set[str]:
+    """Sleeves that did not get this run's as_of. Combined, when cash is missing."""
+    fresh = {row["sleeve"] for row in rows if row.get("as_of") == as_of}
+    return {sleeve for sleeve in SLEEVES if sleeve not in fresh}
+
+
+def assert_fresh(
+    found: dict[str, dt.datetime],
+    floor: dt.datetime,
+    unchanged: set[str] | None = None,
+) -> None:
     now = dt.datetime.now(dt.timezone.utc)
+    kept = unchanged or set()
     missing = [sleeve for sleeve in SLEEVES if sleeve not in found]
     if missing:
         raise RefreshError(
             "public.kpi_summary is missing " + ", ".join(missing) + " after INSERT"
         )
     for sleeve, moment in found.items():
+        if sleeve in kept:
+            continue
         text = iso_z(moment)
         if moment < floor or moment > now + dt.timedelta(minutes=2):
             frozen = " Still the frozen 2026-09-27 23:48Z snapshot." if text.startswith(FROZEN_PREFIX) else ""
@@ -1048,7 +1122,26 @@ def refresh(dry_run: bool) -> int:
     quotes = resolve_marks(sorted(book), env)
     marks = {key: price for key, (price, _source) in quotes.items()}
     as_of = iso_z(dt.datetime.now(dt.timezone.utc))
-    rows, opens = build_rows(trades, marks, priors, as_of)
+    import account_book
+
+    account_book.save_marks(marks, as_of)
+    cash, origin = account_book.read_cash(env, Path(__file__).resolve().parents[1] / "data")
+    if origin:
+        print(f"account cash from {origin}", file=sys.stderr)
+    rows, opens = build_rows(trades, marks, priors, as_of, cash=cash)
+    combined = next(row for row in rows if row["sleeve"] == "combined")
+    if combined.get("running_balance_usd") is None:
+        raise RefreshError(
+            "cash drop absent and no previous combined figures; snapshot was not updated"
+        )
+    insert_rows = [row for row in rows if row.get("as_of") == as_of]
+    unchanged = sleeves_left_unchanged(rows, as_of)
+    account_book.mark_unchanged(unchanged)
+    if not any(row["sleeve"] == "combined" for row in insert_rows):
+        print(
+            "cash drop absent; combined snapshot as_of left unchanged",
+            file=sys.stderr,
+        )
     collapsed = int(getattr(apply_books, "duplicates_collapsed", 0) or 0)
     hidden = list(getattr(apply_books, "exits_hidden_by_duplicates", []) or [])
     open_names = [f"{item['sleeve']} {item['ticker']} {item['qty']}" for item in opens]
@@ -1076,7 +1169,7 @@ def refresh(dry_run: bool) -> int:
     db_url = env.get("SUPABASE_DB_URL") or ""
     base_url = env.get("SUPABASE_URL") or DEFAULT_URL
     columns = table_columns(base_url, key) if key else None
-    payload = prepare_payload(rows, columns)
+    payload = prepare_payload(insert_rows, columns)
     inserted = False
     rest_error_text = ""
     if key and source == "rest":
@@ -1102,8 +1195,8 @@ def refresh(dry_run: bool) -> int:
             found = summary_as_of_db(db_url, secrets)
     else:
         found = summary_as_of_db(db_url, secrets)
-    assert_fresh(found, floor)
-    for row in rows:
+    assert_fresh(found, floor, unchanged)
+    for row in insert_rows:
         print(
             "inserted {sleeve} as_of={as_of} realized={realized_pnl_usd} "
             "unrealized={unrealized_pnl_usd} running={running_pnl_usd} "
@@ -1153,7 +1246,8 @@ def self_test() -> int:
     ]
     marks = {("crypto", "AAA"): Decimal("4"), ("equities", "QCOM"): Decimal("110")}
     priors = {"crypto": {"day_kill_pct": Decimal("-0.10"), "day_target_pct": Decimal("0.025")}}
-    rows, opens = build_rows(fills, marks, priors, "2026-09-28T01:00:00Z")
+    desk_cash = {"USD": Decimal("40"), "USDC": Decimal("10")}
+    rows, opens = build_rows(fills, marks, priors, "2026-09-28T01:00:00Z", cash=desk_cash)
     by = {row["sleeve"]: row for row in rows}
     # Opening buys ignore pnl_trade_usd. FIFO sells 5 of the $2 lot at $5 (realized 15).
     # Leftover is 5 @ 2 and 10 @ 4, cost 50. Mark 4 unrealized is 10, not 15 at the old blend of 3.
@@ -1175,14 +1269,57 @@ def self_test() -> int:
         raise RefreshError("equities balance")
     if by["equities"]["day_kill_pct"] is not None:
         raise RefreshError("missing prior rail should stay null")
-    if by["combined"]["realized_pnl_usd"] != "15.000000":
-        raise RefreshError("combined realized")
-    if by["combined"]["unrealized_pnl_usd"] != "30.000000":
+    # Cash 50 plus the open crypto lot (15 * 4). Equities stay off this row.
+    # Realized is running minus unrealized, not the trade-list 15.
+    combined_balance = Decimal("50") + Decimal("15") * Decimal("4")
+    combined_running = combined_balance - START["combined"]
+    combined_unreal = Decimal("10")
+    combined_realized = combined_running - combined_unreal
+    if by["combined"]["realized_pnl_usd"] != num_text(q6(combined_realized)):
+        raise RefreshError(f"combined realized {by['combined']['realized_pnl_usd']}")
+    if by["combined"]["unrealized_pnl_usd"] != num_text(q6(combined_unreal)):
         raise RefreshError("combined unrealized")
-    if by["combined"]["running_balance_usd"] != "845.000000":
+    if by["combined"]["running_pnl_usd"] != num_text(q6(combined_running)):
+        raise RefreshError("combined running")
+    if Decimal(by["combined"]["realized_pnl_usd"]) + Decimal(by["combined"]["unrealized_pnl_usd"]) != Decimal(
+        by["combined"]["running_pnl_usd"]
+    ):
+        raise RefreshError("combined realized plus unrealized left running")
+    if by["combined"]["running_balance_usd"] != num_text(q6(combined_balance)):
         raise RefreshError("combined balance")
+    if "not a sleeve seed curve" not in by["combined"]["notes"] or "buy fees" not in by["combined"]["notes"]:
+        raise RefreshError(f"combined note {by['combined']['notes']}")
     if by["combined"]["start_balance_usd"] != num_text(START["combined"]):
         raise RefreshError("combined seed")
+    if "not the account" not in by["crypto"]["notes"] or "not the account" not in by["equities"]["notes"]:
+        raise RefreshError("sleeve note still reads as the account")
+    kept_prior = {
+        "combined": {
+            "as_of": "2026-09-01T00:00:00Z",
+            "realized_pnl_usd": "1.25",
+            "unrealized_pnl_usd": "0.25",
+            "running_pnl_usd": "1.50",
+            "running_balance_usd": "12.50",
+        }
+    }
+    import io
+
+    old_err = sys.stderr
+    sys.stderr = io.StringIO()
+    try:
+        kept_rows, _kept_opens = build_rows(fills, marks, kept_prior, "2026-09-28T01:00:00Z")
+        absent_log = sys.stderr.getvalue()
+    finally:
+        sys.stderr = old_err
+    kept_combined = {row["sleeve"]: row for row in kept_rows}["combined"]
+    if kept_combined["running_balance_usd"] != "12.500000":
+        raise RefreshError(f"missing cash rewrote the book {kept_combined}")
+    if kept_combined["as_of"] != "2026-09-01T00:00:00Z":
+        raise RefreshError(f"missing cash stamped a fresh combined clock {kept_combined['as_of']}")
+    if kept_combined["realized_pnl_usd"] != "1.250000" or kept_combined["running_pnl_usd"] != "1.500000":
+        raise RefreshError("missing cash fell back to seed+realized+unrealized")
+    if "cash drop absent" not in absent_log or "not a seed+realized+unrealized fallback" not in kept_combined["notes"]:
+        raise RefreshError("missing cash was not logged")
     if len(opens) != 2:
         raise RefreshError("open count")
     aaa = next(row for row in opens if row["ticker"] == "AAA")
