@@ -13,10 +13,10 @@ set. Running P&L is that balance minus the combined seed. Equities lots
 stay on the equities sleeve row and are not in this balance.
 Unrealized keeps the Robinhood basis (buy fee stays out of average cost).
 Realized is running P&L minus unrealized, so buy fees land there through
-cash. A missing cash drop, or a failed Robinhood cash read, keeps the
-previous combined dollars and the previous combined as_of. It does not
-insert a new combined clock, and it does not fall back to seed + trade
-P&L + open mark-to-market.
+cash. A failed Robinhood cash read falls back to the desk drop. When cash
+is still missing, the previous combined dollars and the previous combined
+as_of stay. It does not insert a new combined clock, and it does not fall
+back to seed + trade P&L + open mark-to-market.
 Per-trade pnl_trade_usd is still the close leg only. avg_cost is the open
 cost that matches those stored close dollars. A FIFO close leaves the
 oldest lots. A close still stored at the older average cost leaves that
@@ -1038,6 +1038,12 @@ def summary_as_of_db(db_url: str, secrets: list[str]) -> dict[str, dt.datetime]:
         raise db_error(exc, secrets) from None
 
 
+def sleeves_left_unchanged(rows: list[dict], as_of: str) -> set[str]:
+    """Sleeves that did not get this run's as_of. Combined, when cash is missing."""
+    fresh = {row["sleeve"] for row in rows if row.get("as_of") == as_of}
+    return {sleeve for sleeve in SLEEVES if sleeve not in fresh}
+
+
 def assert_fresh(
     found: dict[str, dt.datetime],
     floor: dt.datetime,
@@ -1129,6 +1135,8 @@ def refresh(dry_run: bool) -> int:
             "cash drop absent and no previous combined figures; snapshot was not updated"
         )
     insert_rows = [row for row in rows if row.get("as_of") == as_of]
+    unchanged = sleeves_left_unchanged(rows, as_of)
+    account_book.mark_unchanged(unchanged)
     if not any(row["sleeve"] == "combined" for row in insert_rows):
         print(
             "cash drop absent; combined snapshot as_of left unchanged",
@@ -1187,7 +1195,6 @@ def refresh(dry_run: bool) -> int:
             found = summary_as_of_db(db_url, secrets)
     else:
         found = summary_as_of_db(db_url, secrets)
-    unchanged = {sleeve for sleeve in SLEEVES if sleeve not in {row["sleeve"] for row in insert_rows}}
     assert_fresh(found, floor, unchanged)
     for row in insert_rows:
         print(

@@ -6,6 +6,7 @@ Nothing here asserts a value published under data/.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import sys
 from decimal import Decimal
@@ -863,7 +864,7 @@ def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
         raise AssertionError("a missing cash drop built a book")
 
 
-def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatch, tmp_path, capsys):
+def test_failed_robinhood_cash_falls_back_and_unset_keys_use_the_drop(monkeypatch, tmp_path, capsys):
     (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 4, "USDC": 1}), encoding="utf-8")
 
     def boom(_env=None):
@@ -871,8 +872,9 @@ def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatc
 
     monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
     cash, origin = account_book.read_cash({"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p"}, tmp_path)
-    assert cash is None and origin is None
-    assert "treating cash as missing" in capsys.readouterr().err
+    assert origin == "rh_cash.json"
+    assert account_book.cash_total(cash) == Decimal("5")
+    assert "falling back to data/rh_cash.json" in capsys.readouterr().err
 
     monkeypatch.setattr(export_kpi, "load_rh_cash", lambda _env=None: None)
     cash, origin = account_book.read_cash({}, tmp_path)
@@ -1006,3 +1008,122 @@ def test_stale_marks_are_not_reused(tmp_path, monkeypatch, capsys):
     assert calls == [[("crypto", "AAA")]]
     assert fetched[("crypto", "AAA")] == Decimal("9")
     assert "stale quote set ignored" in capsys.readouterr().err
+
+
+def test_read_cash_falls_back_when_the_robinhood_get_fails(tmp_path, monkeypatch, capsys):
+    def boom(_env=None):
+        raise RuntimeError("Robinhood cash read did not include USD buying power and USDC quantity")
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
+    (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 4.25, "USDC": 1.5}), encoding="utf-8")
+    cash, origin = account_book.read_cash({}, tmp_path)
+    assert origin == "rh_cash.json"
+    assert cash["USD"] == 4.25
+    assert cash["USDC"] == 1.5
+    assert "falling back to data/rh_cash.json" in capsys.readouterr().err
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    cash, origin = account_book.read_cash({}, empty)
+    err = capsys.readouterr().err
+    assert cash is None and origin is None
+    assert "falling back to data/rh_cash.json" in err
+
+
+def test_missing_cash_refresh_still_exports(tmp_path, monkeypatch):
+    fills, marks = _sample_book()
+    fresh = "2026-06-01T12:00:00Z"
+    prior_as_of = "2026-06-01T09:00:00Z"
+    now = dt.datetime(2026, 6, 1, 12, 0, tzinfo=dt.timezone.utc)
+    prior = {
+        "combined": {
+            "as_of": prior_as_of,
+            "realized_pnl_usd": "2.00",
+            "unrealized_pnl_usd": "3.00",
+            "running_pnl_usd": "5.00",
+            "running_balance_usd": "40.00",
+        }
+    }
+    rows, _opens = refresh.build_rows(fills, marks, prior, fresh)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    assert combined["as_of"] == prior_as_of
+    assert combined["realized_pnl_usd"] == "2.000000"
+    assert combined["unrealized_pnl_usd"] == "3.000000"
+    unchanged = refresh.sleeves_left_unchanged(rows, fresh)
+    assert unchanged == {"combined"}
+    monkeypatch.setenv("KPI_MARKS_PATH", str(tmp_path / "marks.json"))
+    account_book.save_marks(marks, fresh)
+    account_book.mark_unchanged(unchanged)
+    summary = [{"sleeve": row["sleeve"], "as_of": row["as_of"]} for row in rows]
+    export_kpi.assert_summary_fresh(summary, now=now, unchanged=account_book.unchanged_sleeves())
+    try:
+        export_kpi.assert_summary_fresh(summary, now=now)
+    except RuntimeError as exc:
+        assert "stale" in str(exc)
+    else:
+        raise AssertionError("an old combined clock passed without the refresh stamp")
+    stale_crypto = [dict(row) for row in summary]
+    for row in stale_crypto:
+        if row["sleeve"] == "crypto":
+            row["as_of"] = prior_as_of
+    try:
+        export_kpi.assert_summary_fresh(stale_crypto, now=now, unchanged={"combined", "crypto"})
+    except RuntimeError as exc:
+        assert "stale" in str(exc)
+    else:
+        raise AssertionError("a stale crypto row was skipped")
+    book_dir = tmp_path / "book"
+    book_dir.mkdir()
+    (book_dir / "live_book.json").write_text(
+        json.dumps(
+            {
+                "book_usd": 30,
+                "day_pnl_usd": 0,
+                "kill_remaining_usd": 1,
+                "running_balance_usd": 40,
+                "running_pnl_usd": 5,
+                "realized_pnl_usd": 2,
+                "unrealized_pnl_usd": 3,
+                "holdings": [
+                    {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+                    {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+                ],
+                "positions": [
+                    {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 80, "unrealized_pnl_usd": 3}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    published = export_kpi.refresh_live_book(book_dir, fetch=False, cash=None)
+    assert export_kpi.usd_equal(published["running_balance_usd"], 110)
+    assert export_kpi.usd_equal(published["kill_remaining_usd"], export_kpi.kill_remaining_usd(110, 0))
+    assert export_kpi.usd_differ(published["kill_remaining_usd"], 1)
+    assert export_kpi.usd_equal(published["realized_pnl_usd"], 2)
+    assert export_kpi.usd_equal(published["unrealized_pnl_usd"], 3)
+
+
+def test_equities_close_leaves_the_residual_unchanged():
+    fills, marks = _sample_book()
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    before = account_book.statement(fills, marks, cash, seed)
+    closed = fills + [
+        _acct("EEE", "buy", "1", "10", "2026-05-02T15:00:00Z", sleeve="equities", fee="0", notional="10"),
+        _acct(
+            "EEE",
+            "sell",
+            "1",
+            "12",
+            "2026-05-02T16:00:00Z",
+            sleeve="equities",
+            pnl="2",
+            fee="0",
+            notional="12",
+        ),
+    ]
+    after = account_book.statement(closed, marks, cash, seed)
+    assert after["equities_realized"] == Decimal("2")
+    assert after["residual"] == before["residual"]
+    assert after["funding"] == before["funding"] + Decimal("2")
+    assert abs(after["gap"] - after["components_sum"]) < Decimal("1e-6")
+    assert abs(before["gap"] - before["components_sum"]) < Decimal("1e-6")

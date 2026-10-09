@@ -128,6 +128,44 @@ def save_marks(marks: dict, as_of: str) -> Path:
     return path
 
 
+def _read_marks_payload() -> dict | None:
+    path = marks_path()
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or not _marks_are_fresh(payload):
+        return None
+    return payload
+
+
+def mark_unchanged(sleeves) -> None:
+    """Sleeves whose as_of this refresh deliberately left alone.
+
+    Export reads the same file so a kept combined clock is not a stale export.
+    """
+    path = marks_path()
+    payload = _read_marks_payload()
+    if payload is None:
+        return
+    names = sorted({str(name).strip().lower() for name in sleeves if str(name).strip()})
+    payload["unchanged_sleeves"] = names
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def unchanged_sleeves() -> set[str]:
+    """Sleeves recorded by mark_unchanged for this fresh quote file."""
+    payload = _read_marks_payload()
+    if payload is None:
+        return set()
+    raw = payload.get("unchanged_sleeves")
+    if not isinstance(raw, list):
+        return set()
+    return {str(name).strip().lower() for name in raw if str(name).strip()}
+
+
 def load_marks() -> dict | None:
     """Marks saved by the refresh step in this run.
 
@@ -225,18 +263,20 @@ def residual_tolerance(path: Path | None = None) -> Decimal:
 def read_cash(env: dict | None = None, data_dir: Path | None = None) -> tuple[dict | None, str | None]:
     """Robinhood REST when keys are set, otherwise the desk drop.
 
-    A failed or incomplete REST read is missing cash. The snapshot keeps the
-    previous combined row and still writes the sleeve rows. Returns
-    (None, None) when REST failed or both sources are absent. Does not
-    invent a balance.
+    A failed or incomplete REST read is logged and the desk drop is used.
+    Cash is missing only when that drop fails too. Returns (None, None)
+    in that case. Does not invent a balance.
     """
     import export_kpi
 
     try:
         rest = export_kpi.load_rh_cash(env)
-    except RuntimeError:
-        print("Robinhood cash read failed; treating cash as missing", file=sys.stderr)
-        return None, None
+    except RuntimeError as exc:
+        print(
+            f"Robinhood cash read failed ({exc}); falling back to data/rh_cash.json",
+            file=sys.stderr,
+        )
+        rest = None
     if rest is not None:
         return rest, "robinhood"
     folder = data_dir if data_dir is not None else export_kpi.DATA
@@ -338,6 +378,7 @@ def statement(
         seed = book_seeds.current_seeds()["combined"]
     realized_raw, book = refresh.apply_books(fills)
     trade_pnl = sum(realized_raw.values(), Decimal("0"))
+    crypto_trade_pnl = realized_raw.get("crypto", Decimal("0"))
     equities_realized = realized_raw.get("equities", Decimal("0"))
     lots, unreal_exact, pairs = _marked_lots(book, marks)
     published = publish_identity(
@@ -351,6 +392,7 @@ def statement(
         held,
         seed,
         trade_pnl,
+        crypto_trade_pnl,
         equities_realized,
         marks,
         snapshot_marks if snapshot_marks is not None else marks,
@@ -393,6 +435,7 @@ def _audit(
     cash: Decimal,
     seed: Decimal,
     trade_pnl: Decimal,
+    crypto_trade_pnl: Decimal,
     equities_realized: Decimal,
     marks: dict,
     snapshot_marks: dict | None,
@@ -506,7 +549,8 @@ def _audit(
     gap = warehouse - published_balance
     rounding = buy_rounding + sell_rounding
     realized_exact = (balance_exact - seed) - live_crypto_u
-    residual = realized_exact - (trade_pnl - equities_realized - buy_fees - rounding)
+    # Agentic realized does not include equities closes. Those stay in funding.
+    residual = realized_exact - (crypto_trade_pnl - buy_fees - rounding)
     return {
         "buy_fees": buy_fees,
         "open_buy_fees": open_buy_fees,
