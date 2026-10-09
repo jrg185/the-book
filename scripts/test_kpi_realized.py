@@ -864,7 +864,7 @@ def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
         raise AssertionError("a missing cash drop built a book")
 
 
-def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatch, tmp_path, capsys):
+def test_failed_robinhood_cash_falls_back_and_unset_keys_use_the_drop(monkeypatch, tmp_path, capsys):
     (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 4, "USDC": 1}), encoding="utf-8")
 
     def boom(_env=None):
@@ -872,8 +872,9 @@ def test_failed_robinhood_cash_is_missing_and_unset_keys_use_the_drop(monkeypatc
 
     monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
     cash, origin = account_book.read_cash({"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p"}, tmp_path)
-    assert cash is None and origin is None
-    assert "treating cash as missing" in capsys.readouterr().err
+    assert origin == "rh_cash.json"
+    assert account_book.cash_total(cash) == Decimal("5")
+    assert "falling back to data/rh_cash.json" in capsys.readouterr().err
 
     monkeypatch.setattr(export_kpi, "load_rh_cash", lambda _env=None: None)
     cash, origin = account_book.read_cash({}, tmp_path)
@@ -1033,21 +1034,23 @@ def test_stale_marks_are_not_reused(tmp_path, monkeypatch, capsys):
     assert "stale quote set ignored" in capsys.readouterr().err
 
 
-def test_read_cash_is_missing_when_the_robinhood_get_fails(tmp_path, monkeypatch, capsys):
+def test_read_cash_falls_back_when_the_robinhood_get_fails(tmp_path, monkeypatch, capsys):
     def boom(_env=None):
         raise RuntimeError("Robinhood cash read did not include USD buying power and USDC quantity")
 
     monkeypatch.setattr(export_kpi, "load_rh_cash", boom)
     (tmp_path / "rh_cash.json").write_text(json.dumps({"USD": 4.25, "USDC": 1.5}), encoding="utf-8")
     cash, origin = account_book.read_cash({}, tmp_path)
-    assert cash is None and origin is None
-    assert "treating cash as missing" in capsys.readouterr().err
+    assert origin == "rh_cash.json"
+    assert cash["USD"] == 4.25
+    assert cash["USDC"] == 1.5
+    assert "falling back to data/rh_cash.json" in capsys.readouterr().err
     empty = tmp_path / "empty"
     empty.mkdir()
     cash, origin = account_book.read_cash({}, empty)
     err = capsys.readouterr().err
     assert cash is None and origin is None
-    assert "treating cash as missing" in err
+    assert "falling back to data/rh_cash.json" in err
 
 
 def test_missing_cash_refresh_still_exports(tmp_path, monkeypatch):
