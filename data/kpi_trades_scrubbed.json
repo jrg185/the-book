@@ -1584,6 +1584,18 @@
     "fee_frac_of_book": 0.001567
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T20:56:58.309868+00:00",
+    "ticker": "AXS",
+    "side": "sell",
+    "notional_frac_of_book": 0.169167,
+    "pnl_frac_of_book": -0.002337,
+    "why": "Artifact sell: model sell signal on held AXS lot, p_up 0.388 (artifact faef12e); full exit of the lot bought 5:56am.",
+    "running_pnl_frac": 0.043884,
+    "running_balance_frac": 1.043884,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
