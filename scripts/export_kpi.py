@@ -2129,12 +2129,12 @@ def kill_remaining_usd(running_balance, day_pnl) -> float | None:
 
 
 def agentic_book_usd(book) -> float | None:
-    """Cash holdings plus marked open lots, in cents.
+    """Cash holdings plus marked crypto open lots, in cents.
 
     Same rows as derive.js agenticBookUsd. A missing value leaves the total
     unknown. No position list means the book has not published lots.
-    USD and USDC positions are cash and are not added again. Open equities
-    lots are included.
+    USD and USDC positions are cash and are not added again. Equities are
+    not added.
     """
     if not isinstance(book, dict) or not isinstance(book.get("positions"), list):
         return None
@@ -2160,7 +2160,7 @@ def agentic_book_usd(book) -> float | None:
         if not ticker or ticker in {"USD", "USDC"}:
             continue
         sleeve = str(row.get("sleeve") or "crypto").strip().lower()
-        if sleeve not in {"crypto", "equities"}:
+        if sleeve != "crypto":
             continue
         qty = _decimal_or_none(row.get("qty"))
         if qty is None or qty == 0:
@@ -2732,7 +2732,7 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     """Write the agentic total, the drop's day P&L, and kill headroom.
 
     When a position list is present, running_balance_usd is the cash on the
-    file plus open crypto and equities lots, and running_pnl_usd is that
+    file plus open crypto lots, and running_pnl_usd is that
     total minus the combined seed in BOOK_SEEDS. When the cash drop is
     present, realized and unrealized come from that same total and the same
     marks as positions[].value_usd: unrealized is the open lots, realized is
@@ -2832,7 +2832,7 @@ def refresh_live_book(
     Does nothing when the account file is absent. Does not invent holdings.
     When account_pnl is the latest combined snapshot, sleeve_as_of is that
     row's as_of. Running balance and running P&L come from the cash lines
-    plus open crypto and equities lots on one mark set. When the cash drop
+    plus open crypto lots on one mark set. When the cash drop
     is present, realized and unrealized come from that same total. Realized
     is running minus unrealized. A missing cash drop recomputes balance,
     running P&L, and kill from the file's holdings and lots, and keeps the
@@ -3870,11 +3870,10 @@ def self_test() -> int:
             ],
             "positions": [
                 {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 50, "unrealized_pnl_usd": 4},
-                {"sleeve": "equities", "ticker": "QQ", "qty": "3", "value_usd": 90, "unrealized_pnl_usd": 6},
+                {"sleeve": "equities", "ticker": "QQ", "qty": "3", "value_usd": 90},
                 {"sleeve": "crypto", "ticker": "USDC", "qty": "1", "value_usd": 9},
             ],
         }
-        agentic_with_equity = 190
         write_json(folder / "live_book.json", synthetic)
         day_cash = {
             "USD": 40,
@@ -3910,23 +3909,20 @@ def self_test() -> int:
             raise RuntimeError(f"audit fields were not copied: {published_day}")
         if not usd_equal(published_day["book_usd"], 50):
             raise RuntimeError(f"book_usd was not the cash sum: {published_day}")
-        if not usd_equal(published_day["running_balance_usd"], agentic_with_equity):
-            raise RuntimeError(f"running balance was not cash plus open lots: {published_day}")
+        if not usd_equal(published_day["running_balance_usd"], 100):
+            raise RuntimeError(f"running balance was not cash plus the crypto lot: {published_day}")
         if not usd_differ(published_day["running_balance_usd"], 804) or not usd_differ(published_day["running_pnl_usd"], 4):
             raise RuntimeError("warehouse running figures replaced the agentic total")
-        if not usd_equal(
-            published_day["running_pnl_usd"],
-            js_round_cents(Decimal(str(agentic_with_equity)) - BOOK_SEEDS["combined"]),
-        ):
+        if not usd_equal(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["combined"])):
             raise RuntimeError(f"running P&L was not the combined seed gap: {published_day}")
         if not usd_differ(published_day["running_pnl_usd"], js_round_cents(Decimal("100") - BOOK_SEEDS["crypto"])):
             raise RuntimeError("running P&L used the crypto seed")
-        if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, -2.5)):
+        if not usd_equal(published_day["kill_remaining_usd"], kill_remaining_usd(100, -2.5)):
             raise RuntimeError(f"kill headroom ignored the day loss: {published_day}")
         if published_day.get("sleeve_as_of") != "2026-02-02T00:00:00Z":
             raise RuntimeError(f"snapshot sleeve clock was dropped: {published_day}")
-        if not usd_equal(published_day.get("unrealized_pnl_usd"), 10):
-            raise RuntimeError(f"unrealized was not the open lots: {published_day}")
+        if not usd_equal(published_day.get("unrealized_pnl_usd"), 4):
+            raise RuntimeError(f"unrealized was not the open lot: {published_day}")
         identity_running = Decimal(str(published_day["running_pnl_usd"]))
         identity_unreal = Decimal(str(published_day["unrealized_pnl_usd"]))
         if not usd_equal(published_day.get("realized_pnl_usd"), identity_running - identity_unreal):
@@ -3951,9 +3947,7 @@ def self_test() -> int:
             sys.stderr = old_err
         if "differs from day_realized_usd" in stderr.getvalue():
             raise RuntimeError("a matching gross minus fees warned")
-        if matched["day_pnl_usd"] != -1.5 or not usd_equal(
-            matched["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, -1.5)
-        ):
+        if matched["day_pnl_usd"] != -1.5 or not usd_equal(matched["kill_remaining_usd"], kill_remaining_usd(100, -1.5)):
             raise RuntimeError(f"matched net was recomputed: {matched}")
         cent_cash = {
             "USD": 40,
@@ -3975,11 +3969,9 @@ def self_test() -> int:
             raise RuntimeError(f"a one-cent gap changed day P&L: {within}")
         profit_cash = {"USD": 40, "USDC": 10, "day_realized_usd": 6}
         profit = refresh_live_book(folder, fetch=False, cash=profit_cash)
-        if profit["day_pnl_usd"] != 6 or not usd_equal(
-            profit["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, 0)
-        ):
+        if profit["day_pnl_usd"] != 6 or not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 0)):
             raise RuntimeError(f"a positive day increased kill headroom: {profit}")
-        if not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(agentic_with_equity, 6)):
+        if not usd_equal(profit["kill_remaining_usd"], kill_remaining_usd(100, 6)):
             raise RuntimeError("positive day headroom did not match a flat day")
         stopped_cash = {"USD": 40, "USDC": 10, "day_realized_usd": -40}
         stopped = refresh_live_book(folder, fetch=False, cash=stopped_cash)

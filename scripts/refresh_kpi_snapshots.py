@@ -8,8 +8,9 @@ public.kpi_trades (qty and price), marks what is still open, and INSERTs.
 Seeds come from config/book_seeds.json.
 Crypto and equities sleeve rows stay seed-anchored so the old sleeve curves
 still have a start. They are not the account. The combined row is the
-account in scripts/account_book.py: cash plus open crypto and equities
-lots, one mark set. Running P&L is that balance minus the combined seed.
+account in scripts/account_book.py: cash plus open crypto lots, one mark
+set. Running P&L is that balance minus the combined seed. Equities lots
+stay on the equities sleeve row and are not in this balance.
 Unrealized keeps the Robinhood basis (buy fee stays out of average cost).
 Realized is running P&L minus unrealized, so buy fees land there through
 cash. A missing cash drop keeps the previous combined dollars and the
@@ -1260,11 +1261,11 @@ def self_test() -> int:
         raise RefreshError("equities balance")
     if by["equities"]["day_kill_pct"] is not None:
         raise RefreshError("missing prior rail should stay null")
-    # Cash 50 plus the open crypto lot (15 * 4) plus the open equity lot (2 * 110).
+    # Cash 50 plus the open crypto lot (15 * 4). Equities stay off this row.
     # Realized is running minus unrealized, not the trade-list 15.
-    combined_balance = Decimal("50") + Decimal("15") * Decimal("4") + Decimal("2") * Decimal("110")
+    combined_balance = Decimal("50") + Decimal("15") * Decimal("4")
     combined_running = combined_balance - START["combined"]
-    combined_unreal = Decimal("10") + Decimal("20")
+    combined_unreal = Decimal("10")
     combined_realized = combined_running - combined_unreal
     if by["combined"]["realized_pnl_usd"] != num_text(q6(combined_realized)):
         raise RefreshError(f"combined realized {by['combined']['realized_pnl_usd']}")

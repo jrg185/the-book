@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Account book shared by the sleeve snapshot and the live-book export.
 
-Balance is cash plus open crypto and equities lots, marked once. Running P&L is that
+Balance is cash plus open crypto lots, marked once. Running P&L is that
 balance minus the combined seed in config/book_seeds.json. Unrealized is
 open quantity times (mark - average cost) on the Robinhood basis, which
 leaves the buy fee out of cost. Realized is running P&L minus unrealized,
@@ -246,12 +246,12 @@ def _refresh():
 
 
 def _marked_lots(book: dict, marks: dict) -> tuple[Decimal, Decimal, list[tuple[Decimal, Decimal]]]:
-    """Open crypto and equities lots, one quote set. Returns value, unrealized, and pairs."""
+    """Open crypto lots, one quote set. Equities stay off the Agentic balance."""
     lots = Decimal("0")
     unreal = Decimal("0")
     pairs: list[tuple[Decimal, Decimal]] = []
     for (sleeve, ticker), pos in book.items():
-        if sleeve not in {"crypto", "equities"} or ticker in {"USD", "USDC"}:
+        if sleeve != "crypto" or ticker in {"USD", "USDC"}:
             continue
         if (sleeve, ticker) not in marks:
             raise AccountBookError(f"open ticker has no mark: {sleeve} {ticker}")
@@ -480,29 +480,23 @@ def _audit(
     funding = seed + equities_realized - net_funding
     _realized, live_book = refresh.apply_books(fills)
     live_crypto_u = _sleeve_unrealized(live_book, marks, "crypto") if live_book else Decimal("0")
-    live_equity_u = _sleeve_unrealized(live_book, marks, "equities") if live_book else Decimal("0")
     snap = snapshot_marks if snapshot_marks is not None else marks
     snap_crypto_u = _sleeve_unrealized(live_book, snap, "crypto") if live_book else Decimal("0")
     try:
         equity_u = _sleeve_unrealized(live_book, snap, "equities") if live_book else Decimal("0")
     except AccountBookError:
-        equity_u = live_equity_u
-    mark_drift = (snap_crypto_u - live_crypto_u) + (equity_u - live_equity_u)
-    equity_cost = Decimal("0")
-    for (sleeve, ticker), pos in live_book.items():
-        if sleeve != "equities" or ticker in {"USD", "USDC"}:
-            continue
-        equity_cost += pos["qty"] * pos["avg"]
+        equity_u = Decimal("0")
+    mark_drift = snap_crypto_u - live_crypto_u
     balance_exact = cash + sum(
         (pos["qty"] * marks[(sleeve, ticker)])
         for (sleeve, ticker), pos in live_book.items()
-        if sleeve in {"crypto", "equities"} and ticker not in {"USD", "USDC"}
+        if sleeve == "crypto" and ticker not in {"USD", "USDC"}
     )
     cents_gap = balance_exact - published_balance
     warehouse = seed + trade_pnl + snap_crypto_u + equity_u
     gap = warehouse - published_balance
     rounding = buy_rounding + sell_rounding
-    realized_exact = (balance_exact - seed) - live_crypto_u - live_equity_u
+    realized_exact = (balance_exact - seed) - live_crypto_u
     residual = realized_exact - (trade_pnl - buy_fees - rounding)
     return {
         "buy_fees": buy_fees,
@@ -518,9 +512,7 @@ def _audit(
         "equity_unrealized": equity_u,
         "gap": gap,
         "residual": residual,
-        "components_sum": (
-            buy_fees + buy_rounding + sell_rounding + basis_gap + funding + mark_drift + cents_gap - equity_cost
-        ),
+        "components_sum": buy_fees + buy_rounding + sell_rounding + basis_gap + funding + mark_drift + cents_gap + equity_u,
     }
 
 
@@ -548,7 +540,7 @@ def position_identity(positions: list | None, cash: dict | None, seed: Decimal) 
             continue
         ticker = str(row.get("ticker") or "").strip().upper()
         sleeve = str(row.get("sleeve") or "crypto").strip().lower()
-        if not ticker or ticker in {"USD", "USDC"} or sleeve not in {"crypto", "equities"}:
+        if not ticker or ticker in {"USD", "USDC"} or sleeve != "crypto":
             continue
         qty = _dec(row.get("qty"))
         if qty is None or qty == 0:

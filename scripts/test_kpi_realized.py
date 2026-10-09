@@ -819,30 +819,6 @@ def test_average_cost_full_close_gap_sums_to_the_cent_sliver():
     assert abs(same["gap"] - same["components_sum"]) < Decimal("1e-6")
 
 
-def test_open_equity_lot_is_in_the_balance():
-    fills = [
-        _acct(
-            "EEE",
-            "buy",
-            "2",
-            "10",
-            "2026-05-01T15:00:00Z",
-            sleeve="equities",
-            fee="0",
-            notional="20",
-        )
-    ]
-    marks = {("equities", "EEE"): Decimal("12")}
-    seed = book_seeds.current_seeds()["combined"]
-    cash = _funded_cash(fills, seed)
-    reading = account_book.statement(fills, marks, cash, seed)
-    assert reading["lots_exact"] == Decimal("24")
-    assert reading["unrealized_exact"] == Decimal("4")
-    assert reading["balance_exact"] == account_book.cash_total(cash) + Decimal("24")
-    assert reading["realized_exact"] + reading["unrealized_exact"] == reading["running_exact"]
-    assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
-
-
 def test_open_mark_drift_is_in_the_gap():
     fills, marks = _sample_book()
     seed = book_seeds.current_seeds()["combined"]
