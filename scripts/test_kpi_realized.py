@@ -1178,3 +1178,93 @@ def test_failed_robinhood_read_refresh_and_export_share_the_drop(monkeypatch, tm
     assert export_kpi.usd_equal(combined["running_pnl_usd"], published["running_pnl_usd"])
     assert export_kpi.usd_equal(combined["realized_pnl_usd"], published["realized_pnl_usd"])
     assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], published["unrealized_pnl_usd"])
+
+
+def test_second_rest_fail_reuses_live_cash_instead_of_the_drop(monkeypatch, tmp_path, capsys):
+    """Refresh already stored live cash. A later 429 must not publish the drop."""
+    fills, marks = _sample_book()
+    live = {"USD": 80.0, "USDC": 20.0}
+    (tmp_path / "rh_cash.json").write_text(
+        json.dumps({"USD": 40.5, "USDC": 9.5, "day_realized_usd": -2.5}),
+        encoding="utf-8",
+    )
+    (tmp_path / "live_book.json").write_text(
+        json.dumps(
+            {
+                "book_usd": 1,
+                "day_pnl_usd": 0,
+                "kill_remaining_usd": 1,
+                "running_balance_usd": 1,
+                "running_pnl_usd": 0,
+                "realized_pnl_usd": 0,
+                "unrealized_pnl_usd": 0,
+                "holdings": [
+                    {"ticker": "USD", "sleeve": "crypto", "value_usd": 1},
+                    {"ticker": "USDC", "sleeve": "crypto", "value_usd": 1},
+                ],
+                "positions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KPI_MARKS_PATH", str(tmp_path / "marks.json"))
+    monkeypatch.setenv("RH_API_KEY", "k")
+    monkeypatch.setenv("RH_BASE64_PRIVATE_KEY", "p")
+    monkeypatch.setattr(export_kpi, "DATA", tmp_path)
+    account_book.save_marks(marks, "2026-06-02T00:00:00Z")
+    calls = {"n": 0}
+
+    def once(_env=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return dict(live)
+        raise RuntimeError("429 too many requests")
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", once)
+    refresh_cash, refresh_origin = account_book.read_cash(
+        {"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p"},
+        tmp_path,
+    )
+    account_book.mark_unchanged(set())
+    export_cash, export_origin = account_book.read_cash()
+    err = capsys.readouterr().err
+    assert calls["n"] == 2
+    assert refresh_origin == export_origin == "robinhood"
+    assert account_book.cash_total(refresh_cash) == Decimal("100")
+    assert account_book.cash_total(export_cash) == Decimal("100")
+    assert "day_realized_usd" not in export_cash
+    assert "falling back to data/rh_cash.json" not in err
+    assert "using the live cash already read this run" in err
+    rows, _opens = refresh.build_rows(fills, marks, {}, "2026-06-02T00:00:00Z", cash=refresh_cash)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    positions = export_kpi.card_positions(fills, marks)
+    published = export_kpi.refresh_live_book(
+        tmp_path, fetch=False, cash=export_cash, positions=positions
+    )
+    assert export_kpi.usd_equal(combined["running_balance_usd"], published["running_balance_usd"])
+    assert export_kpi.usd_equal(combined["running_pnl_usd"], published["running_pnl_usd"])
+    assert export_kpi.usd_equal(combined["realized_pnl_usd"], published["realized_pnl_usd"])
+    assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], published["unrealized_pnl_usd"])
+    usd = next(row["value_usd"] for row in published["holdings"] if row["ticker"] == "USD")
+    usdc = next(row["value_usd"] for row in published["holdings"] if row["ticker"] == "USDC")
+    assert export_kpi.usd_equal(usd, 80)
+    assert export_kpi.usd_equal(usdc, 20)
+    assert export_kpi.usd_equal(published["day_pnl_usd"], 0)
+    drop_rows, _opens = refresh.build_rows(
+        fills,
+        marks,
+        {},
+        "2026-06-02T00:00:00Z",
+        cash={"USD": Decimal("40.5"), "USDC": Decimal("9.5")},
+    )
+    drop_combined = {row["sleeve"]: row for row in drop_rows}["combined"]
+    assert export_kpi.usd_differ(published["running_balance_usd"], drop_combined["running_balance_usd"])
+    stored = json.loads((tmp_path / "marks.json").read_text(encoding="utf-8"))
+    stored["written_at"] = "2020-01-01T00:00:00Z"
+    (tmp_path / "marks.json").write_text(json.dumps(stored), encoding="utf-8")
+    stale_cash, stale_origin = account_book.read_cash()
+    stale_err = capsys.readouterr().err
+    assert stale_origin == "rh_cash.json"
+    assert account_book.cash_total(stale_cash) == Decimal("50")
+    assert "stale live cash ignored" in stale_err
+    assert "falling back to data/rh_cash.json" in stale_err
