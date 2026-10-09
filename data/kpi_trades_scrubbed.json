@@ -1560,6 +1560,18 @@
     "fee_frac_of_book": 0.0016
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T17:06:34.767326+00:00",
+    "ticker": "QNT",
+    "side": "sell",
+    "notional_frac_of_book": 0.1675,
+    "pnl_frac_of_book": 0.003185,
+    "why": "Trail exit: QNT scaled leftover breached its cost+5% trail (trail ~248.24, bid 243.36); full exit of the lot (manual fix 1:06pm after the 1:05 check-in missed the breach).",
+    "running_pnl_frac": 0.046221,
+    "running_balance_frac": 1.046221,
+    "fee_frac_of_book": 0.0016
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
