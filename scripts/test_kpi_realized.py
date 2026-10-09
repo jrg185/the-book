@@ -790,32 +790,57 @@ def test_refresh_and_export_share_one_balance():
 
 
 def test_average_cost_full_close_gap_sums_to_the_cent_sliver():
-    fifo_gross = Decimal("10")
-    fee = Decimal("0.30")
-    stored = fifo_gross - Decimal("0.302122")
+    fifo_gross = Decimal("8")
+    fee = Decimal("0.16")
+    sliver = Decimal("0.004321")
+    stored = fifo_gross - fee - sliver
     fills = [
-        _acct("GRT", "buy", "10", "1", "2026-04-03T15:00:00Z", fee=format(fee, "f"), notional="10"),
+        _acct("ZZZ", "buy", "4", "2", "2026-04-03T15:00:00Z", fee=format(fee, "f"), notional="8"),
         _acct(
-            "GRT",
+            "ZZZ",
             "sell",
-            "10",
-            "2",
+            "4",
+            "4",
             "2026-04-03T18:00:00Z",
             pnl=format(stored, "f"),
             fee=format(fee, "f"),
-            notional="20",
+            notional="16",
         ),
     ]
     seed = book_seeds.current_seeds()["combined"]
     cash = _funded_cash(fills, seed)
     reading = account_book.decompose(fills, {}, cash, seed)
     assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
-    assert reading["basis_gap"] == -(Decimal("0.302122") - fee)
+    assert reading["basis_gap"] == -sliver
     assert reading["buy_fees"] == fee
     # Flat book: a second quote set does not move an open mark.
     same = account_book.decompose(fills, {}, cash, seed, snapshot_marks={})
     assert same["mark_drift"] == 0
     assert abs(same["gap"] - same["components_sum"]) < Decimal("1e-6")
+
+
+def test_open_equity_lot_is_in_the_balance():
+    fills = [
+        _acct(
+            "EEE",
+            "buy",
+            "2",
+            "10",
+            "2026-05-01T15:00:00Z",
+            sleeve="equities",
+            fee="0",
+            notional="20",
+        )
+    ]
+    marks = {("equities", "EEE"): Decimal("12")}
+    seed = book_seeds.current_seeds()["combined"]
+    cash = _funded_cash(fills, seed)
+    reading = account_book.statement(fills, marks, cash, seed)
+    assert reading["lots_exact"] == Decimal("24")
+    assert reading["unrealized_exact"] == Decimal("4")
+    assert reading["balance_exact"] == account_book.cash_total(cash) + Decimal("24")
+    assert reading["realized_exact"] + reading["unrealized_exact"] == reading["running_exact"]
+    assert abs(reading["gap"] - reading["components_sum"]) < Decimal("1e-6")
 
 
 def test_open_mark_drift_is_in_the_gap():
@@ -840,6 +865,7 @@ def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
     assert usdc_only["cash"] == Decimal("20")
     prior = {
         "combined": {
+            "as_of": "2026-03-01T00:00:00Z",
             "realized_pnl_usd": "1.25",
             "unrealized_pnl_usd": "0.50",
             "running_pnl_usd": "1.75",
@@ -850,6 +876,7 @@ def test_cash_lines_usd_only_usdc_only_and_a_missing_drop(capsys):
     combined = {row["sleeve"]: row for row in rows}["combined"]
     assert combined["running_balance_usd"] == "9.250000"
     assert combined["realized_pnl_usd"] == "1.250000"
+    assert combined["as_of"] == "2026-03-01T00:00:00Z"
     assert "cash drop absent" in capsys.readouterr().err
     assert "not a seed+realized+unrealized fallback" in combined["notes"]
     try:
@@ -934,3 +961,23 @@ def test_export_reuses_the_refresh_marks(tmp_path, monkeypatch):
     assert calls == [[("crypto", "AAA")]]
     assert fetched[("crypto", "AAA")] == Decimal("13")
     _ = fills
+
+
+def test_stale_marks_are_not_reused(tmp_path, monkeypatch, capsys):
+    path = tmp_path / "marks.json"
+    monkeypatch.setenv("KPI_MARKS_PATH", str(path))
+    account_book.save_marks({("crypto", "AAA"): Decimal("13")}, "2026-04-05T00:00:00Z")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["written_at"] = "2020-01-01T00:00:00Z"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    calls = []
+
+    def once(keys, _env):
+        calls.append(list(keys))
+        return {key: (Decimal("9"), "fixture") for key in keys}
+
+    fetched, origin = account_book.resolve_or_reuse([("crypto", "AAA")], once, {})
+    assert origin == "quotes"
+    assert calls == [[("crypto", "AAA")]]
+    assert fetched[("crypto", "AAA")] == Decimal("9")
+    assert "stale quote set ignored" in capsys.readouterr().err
