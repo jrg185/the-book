@@ -1596,6 +1596,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T21:50:58.493099+00:00",
+    "ticker": "XCN",
+    "side": "sell",
+    "notional_frac_of_book": 0.173967,
+    "pnl_frac_of_book": -0.002462,
+    "why": "Artifact sell: model sell signal on held XCN lot, p_up 0.400 (artifact 82f4691); full exit of the lot bought 1:53am.",
+    "running_pnl_frac": 0.041422,
+    "running_balance_frac": 1.041422,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-09T21:51:07.147103+00:00",
+    "ticker": "W",
+    "side": "buy",
+    "notional_frac_of_book": 0.332933,
+    "pnl_frac_of_book": 0.0,
+    "why": "W p_up 0.509 clears the temp 0.50 live gate (artifact 82f4691); only unheld qualifier; $100 cap; no cash reserve per Joe.",
+    "running_pnl_frac": 0.041422,
+    "running_balance_frac": 1.041422,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
