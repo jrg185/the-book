@@ -87,7 +87,7 @@ function renderRun(run, id) {
   actions.append(share, copy);
   card.append(actions);
   const mark = el("p", "watermark");
-  mark.append(el("span", "wm-brand", "jrg185.github.io/the-book/runs"), el("span", null, run.startedAt ? formatEt(run.startedAt) : ""));
+  mark.append(el("span", "wm-brand", "jrg185.github.io/the-book/runs.html"), el("span", null, run.startedAt ? formatEt(run.startedAt) : ""));
   card.append(mark);
   return card;
 }

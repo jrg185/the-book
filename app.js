@@ -446,7 +446,13 @@ function renderChips(trades, scorecard) {
       tone(fills.expectancyFrac),
       "Mean P&L of decided crypto sells, as a fraction of the sleeve seed."
     ),
-    statChip("Max drawdown", formatPct(dd.max, { digits: 1 }), dd.current == null ? "" : `now ${formatPct(dd.current, { digits: 1 })}`, dd.max ? "down" : "flat", "Worst fall from a running peak on the crypto sleeve curve."),
+    statChip(
+      "Max drawdown",
+      formatPct(dd.max, { digits: 1 }),
+      dd.current == null ? "" : dd.current > -0.0005 ? "now at a high" : `now ${formatPct(dd.current, { digits: 1 })}`,
+      dd.max ? "down" : "flat",
+      "Worst fall from a running peak on the crypto sleeve curve."
+    ),
     statChip(
       "Sharpe",
       sharpe.value == null ? "\u2014" : sharpe.value.toFixed(2),
@@ -488,11 +494,15 @@ function paintCurves() {
     return;
   }
   const points = windowPoints(state.points, state.range);
-  const change = windowChange(points);
+  const all = state.range === "all";
+  const change = all ? points[points.length - 1].frac - 1 : windowChange(points);
   curveChangeEl.replaceChildren();
   const label = RANGES.find((range) => range.key === state.range)?.label || "";
   if (change != null) {
-    curveChangeEl.append(el("span", `delta ${tone(change)}`, formatPct(change, { signed: true, digits: 2 })), document.createTextNode(` ${label}`));
+    curveChangeEl.append(
+      el("span", `delta ${tone(change)}`, formatPct(change, { signed: true, digits: 2 })),
+      document.createTextNode(all ? " vs seed, all time" : ` over ${label}`)
+    );
   }
   areaChart(curvesEl, points, {
     height: 240,
@@ -566,13 +576,14 @@ function renderRisk(view, summary, scorecard) {
     );
   }
   const dd = drawdownStats(state.points);
+  const atHigh = dd.current != null && dd.current > -0.0005;
   railsEl.append(
     railBar({
       title: "Below peak",
-      value: formatPct(dd.current, { digits: 1 }),
+      value: atHigh ? "At a high" : formatPct(dd.current, { digits: 1 }),
       detail: dd.max == null ? "No sleeve history yet." : `Worst so far ${formatPct(dd.max, { digits: 1 })}${dd.maxAt ? ` on ${shortWhen(Date.parse(dd.maxAt))}` : ""}.`,
       fill: dd.current == null || !dd.max ? 0 : Math.min(1, dd.current / dd.max),
-      toneClass: "down",
+      toneClass: atHigh ? "up" : "down",
       hint: "Current drawdown of the crypto sleeve as a share of its worst drawdown.",
     })
   );
