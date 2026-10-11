@@ -34,6 +34,16 @@ function asText(value) {
   return text || null;
 }
 
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+// Shown text never carries a UUID. id, run_id, and model_version_id stay
+// opaque join keys and are never rendered.
+export function asDisplay(value) {
+  const text = asText(value);
+  if (!text) return null;
+  return text.replace(UUID_RE, "[id]");
+}
+
 function asNumber(value) {
   if (typeof value === "boolean" || value == null || value === "") return null;
   const number = Number(value);
@@ -51,7 +61,7 @@ function copyAllow(row, keys) {
 export function formatWhen(value) {
   if (!value) return "";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return asText(value) || "";
+  if (Number.isNaN(date.getTime())) return asDisplay(value) || "";
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     month: "short",
@@ -88,7 +98,7 @@ export function formatMetricValue(value) {
   }
   if (typeof value === "boolean") return value ? "true" : "false";
   if (value == null || typeof value === "object") return "";
-  return String(value).split("$").join("");
+  return asDisplay(value) || "";
 }
 
 export function metricEntries(metrics) {
@@ -253,10 +263,10 @@ function normalizeRun(row) {
   ]);
   run.id = asText(run.id);
   run.model_version_id = asText(run.model_version_id);
-  run.model_version = asText(run.model_version);
-  run.model_version_name = asText(run.model_version_name);
-  run.backend = asText(run.backend);
-  run.mode = asText(run.mode);
+  run.model_version = asDisplay(run.model_version);
+  run.model_version_name = asDisplay(run.model_version_name);
+  run.backend = asDisplay(run.backend);
+  run.mode = asDisplay(run.mode);
   run.generated_at = asText(run.generated_at);
   run.last_bar_time = asText(run.last_bar_time);
   run.anomaly = asBool(run.anomaly);
@@ -280,9 +290,9 @@ function normalizePrediction(row) {
     "traded",
   ]);
   prediction.run_id = asText(prediction.run_id);
-  prediction.symbol = asText(prediction.symbol);
+  prediction.symbol = asDisplay(prediction.symbol);
   prediction.p_up = asNumber(prediction.p_up);
-  prediction.side = asText(prediction.side);
+  prediction.side = asDisplay(prediction.side);
   prediction.conviction = asNumber(prediction.conviction);
   prediction.bar_time = asText(prediction.bar_time);
   prediction.expires_at = asText(prediction.expires_at);
@@ -298,9 +308,9 @@ function normalizeVersion(row) {
   if (!row || typeof row !== "object") return null;
   const version = copyAllow(row, ["id", "name", "parent", "status", "oos_metrics", "trained_at", "promoted_at", "created_at"]);
   version.id = asText(version.id);
-  version.name = asText(version.name);
-  version.parent = asText(version.parent);
-  version.status = asText(version.status);
+  version.name = asDisplay(version.name);
+  version.parent = asDisplay(version.parent);
+  version.status = asDisplay(version.status);
   version.trained_at = asText(version.trained_at);
   version.promoted_at = asText(version.promoted_at);
   version.created_at = asText(version.created_at);
@@ -311,11 +321,11 @@ function normalizeVersion(row) {
       if (forbiddenField(key)) continue;
       const value = metrics[key];
       if (value != null && typeof value === "object") continue;
-      clean[key] = typeof value === "string" ? value.split("$").join("") : value;
+      clean[key] = typeof value === "string" ? asDisplay(value) : value;
     }
     version.oos_metrics = clean;
   } else if (typeof metrics === "string") {
-    version.oos_metrics = metrics.split("$").join("");
+    version.oos_metrics = asDisplay(metrics);
   } else if (metrics != null && typeof metrics !== "number" && typeof metrics !== "boolean") {
     version.oos_metrics = null;
   }

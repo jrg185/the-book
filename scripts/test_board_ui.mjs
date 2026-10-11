@@ -210,6 +210,36 @@ test("runs page names the model from model_version_name and keeps run ids out of
   assert.equal(page.includes("tr.id = run.id"), false);
 });
 
+test("run ids are opaque join keys, hashed or raw, and never reach shown text", () => {
+  const uuid = "4f7c2a8e-1b2d-4c3e-9f10-112233445566";
+  for (const key of ["k9f3a2c1", uuid]) {
+    const bundle = normalizeBundle({
+      source: "supabase",
+      runs: [{ id: key, model_version: uuid, backend: "ml", mode: `live ${uuid}`, generated_at: "2026-10-11T16:31:53+00:00" }],
+      predictions: [{ run_id: key, symbol: `BTC ${uuid}`, side: "sell", p_up: 0.3 }],
+      model_versions: [{ id: uuid, name: `lgbm ${uuid}`, parent: uuid, status: "promoted", oos_metrics: { note: `see ${uuid}`, auc: 0.5 } }],
+    });
+    const run = bundle.runs[0];
+    assert.equal(run.id, key);
+    assert.equal(predictionsByRun(bundle).get(run.id).length, 1);
+    assert.deepEqual(runAnchors(bundle.runs), ["run-20261011-163153"]);
+    const shown = JSON.stringify([
+      runModelLabel(run, versionNames(bundle)),
+      run.mode,
+      bundle.predictions[0].symbol,
+      bundle.modelVersions[0].name,
+      bundle.modelVersions[0].parent,
+      oosChips(bundle.modelVersions[0].oos_metrics),
+    ]);
+    assert.equal(shown.includes("4f7c2a8e"), false, shown);
+    assert.ok(shown.includes("[id]"));
+  }
+  for (const file of ["runs/app.js", "app.js"]) {
+    const lines = src(file).split("\n").filter((line) => /\b(run|latest|row|item)\.(id|run_id)\b/.test(line));
+    for (const line of lines) assert.match(line, /byRun\.get\(|predictionsByRun\(bundle\)\.get\(/, `${file}: ${line.trim()}`);
+  }
+});
+
 test("out-of-sample metrics become ordered chips without private keys", () => {
   const chips = oosChips({ auc: 0.5303, hit_rate: 0.524, buy_mean_net: 0.0053, sell_mean_net: -0.0029, n_flat: 414038, fee_usd: 1, account_x: 2, extra: 3 });
   assert.deepEqual(chips.map((chip) => chip.key), ["auc", "hit_rate", "buy_mean_net", "sell_mean_net", "n_flat", "extra"]);
