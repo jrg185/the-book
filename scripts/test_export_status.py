@@ -308,6 +308,82 @@ class ScorecardTests(unittest.TestCase):
         blob = json.dumps(card)
         self.assertNotIn("should-not-survive", blob)
         self.assertNotIn('"order_id"', blob)
+        self.assertNotIn("order_id", blob)
+
+
+class PublishedIdentifierTests(unittest.TestCase):
+    def test_published_data_has_no_order_or_account_identifiers(self):
+        root = Path(__file__).resolve().parents[1] / "data"
+        problems = export_kpi.published_identifier_problems(root)
+        self.assertEqual(problems, [])
+        scorecard = json.loads((root / "model_scorecard.json").read_text(encoding="utf-8"))
+        blob = json.dumps(scorecard)
+        self.assertNotIn("order_id", blob)
+        self.assertNotIn("fill_trade_id", blob)
+        self.assertNotIn("account_number", blob)
+        self.assertNotIn("rhs_account_number", blob)
+        self.assertNotIn("order_id_unique", scorecard)
+        self.assertNotIn("order_id_available", scorecard.get("closed_fills", {}))
+
+    def test_scanner_flags_keys_order_uuids_and_account_numbers(self):
+        with TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "bad.json").write_text(
+                json.dumps(
+                    {
+                        "order_id": "6ab90000-0000-4000-8000-000000000004",
+                        "nested": {
+                            "fill_trade_id": "fill-1",
+                            "Account": "desk",
+                            "account_number": "123456789",
+                            "rhs_account_number": "RHACCT1234",
+                        },
+                        "why": "sync order 6ab90000-0000-4000-8000-000000000099",
+                        "ref": "123456789",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "bad.csv").write_text(
+                "ticker,order_id,note\nBTC,6ab90000-0000-4000-8000-0000000000bb,held\n",
+                encoding="utf-8",
+            )
+            (folder / "ok.json").write_text(
+                json.dumps(
+                    {
+                        "sleeve": "crypto",
+                        "win_rate": 0.484848,
+                        "id": "rules",
+                        "model_run": "6ab90000-0000-4000-8000-0000000000aa",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            problems = export_kpi.published_identifier_problems(folder)
+        blob = "\n".join(problems)
+        for name in ("order_id", "fill_trade_id", "Account", "account_number", "rhs_account_number"):
+            self.assertIn(name, blob)
+        self.assertIn("order uuid", blob)
+        self.assertIn("ref", blob)
+        self.assertIn("account number", blob)
+        self.assertIn("bad.csv", blob)
+        self.assertNotIn("ok.json", blob)
+
+        with TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "note.json").write_text(
+                json.dumps({"note": "book RH-ACCT-99 stays private"}),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("RH_AGENTIC_ACCOUNT", None)
+                self.assertEqual(export_kpi.published_identifier_problems(folder), [])
+            with mock.patch.dict(os.environ, {"RH_AGENTIC_ACCOUNT": "RH-ACCT-99"}):
+                flagged = export_kpi.published_identifier_problems(folder)
+        self.assertEqual(flagged, ["note.json: note: account number"])
+        source = Path(export_kpi.__file__).read_text(encoding="utf-8")
+        self.assertIn('os.environ.get("RH_AGENTIC_ACCOUNT")', source)
+        self.assertNotIn("RH-ACCT-99", source)
 
 
 if __name__ == "__main__":

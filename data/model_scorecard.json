@@ -19,11 +19,9 @@
     "expectancy_usd": 0.19,
     "seed_usd": 300,
     "deduped": 0,
-    "order_id_available": false,
     "dedupe": "scrubbed-rows",
     "note": "Sell fills with a finite P&L. Flat zero is excluded, same as sleeve Win %. The scrubbed tape has no order id, so rows are not collapsed. T24b will improve joined-fill metrics."
   },
-  "order_id_unique": null,
   "fee_drag": {
     "status": "known",
     "fee_usd": 34.59,
