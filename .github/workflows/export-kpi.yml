@@ -45,7 +45,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: sleeves-kpi-export
+  group: export-kpi-main
   cancel-in-progress: false
 
 jobs:
@@ -224,12 +224,8 @@ jobs:
           if [ -f data/runs.csv ]; then
             git add -- data/runs.csv
           fi
-          if git diff --cached --quiet; then
-            echo "KPI JSON unchanged."
-          else
-            git commit -m "Export scrubbed KPI views to data JSON"
-            git push
-          fi
+          # A queued run checked out an older main. Rebase onto the newest main before pushing.
+          scripts/push_with_retry.sh "Export scrubbed KPI views to data JSON"
 
       - name: Publish export failure on the board
         if: failure()
@@ -237,9 +233,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/meta.json
-          if git diff --cached --quiet; then
-            echo "No export status to publish. The board keeps the previous snapshot."
-          else
-            git commit -m "Mark KPI export stale"
-            git push
-          fi
+          scripts/push_with_retry.sh "Mark KPI export stale"
