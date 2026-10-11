@@ -98,6 +98,52 @@ def dirty_rows():
 
 
 class RunsExportTests(unittest.TestCase):
+    def test_calibration_covers_all_predictions_not_just_exported(self):
+        runs, predictions, versions = dirty_rows()
+        extra = []
+        for index in range(2500):
+            extra.append({
+                "run_id": "run-old-%d" % (index % 7),
+                "symbol": "BTC",
+                "bar_time": "2026-09-01T%02d:00:00Z" % (index % 24),
+                "p_up": None if index % 3 == 0 else 0.6,
+                "label_up_net30": index % 2 == 0,
+                "resolved_at": "2026-09-02T00:00:00Z",
+            })
+        extra.append({"run_id": "run-old-0", "symbol": "ETH", "p_up": 0.4, "label_up_net30": None})
+        every = predictions + extra
+        calls = []
+
+        def read_rows(source, columns, order, limit):
+            calls.append((source, tuple(columns), limit))
+            if source in ("runs_public",):
+                return runs
+            if source == "run_predictions_public":
+                rows = every if "p_up" in columns and len(columns) <= len(export_runs.CALIBRATION_COLUMNS) else every
+                return rows[:limit]
+            if source == "model_versions_public":
+                return versions
+            raise export_runs.SourceMissing(source)
+
+        old_limit = export_runs.PREDICTION_LIMIT
+        export_runs.PREDICTION_LIMIT = 10
+        try:
+            bundle, _ = export_runs.collect(read_rows, "2026-10-11T17:00:00Z")
+        finally:
+            export_runs.PREDICTION_LIMIT = old_limit
+        calibration = bundle["calibration"]
+        expected_resolved = sum(1 for row in every if isinstance(row.get("label_up_net30"), bool))
+        expected_scored = sum(1 for row in every if isinstance(row.get("label_up_net30"), bool) and row.get("p_up") is not None)
+        self.assertEqual(calibration["scope"], "all_predictions")
+        self.assertEqual(calibration["n_resolved"], expected_resolved)
+        self.assertEqual(calibration["n_scored"], expected_scored)
+        self.assertEqual(calibration["n_unscored"], expected_resolved - expected_scored)
+        self.assertEqual(sum(slot["n"] for slot in calibration["bins"]), expected_scored)
+        self.assertLessEqual(len(bundle["predictions"]), 10)
+        self.assertGreater(calibration["n_resolved"], len(bundle["predictions"]))
+        self.assertTrue(any(limit == export_runs.CALIBRATION_LIMIT for _, _, limit in calls))
+
+
     def test_uuid_ids_are_never_published(self):
         raw = "6ab90000-1111-4222-8333-944455556666"
         runs, predictions, versions = dirty_rows()
@@ -153,7 +199,7 @@ class RunsExportTests(unittest.TestCase):
         self.assertNotIn("account", blob.lower())
         self.assertNotIn("usd", blob.lower())
         calibration = bundle["calibration"]
-        self.assertEqual(calibration["n_resolved"], 3)
+        self.assertEqual(calibration["n_scored"], 3)
         self.assertAlmostEqual(calibration["brier"], 0.24, places=6)
         occupied = [slot for slot in calibration["bins"] if slot["n"]]
         self.assertEqual(sorted(slot["n"] for slot in occupied), [1, 2])

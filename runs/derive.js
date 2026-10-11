@@ -338,6 +338,8 @@ function normalizeCalibration(raw) {
   const bins = Array.isArray(body.bins) ? body.bins : [];
   return {
     nResolved: Number.isInteger(body.n_resolved) ? body.n_resolved : 0,
+    nScored: Number.isInteger(body.n_scored) ? body.n_scored : null,
+    nUnscored: Number.isInteger(body.n_unscored) ? body.n_unscored : null,
     logloss: asNumber(body.logloss),
     brier: asNumber(body.brier),
     bins: bins.map((slot) => ({
