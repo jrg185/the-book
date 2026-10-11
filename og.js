@@ -138,11 +138,11 @@ export function buildOgSvg(snap) {
   <rect width="${W}" height="${H}" fill="url(#glow)"/>
   <g transform="translate(60,66)">
     <rect width="34" height="34" rx="8" fill="${C.accent}"/>
-    <text x="50" y="26" font-size="26" font-weight="800" fill="${C.ink}" letter-spacing="1">THE BOOK</text>
+    <text x="50" y="26" font-size="26" font-weight="900" fill="${C.ink}" letter-spacing="1">THE BOOK</text>
     <text x="196" y="26" font-size="18" fill="${C.dim}">· one live crypto book, public scoreboard</text>
   </g>
   <text x="60" y="168" font-size="18" letter-spacing="3" fill="${C.dim}" font-weight="600">ACCOUNT VALUE</text>
-  <text x="56" y="262" font-size="96" font-weight="800" fill="${C.ink}" letter-spacing="-2">${xmlEscape(formatUsd(s.balance))}</text>
+  <text x="56" y="262" font-size="96" font-weight="900" fill="${C.ink}" letter-spacing="-2">${xmlEscape(formatUsd(s.balance))}</text>
   <text x="60" y="318" font-size="30" font-weight="700" fill="${pnlColor}">${xmlEscape(allTime)}</text>
   <text x="60" y="350" font-size="17" fill="${C.dim}">all-time vs seed</text>
   <text x="60" y="400" font-size="22" fill="${C.dim}">Day P&amp;L <tspan fill="${dayColor}" font-weight="700">${xmlEscape(formatUsd(s.dayPnl, { signed: true }))}</tspan></text>
