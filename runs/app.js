@@ -31,6 +31,11 @@ const toastEl = document.querySelector("#toast");
 
 const state = { bundle: null, runs: [], anchors: [], names: new Map(), byRun: new Map(), runLimit: RUN_PAGE, selected: 0 };
 
+function scoredNote(calibration) {
+  if (calibration.nScored == null) return "8h label known";
+  return `${calibration.nScored.toLocaleString("en-US")} with p_up scored`;
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -215,7 +220,7 @@ function renderSummary(bundle) {
     stat("Runs", String(bundle.runs.length), bundle.runs.length ? `since ${formatDay(state.runs[state.runs.length - 1].generated_at)}` : ""),
     stat("Predictions", bundle.predictions.length.toLocaleString("en-US"), `${new Set(bundle.predictions.map((row) => row.symbol)).size} symbols`),
     stat("Models", String(bundle.modelVersions.length), statusCounts(bundle.modelVersions)),
-    stat("Resolved", calibration.nResolved.toLocaleString("en-US"), "8h label known"),
+    stat("Resolved", calibration.nResolved.toLocaleString("en-US"), scoredNote(calibration)),
     stat("Hit rate", overall.calls ? formatProb(overall.hitRate) : "—", overall.calls ? `${overall.calls} buy or sell calls` : "No resolved buy or sell calls", overall.hitRate == null ? "" : overall.hitRate >= 0.5 ? "up" : "down"),
     stat("Log loss", formatScore(calibration.logloss), calibration.brier == null ? "" : `Brier ${formatScore(calibration.brier)}`),
   );
@@ -328,7 +333,8 @@ function renderCalibration(bundle) {
   }
   const chips = el("div", "chips calib-chips");
   chips.append(
-    stat("Resolved", calibration.nResolved.toLocaleString("en-US")),
+    stat("Resolved", calibration.nResolved.toLocaleString("en-US"), "8h label known"),
+    stat("Scored", calibration.nScored == null ? "—" : calibration.nScored.toLocaleString("en-US"), "Resolved with p_up; scores use these"),
     stat("Log loss", formatScore(calibration.logloss), "Lower is better"),
     stat("Brier", formatScore(calibration.brier), "0.25 is a coin flip"),
   );

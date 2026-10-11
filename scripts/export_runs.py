@@ -49,6 +49,10 @@ PREDICTION_LIMIT = 20_000
 VERSION_LIMIT = 200
 BIN_COUNT = 10
 PAGE_SIZE = 1000
+# Calibration reads every prediction (few columns) so aggregates are not cut by
+# RUN_LIMIT or PREDICTION_LIMIT. Pages of PAGE_SIZE; this is a runaway guard only.
+CALIBRATION_LIMIT = 5_000_000
+CALIBRATION_COLUMNS = ("run_id", "bar_time", "symbol", "p_up", "label_up_net30", "resolved_at")
 
 RUN_SOURCES = ("runs_public", "scoring_runs")
 PREDICTION_SOURCES = ("run_predictions_public", "run_predictions")
@@ -316,15 +320,19 @@ def project_version(row: dict) -> dict | None:
 
 def calibrate(predictions: list) -> dict:
     resolved = []
+    n_resolved = 0
     for row in predictions:
-        label = row.get("label_up_net30")
-        probability = row.get("p_up")
-        if not isinstance(label, bool) or probability is None:
+        label = as_bool(row.get("label_up_net30"))
+        if not isinstance(label, bool):
+            continue
+        n_resolved += 1
+        probability = as_float(row.get("p_up"))
+        if probability is None:
             continue
         probability = min(1.0, max(0.0, float(probability)))
         resolved.append((probability, 1.0 if label else 0.0))
     if not resolved:
-        return {"n_resolved": 0, "logloss": None, "brier": None, "bins": []}
+        return {"n_resolved": n_resolved, "n_scored": 0, "n_unscored": n_resolved, "logloss": None, "brier": None, "bins": []}
     epsilon = 1e-15
     logloss = 0.0
     brier = 0.0
@@ -354,7 +362,11 @@ def calibrate(predictions: list) -> dict:
             }
         )
     return {
-        "n_resolved": len(resolved),
+        # n_resolved: every prediction whose 8h label is known.
+        # n_scored: the resolved ones that carry p_up; logloss, brier, and bins use these.
+        "n_resolved": n_resolved,
+        "n_scored": len(resolved),
+        "n_unscored": n_resolved - len(resolved),
         "logloss": q6(logloss / len(resolved)),
         "brier": q6(brier / len(resolved)),
         "bins": public_bins,
@@ -709,6 +721,19 @@ def collect(read_rows, fetched_at: str):
     if run_source is None and pred_source is None and version_source is None:
         return None, missing
     bundle = build_bundle(runs or [], predictions or [], versions or [], fetched_at)
+    calibration_rows = None
+    if pred_source is not None:
+        try:
+            calibration_rows = read_with_columns(
+                read_rows, pred_source, CALIBRATION_COLUMNS, "bar_time.desc", CALIBRATION_LIMIT
+            )
+        except SourceMissing as exc:
+            print(f"scoring runs: calibration read skipped: {exc}")
+    if calibration_rows is not None:
+        bundle["calibration"] = calibrate(calibration_rows)
+        bundle["calibration"]["scope"] = "all_predictions"
+    else:
+        bundle["calibration"]["scope"] = "exported_predictions"
     bundle["sources"] = {
         "runs": run_source,
         "predictions": pred_source,
