@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scoring runs · The Book</title>
+  <meta name="description" content="Recent scoring runs, predictions, model versions, and calibration. Public fractions only.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%2312110e' width='32' height='32'/%3E%3Crect fill='%23e3a15a' x='6' y='8' width='8' height='16'/%3E%3Crect fill='%237eb8c4' x='18' y='14' width='8' height='10'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">The Book</p>
+      <h1>Scoring runs</h1>
+    </div>
+    <p class="lede">Recent scoring runs, per-symbol predictions, model versions, and calibration. Resolved rows only enter log loss and Brier. Dollar amounts, fill ids, order ids, and account fields stay off this page.</p>
+    <nav class="repo-links" aria-label="Board links">
+      <a href="../">KPI board</a>
+      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
+    </nav>
+  </header>
+  <section id="status" class="status" aria-live="polite">
+    <p class="status-copy">Loading scoring runs…</p>
+  </section>
+  <main>
+    <section class="book-block" id="calibration-section" aria-labelledby="calibration-heading">
+      <div class="block-head">
+        <h2 id="calibration-heading">Calibration</h2>
+        <p>Binned p_up against the realized label rate on resolved rows.</p>
+      </div>
+      <div id="calibration"></div>
+    </section>
+    <section class="book-block" id="versions-section" aria-labelledby="versions-heading">
+      <div class="block-head">
+        <h2 id="versions-heading">Model versions</h2>
+        <p>Status and out-of-sample metrics from the public registry.</p>
+      </div>
+      <div id="versions"></div>
+    </section>
+    <section class="book-block" id="runs-section" aria-labelledby="runs-heading">
+      <div class="block-head">
+        <h2 id="runs-heading">Latest runs</h2>
+        <p>Model version, backend, mode, and the last bar on each scoring run.</p>
+      </div>
+      <div id="runs"></div>
+    </section>
+    <section class="book-block" id="predictions-section" aria-labelledby="predictions-heading">
+      <div class="block-head">
+        <h2 id="predictions-heading">Predictions</h2>
+        <p>Per-symbol probability, side, conviction, and the resolved label when it exists.</p>
+      </div>
+      <div id="predictions"></div>
+    </section>
+  </main>
+  <footer>
+    <p>Static page. It reads <code>data/runs.json</code> only and does not place orders.</p>
+    <nav class="repo-links" aria-label="Board links">
+      <a href="../">KPI board</a>
+      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
+    </nav>
+  </footer>
+  <noscript>This page needs JavaScript to read the committed JSON snapshot.</noscript>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

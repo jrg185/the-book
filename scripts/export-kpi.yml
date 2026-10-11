@@ -80,6 +80,11 @@ jobs:
           python3 -m unittest scripts/test_export_status.py
           node --test scripts/test_tape_ux.mjs scripts/test_board_t17.mjs scripts/test_model_scorecard.mjs scripts/test_live_book.mjs scripts/test_book_seeds.mjs
 
+      - name: Runs export scrub
+        run: |
+          python3 -m unittest scripts/test_runs_export.py
+          node --test scripts/test_runs_page.mjs
+
   export:
     needs: check
     if: github.event_name != 'pull_request'
@@ -212,6 +217,12 @@ jobs:
           git add -- data/live_book.json data/kpi_summary.json data/kpi_trades_scrubbed.json data/open_positions.json data/sleeve_curves.json data/models_oos.json data/model_scorecard.json data/meta.json
           if [ -f data/rh_kpi_sync_cursor.json ]; then
             git add -- data/rh_kpi_sync_cursor.json
+          fi
+          if [ -f data/runs.json ]; then
+            git add -- data/runs.json
+          fi
+          if [ -f data/runs.csv ]; then
+            git add -- data/runs.csv
           fi
           if git diff --cached --quiet; then
             echo "KPI JSON unchanged."

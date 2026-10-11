@@ -598,6 +598,11 @@ footer .repo-links { margin-top: 12px; }
 
 code { color: var(--ink); }
 
+.runs-scroll {
+  max-height: 32rem;
+  overflow: auto;
+}
+
 @media (min-width: 800px) {
   .tape table {
     table-layout: fixed;

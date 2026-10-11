@@ -32,9 +32,10 @@ GitHub Actions then writes the scrubbed views into the repo:
 - `public.kpi_summary` → `data/kpi_summary.json`
 - `public.kpi_trades_scrubbed` → `data/kpi_trades_scrubbed.json`
 - `public.models_oos` → `data/models_oos.json` when that view exists
+- `public.runs_public`, `public.run_predictions_public`, and `public.model_versions_public` → `data/runs.json` and `data/runs.csv`. Safe columns only. A missing or empty relation is logged and does not fail the export
 - provenance → `data/meta.json`
 
-Pages serves that committed JSON. The browser only fetches `data/*.json`.
+Pages serves that committed JSON. The browser only fetches `data/*.json`. Scoring runs are on [`runs/`](runs/).
 
 Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml) (same bytes as [`scripts/export-kpi.yml`](scripts/export-kpi.yml)).
 
