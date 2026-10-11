@@ -129,9 +129,13 @@ test("models tab markup loads the scorecard instead of a second page", () => {
   assert.equal(app.includes("renderCryptoScorecard"), true);
   assert.equal(app.includes('metric("Fee drag"'), true);
   assert.equal(app.includes("UNKNOWN"), true);
-  assert.equal(app.includes("30 bp"), true);
-  assert.equal(app.includes("95 bps/leg"), true);
-  assert.equal(app.includes("190 RT"), true);
+  // The fee assumption and the measured fee are published in the scorecard
+  // note. The page shows that note and does not carry its own copy of the fee.
+  assert.equal(app.includes("scorecard?.oos?.note"), true);
+  assert.equal(app.includes("scorecard?.oos?.fee_bps"), true);
+  assert.equal(app.includes("95 bps/leg"), false);
+  assert.equal(app.includes("190 RT"), false);
+  assert.equal(/fee_bps\s*\?\?\s*\d/.test(app), false);
   assert.equal(app.includes("fee_frac_of_book"), true);
   assert.equal(app.includes('"Fee"'), true);
   const scorecard = read("model_scorecard.json");

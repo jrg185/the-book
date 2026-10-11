@@ -2,72 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The Book</title>
-  <meta name="description" content="The Book — read-only KPI board. One crypto book. The value is the Agentic account. Equities are not a second book.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%2312110e' width='32' height='32'/%3E%3Crect fill='%23e3a15a' x='6' y='8' width='8' height='16'/%3E%3Crect fill='%237eb8c4' x='18' y='14' width='8' height='10'/%3E%3C/svg%3E">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Book · one live crypto book, public scoreboard</title>
+  <meta name="description" content="The Book is a read-only scoreboard for one live crypto book. Account value, P&amp;L, risk rails, and every scrubbed fill, refreshed from the warehouse.">
+  <link rel="canonical" href="https://jrg185.github.io/the-book/">
+  <meta name="theme-color" content="#0b0d10">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="The Book">
+  <meta property="og:title" content="The Book · one live crypto book, public scoreboard">
+  <meta property="og:description" content="Account value, P&amp;L, risk rails, and every scrubbed fill. Read-only. Refreshed from the warehouse.">
+  <meta property="og:url" content="https://jrg185.github.io/the-book/">
+  <meta property="og:image" content="https://jrg185.github.io/the-book/og.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Book scoreboard: account value, all-time P&amp;L, crypto sleeve curve, and risk stats.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The Book · one live crypto book, public scoreboard">
+  <meta name="twitter:description" content="Account value, P&amp;L, risk rails, and every scrubbed fill. Read-only.">
+  <meta name="twitter:image" content="https://jrg185.github.io/the-book/og.png">
+  <meta name="twitter:image:alt" content="The Book scoreboard: account value, all-time P&amp;L, crypto sleeve curve, and risk stats.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230b0d10' width='32' height='32' rx='7'/%3E%3Crect fill='%23f5b84b' x='7' y='7' width='18' height='18' rx='4'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="top">
-    <div>
-      <p class="eyebrow">The Book</p>
-      <h1>KPI board</h1>
-    </div>
-    <p class="lede">One crypto book. The value is the Agentic account. Equities are $0 and are not a second book. Read-only. The −10% kill and +2.5% target apply to the signal book.</p>
+  <header class="masthead">
+    <a class="brand" href="./" aria-label="The Book home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">The Book</span>
+    </a>
+    <nav class="tabs" aria-label="Board sections">
+      <button type="button" id="tab-sleeves" aria-selected="true">Book</button>
+      <button type="button" id="tab-models" aria-selected="false">Models</button>
+      <a class="tab-link" href="runs.html">Runs</a>
+    </nav>
     <nav class="repo-links" aria-label="Board links">
-      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
       <a href="#model-crypto" data-tab="models">Crypto signals</a>
       <a href="#model-equities" data-tab="models">Equity research</a>
+      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
     </nav>
   </header>
-  <nav class="tabs" aria-label="Board sections">
-    <button type="button" id="tab-sleeves" aria-selected="true">Book</button>
-    <button type="button" id="tab-models" aria-selected="false">Models</button>
-  </nav>
+
+  <p class="lede">One crypto book. The value is the Agentic account. Equities are not a second book. Read-only: this page never places orders.</p>
+
   <section id="status" class="status" aria-live="polite">
     <p class="status-copy">Loading snapshot…</p>
   </section>
+
   <div id="panel-sleeves">
-    <main id="board"></main>
-    <section class="book-block" id="positions-section" aria-labelledby="positions-heading">
-      <div class="block-head">
-        <h2 id="positions-heading">Open positions</h2>
-        <p>USD and USDC cash stay on this list, with no P&amp;L. Each other row is an open net. Its running P&amp;L is that name's closed P&amp;L plus the same mark as the sleeve. A flat name stays off. This is not a second book.</p>
+    <main id="board">
+      <section id="hero" class="card hero shot" aria-label="Account"></section>
+      <section id="chips" class="chips" aria-label="Key stats"></section>
+
+      <div class="duo">
+        <section class="card shot" id="curves-section" aria-labelledby="curves-heading">
+          <header class="card-head">
+            <div>
+              <h2 id="curves-heading">Equity curve</h2>
+              <p class="sub" id="curve-change"></p>
+            </div>
+            <div class="seg" role="group" aria-label="Time range" id="range-toggle"></div>
+          </header>
+          <div id="curves" class="chart-host"></div>
+          <p class="fine">Crypto sleeve vs its seed. The line is not the live account.</p>
+        </section>
+
+        <section class="card shot" id="risk-section" aria-labelledby="risk-heading">
+          <header class="card-head">
+            <div>
+              <h2 id="risk-heading">Risk rails</h2>
+              <p class="sub" id="rails-source"></p>
+            </div>
+          </header>
+          <div id="rails" class="rails"></div>
+          <h3 class="mini-head">Underwater <span class="tip" tabindex="0" data-tip="Distance below the crypto sleeve's running peak. 0% is a new high.">?</span></h3>
+          <div id="underwater" class="chart-host"></div>
+        </section>
       </div>
-      <div id="positions"></div>
-    </section>
-    <section class="book-block" id="curves-section" aria-labelledby="curves-heading">
-      <div class="block-head">
-        <h2 id="curves-heading">Book history</h2>
-        <p>Crypto sleeve history as a fraction of its old divisor. The line is not the live account.</p>
-      </div>
-      <div id="curves"></div>
-    </section>
-    <section class="tapes-head">
-      <h2>Scrubbed fills</h2>
-      <p>Trade tape from <code>kpi_trades_scrubbed</code>. Account fields stay off this page.</p>
-    </section>
-    <div id="tapes" class="tapes"></div>
+
+      <section class="card shot" id="positions-section" aria-labelledby="positions-heading">
+        <header class="card-head">
+          <div>
+            <h2 id="positions-heading">Open positions</h2>
+            <p class="sub">Cash lines first, then each open net. <span class="tip" tabindex="0" data-tip="USD and USDC are cash with no P&amp;L. Each open row's running P&amp;L is that name's closed P&amp;L plus the live mark. A flat name stays off.">?</span></p>
+          </div>
+        </header>
+        <div id="positions"></div>
+      </section>
+
+      <section class="card" id="feed-section" aria-labelledby="feed-heading">
+        <header class="card-head">
+          <div>
+            <h2 id="feed-heading">Trade feed</h2>
+            <p class="sub">Scrubbed fills, newest first. <span class="tip" tabindex="0" data-tip="From kpi_trades_scrubbed. Dollars are scrubbed fractions times the seed in config/book_seeds.json. Order, fill, and account ids are never shown.">?</span></p>
+          </div>
+        </header>
+        <div id="day-banner" class="day-banner" hidden></div>
+        <div id="tapes" class="tapes"></div>
+      </section>
+    </main>
   </div>
+
   <div id="panel-models" hidden>
     <section class="models-head">
       <h2>Models</h2>
-      <p>Crypto scorecard is the live backend, closed-fill win rate and expectancy, fee drag, kill headroom, and the out-of-sample read. Model cards still read <code>data/models.json</code> and <code>data/models_oos.json</code>.</p>
+      <p class="sub">Crypto scorecard first: the live backend, closed-fill win rate and expectancy, fee drag, kill headroom, and the out-of-sample read.</p>
     </section>
     <div id="models"></div>
   </div>
-  <footer>
+
+  <footer class="foot">
     <p>Static page. It reads <code>data/*.json</code> only and does not place orders.</p>
-    <nav class="repo-links" aria-label="Board links">
-      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
+    <nav class="repo-links" aria-label="Footer links">
       <a href="#model-crypto" data-tab="models">Crypto signals</a>
       <a href="#model-equities" data-tab="models">Equity research</a>
+      <a href="runs.html">Runs</a>
     </nav>
   </footer>
+  <div id="toast" class="toast" role="status" hidden></div>
   <noscript>This board needs JavaScript to read the committed JSON snapshot.</noscript>
   <script type="module" src="app.js"></script>
 </body>
