@@ -1,6 +1,6 @@
 {
   "source": "supabase",
-  "fetched_at": "2026-10-11T19:51:25Z",
+  "fetched_at": "2026-10-11T19:53:37Z",
   "runs": [
     {
       "id": "run_3782ba7fdd4c",
@@ -188826,7 +188826,9 @@
     }
   ],
   "calibration": {
-    "n_resolved": 3016,
+    "n_resolved": 12992,
+    "n_scored": 3016,
+    "n_unscored": 9976,
     "logloss": 0.690585,
     "brier": 0.248725,
     "bins": [
@@ -188900,7 +188902,8 @@
         "mean_p_up": null,
         "label_rate": null
       }
-    ]
+    ],
+    "scope": "all_predictions"
   },
   "sources": {
     "runs": "runs_public",
