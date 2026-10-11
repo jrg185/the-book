@@ -144,6 +144,18 @@ function runShareText(run, stats) {
     .join(" · ");
 }
 
+function formatDay(value) {
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" }).format(date);
+}
+
+function statusCounts(versions) {
+  const counts = new Map();
+  for (const version of versions) if (version.status) counts.set(version.status, (counts.get(version.status) || 0) + 1);
+  return [...counts].map(([status, n]) => `${n} ${status}`).join(" · ");
+}
+
 function renderStatus(bundle) {
   statusEl.replaceChildren();
   statusEl.classList.remove("is-live");
@@ -178,13 +190,18 @@ function renderSummary(bundle) {
   const left = el("div");
   if (latest) {
     const stats = runStats(state.byRun.get(latest.id));
-    left.append(el("p", "hero-kicker", "Latest run"), el("p", "runs-hero-model", runModelLabel(latest, state.names)));
+    const name = runModelName(latest, state.names);
+    left.append(
+      el("p", "hero-kicker", `Latest run · ${formatWhen(latest.generated_at)}`),
+      el("p", "runs-hero-model", `${countLabel(stats.n, "symbol", "symbols")} scored`)
+    );
     const meta = el("p", "runs-hero-meta");
     meta.append(
-      document.createTextNode([formatWhen(latest.generated_at), latest.backend, latest.mode].filter(Boolean).join(" · ")),
+      el("span", name ? "" : "dim", runModelLabel(latest, state.names)),
+      document.createTextNode([latest.backend, latest.mode].filter(Boolean).map((part) => ` · ${part}`).join(""))
     );
     if (latest.anomaly) meta.append(el("span", "chip stale", "anomaly"));
-    left.append(meta, el("p", "runs-hero-split", `${countLabel(stats.n, "symbol", "symbols")} · ${splitText(stats)}`));
+    left.append(meta, el("p", "runs-hero-split", splitText(stats)));
   } else {
     left.append(el("p", "empty", "No scoring runs in this snapshot."));
   }
@@ -195,9 +212,9 @@ function renderSummary(bundle) {
   const overall = runStats(resolved);
   const chips = el("div", "chips runs-chips");
   chips.append(
-    stat("Runs", String(bundle.runs.length), bundle.runs.length ? `since ${formatWhen(state.runs[state.runs.length - 1].generated_at)}` : ""),
+    stat("Runs", String(bundle.runs.length), bundle.runs.length ? `since ${formatDay(state.runs[state.runs.length - 1].generated_at)}` : ""),
     stat("Predictions", bundle.predictions.length.toLocaleString("en-US"), `${new Set(bundle.predictions.map((row) => row.symbol)).size} symbols`),
-    stat("Models", String(bundle.modelVersions.length), bundle.modelVersions.map((version) => version.status).filter(Boolean).join(" · ")),
+    stat("Models", String(bundle.modelVersions.length), statusCounts(bundle.modelVersions)),
     stat("Resolved", calibration.nResolved.toLocaleString("en-US"), "8h label known"),
     stat("Hit rate", overall.calls ? formatProb(overall.hitRate) : "—", overall.calls ? `${overall.calls} buy or sell calls` : "No resolved buy or sell calls", overall.hitRate == null ? "" : overall.hitRate >= 0.5 ? "up" : "down"),
     stat("Log loss", formatScore(calibration.logloss), calibration.brier == null ? "" : `Brier ${formatScore(calibration.brier)}`),

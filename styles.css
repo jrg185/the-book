@@ -1844,6 +1844,16 @@ tr.is-selected td {
   table.calib-table td.ticker::before {
     display: block;
   }
+  table.calib-table td.ticker {
+    font-size: 0.86rem;
+  }
+  table.cards-on-mobile tr.is-selected {
+    border-color: rgba(245, 184, 75, 0.45);
+    background: var(--accent-bg);
+  }
+  table.cards-on-mobile tr.is-selected td {
+    background: none;
+  }
   table.cards-on-mobile tr.empty-row {
     display: block;
   }
