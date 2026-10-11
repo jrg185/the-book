@@ -4515,6 +4515,16 @@ def self_test() -> int:
     return 0
 
 
+def publish_scoring_runs(target: Path, base_url: str, key: str | None, db_url: str | None) -> None:
+    """Write data/runs.json and data/runs.csv. A missing view is logged, not fatal."""
+    try:
+        import export_runs
+
+        export_runs.publish(target, base_url, key, db_url)
+    except Exception as exc:
+        print(f"scoring runs export skipped: {exc}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -4574,6 +4584,7 @@ def main(argv: list[str] | None = None) -> int:
         except OSError as exc:
             print(f"Could not record export status in data/meta.json: {exc}", file=sys.stderr)
             return 1
+        publish_scoring_runs(DATA, base_url, key, db_url)
         return 0
 
     try:
@@ -4628,6 +4639,7 @@ def main(argv: list[str] | None = None) -> int:
         except OSError as stamp_exc:
             print(f"Could not record export status in data/meta.json: {stamp_exc}", file=sys.stderr)
         return 1
+    publish_scoring_runs(DATA, base_url, key, db_url)
     if not (DATA / "models.json").exists():
         write_json(DATA / "models.json", sample_bundle()["models"])
     print(
