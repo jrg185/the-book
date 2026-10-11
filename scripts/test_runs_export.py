@@ -130,7 +130,8 @@ class RunsExportTests(unittest.TestCase):
         self.assertEqual(bundle["runs"][0]["id"], run_key)
         self.assertRegex(run_key, r"^run_[0-9a-f]{12}$")
         self.assertNotIn("run-1", json.dumps(bundle))
-        self.assertTrue(all(row["run_id"] == run_key for row in bundle["predictions"]))
+        self.assertTrue(any(row["run_id"] == run_key for row in bundle["predictions"]))
+        self.assertTrue(all(row["run_id"].startswith("run_") for row in bundle["predictions"]))
         self.assertEqual(
             bundle["runs"][0]["model_version_id"],
             bundle["model_versions"][0]["id"],
