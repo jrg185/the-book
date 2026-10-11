@@ -14,6 +14,7 @@ A missing or empty relation is logged. It does not fail Export KPI.
 from __future__ import annotations
 
 import csv
+import hashlib
 import datetime as dt
 import io
 import json
@@ -25,6 +26,19 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+RUN_KEY_LABEL = "the-book/run-key/v1"
+VERSION_KEY_LABEL = "the-book/model-version-key/v1"
+
+
+def public_key(value, label: str, prefix: str = "k"):
+    """Short non-reversible key for a private id. Never the raw id."""
+    text = as_text(value)
+    if not text:
+        return None
+    # The prefix keeps the key from reading as an account-number-like token.
+    return prefix + "_" + hashlib.sha256((label + ":" + text).encode("utf-8")).hexdigest()[:12]
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
@@ -249,8 +263,8 @@ def project_run(row: dict, names: dict) -> dict | None:
     if not version and version_id:
         version = names.get(version_id)
     public = {
-        "id": as_text(row.get("id")),
-        "model_version_id": version_id,
+        "id": public_key(row.get("id"), RUN_KEY_LABEL, "run"),
+        "model_version_id": public_key(version_id, VERSION_KEY_LABEL, "mv"),
         "model_version": version,
         "model_version_name": version_name or version,
         "backend": as_text(row.get("backend")),
@@ -266,7 +280,7 @@ def project_run(row: dict, names: dict) -> dict | None:
 
 def project_prediction(row: dict) -> dict | None:
     public = {
-        "run_id": as_text(row.get("run_id")),
+        "run_id": public_key(row.get("run_id"), RUN_KEY_LABEL, "run"),
         "symbol": as_text(row.get("symbol")),
         "p_up": as_float(row.get("p_up")),
         "side": as_text(row.get("side")),
@@ -286,7 +300,7 @@ def project_prediction(row: dict) -> dict | None:
 def project_version(row: dict) -> dict | None:
     metrics = row.get("oos_metrics")
     public = {
-        "id": as_text(row.get("id")),
+        "id": public_key(row.get("id"), VERSION_KEY_LABEL, "mv"),
         "name": as_text(row.get("name")),
         "parent": as_text(row.get("parent")),
         "status": as_text(row.get("status")),
@@ -357,8 +371,9 @@ def build_bundle(runs, predictions, versions, fetched_at: str) -> dict:
         if not public:
             continue
         public_versions.append(public)
-        if public.get("id") and public.get("name"):
-            names[public["id"]] = public["name"]
+        raw_id = as_text(row.get("id"))
+        if raw_id and public.get("name"):
+            names[raw_id] = public["name"]
     public_versions.sort(key=lambda row: (row.get("name") or "", row.get("id") or ""))
 
     public_runs = []

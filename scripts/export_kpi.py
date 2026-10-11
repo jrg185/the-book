@@ -118,6 +118,10 @@ UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 ORDER_WORD_RE = re.compile(r"order", re.IGNORECASE)
+# Redaction placeholders written by the history scrub. Not real ids.
+UUID_ALLOWLIST_RE = re.compile(r"^00000000-0000-4000-8000-[0-9]{12}$")
+# Files that must never carry a UUID-shaped value, allowlisted or not.
+NO_UUID_FILES = ("runs.json", "runs.csv")
 ACCOUNT_DIGITS_RE = re.compile(r"^[0-9]{8,12}$")
 ACCOUNT_ALNUM_RE = re.compile(r"^[A-Za-z0-9]{8,12}$")
 
@@ -774,7 +778,25 @@ def published_identifier_problems(directory: Path) -> list[str]:
             problems.extend(_json_identifier_problems(path, account))
         else:
             problems.extend(_csv_identifier_problems(path, account))
+        problems.extend(_uuid_problems(path))
     return problems
+
+
+def _uuid_problems(path: Path) -> list[str]:
+    """Flag UUID-shaped values (RH order id shape). runs.* allow none at all."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    strict = path.name in NO_UUID_FILES
+    count = 0
+    for match in UUID_RE.finditer(text):
+        if not strict and UUID_ALLOWLIST_RE.match(match.group(0)):
+            continue
+        count += 1
+    if not count:
+        return []
+    return [f"{path.name}: {count} uuid-shaped value(s)"]
 
 
 def _json_identifier_problems(path: Path, account: str) -> list[str]:
