@@ -19,11 +19,9 @@
     "expectancy_usd": 0.19,
     "seed_usd": 300,
     "deduped": 0,
-    "order_id_available": false,
     "dedupe": "scrubbed-rows",
     "note": "Sell fills with a finite P&L. Flat zero is excluded, same as sleeve Win %. The scrubbed tape has no order id, so rows are not collapsed. T24b will improve joined-fill metrics."
   },
-  "order_id_unique": null,
   "fee_drag": {
     "status": "known",
     "fee_usd": 34.59,
@@ -34,10 +32,10 @@
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-11T16:24:03+00:00",
-    "kill_headroom_stored": 2.99579,
-    "kill_headroom_frac": 0.0299579,
-    "kill_headroom_usd": 8.99,
+    "as_of": "2026-10-11T17:19:35+00:00",
+    "kill_headroom_stored": 3.289223,
+    "kill_headroom_frac": 0.032892229999999995,
+    "kill_headroom_usd": 9.87,
     "day_kill_pct": -0.1,
     "day_kill_usd": -30.0,
     "day_target_pct": 0.025,
@@ -94,9 +92,9 @@
     "status": "known",
     "artifacts_table": "signal_artifacts",
     "outcomes_table": "signal_trade_outcomes",
-    "artifact_count": 498,
+    "artifact_count": 500,
     "outcome_count": 50,
-    "last_generated_at": "2026-10-11T13:36:51+00:00",
+    "last_generated_at": "2026-10-11T16:31:53+00:00",
     "note": "Counts only. The artifact payload stays in the warehouse."
   }
 }

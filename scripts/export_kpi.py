@@ -49,6 +49,7 @@ Derived for the Models tab, from the exported tape plus committed model files:
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import io
 import json
@@ -82,7 +83,18 @@ DENY_KEYS = {
     "email",
     "phone",
     "order_id",
+    "fill_trade_id",
+    "account",
+    "account_number",
+    "rhs_account_number",
     "account_id",
+    "client_order_id",
+    "trade_id",
+    "fill_id",
+    "order_uuid",
+    "order_ids",
+    "order_id_unique",
+    "order_id_available",
     "user_id",
     "api_key",
     "service_role",
@@ -92,6 +104,22 @@ DENY_KEYS = {
     "ssn",
     "address",
 }
+
+# Keys the Export KPI check job rejects in data/*.json and data/*.csv.
+FORBIDDEN_PUBLISHED_KEYS = frozenset({
+    "order_id",
+    "fill_trade_id",
+    "account",
+    "account_number",
+    "rhs_account_number",
+})
+
+UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+ORDER_WORD_RE = re.compile(r"order", re.IGNORECASE)
+ACCOUNT_DIGITS_RE = re.compile(r"^[0-9]{8,12}$")
+ACCOUNT_ALNUM_RE = re.compile(r"^[A-Za-z0-9]{8,12}$")
 
 # Book seeds from config/book_seeds.json. Curves and open P&L use these divisors,
 # not a raw account balance, so the page can show seed × fraction.
@@ -569,6 +597,104 @@ def looks_like_secret(value: object) -> bool:
     return "service_role" in lowered or lowered.startswith("sb_secret_")
 
 
+def _env_account() -> str:
+    """Agentic account from the environment. Never a hardcoded number."""
+    return (os.environ.get("RH_AGENTIC_ACCOUNT") or "").strip()
+
+
+def _key_mentions_order(key: str) -> bool:
+    return "order" in str(key).lower()
+
+
+def _account_like(text: str) -> bool:
+    """Whole-value Robinhood account numbers.
+
+    Eight to twelve digits, or eight to twelve letters and digits with at
+    least one of each. Decimals, timestamps, and tickers do not match.
+    """
+    if ACCOUNT_DIGITS_RE.fullmatch(text):
+        return True
+    if not ACCOUNT_ALNUM_RE.fullmatch(text):
+        return False
+    return any(char.isdigit() for char in text) and any(char.isalpha() for char in text)
+
+
+def _number_is_env_account(value, account: str) -> bool:
+    if not account or isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, float) and not value.is_integer():
+        return False
+    return account.isdigit() and str(int(value)) == account
+
+
+def _order_context(key: str, text: str, sibling_order: bool) -> bool:
+    if sibling_order or _key_mentions_order(key):
+        return True
+    lowered = str(key).lower()
+    if lowered in {"fill_trade_id", "trade_id", "fill_id", "client_order_id"}:
+        return True
+    return bool(ORDER_WORD_RE.search(text))
+
+
+def _redact_identifier_text(text: str, account: str, order_context: bool) -> str:
+    updated = text
+    if order_context:
+        updated = UUID_RE.sub("", updated)
+    if account:
+        updated = updated.replace(account, "")
+    return updated
+
+
+def _string_is_identifier(text: str, account: str, order_context: bool) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if _account_like(stripped) or (account and stripped == account):
+        return True
+    return order_context and bool(UUID_RE.fullmatch(stripped))
+
+
+def scrub_published_identifiers(value):
+    """Drop order ids, fill/trade ids, and account numbers from a public payload."""
+    return _scrub_published(value, _env_account(), "", False)
+
+
+def _scrub_published(value, account: str, key: str, sibling_order: bool):
+    if isinstance(value, dict):
+        child_order = sibling_order or any(_key_mentions_order(str(name)) for name in value)
+        cleaned = {}
+        for raw_key, item in value.items():
+            name = str(raw_key)
+            if name.lower() in DENY_KEYS:
+                continue
+            child = _scrub_published(item, account, name, child_order)
+            if isinstance(child, str):
+                context = _order_context(name, child, child_order)
+                if _string_is_identifier(child, account, context):
+                    continue
+                child = _redact_identifier_text(child, account, context)
+                if child.strip() == "" and child != item:
+                    continue
+            elif _number_is_env_account(child, account):
+                continue
+            cleaned[name] = child
+        return cleaned
+    if isinstance(value, list):
+        cleaned = []
+        for item in value:
+            child = _scrub_published(item, account, key, sibling_order)
+            if isinstance(item, str) and isinstance(child, str) and child.strip() == "" and item.strip():
+                continue
+            cleaned.append(child)
+        return cleaned
+    if isinstance(value, str):
+        context = _order_context(key, value, sibling_order)
+        if _string_is_identifier(value, account, context):
+            return ""
+        return _redact_identifier_text(value, account, context)
+    return value
+
+
 def scrub_row(row: dict) -> dict:
     clean = {}
     for key, value in row.items():
@@ -594,7 +720,100 @@ def jsonable(value):
 
 def write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    public = scrub_published_identifiers(payload)
+    path.write_text(json.dumps(public, indent=2) + "\n", encoding="utf-8")
+
+
+def _identifier_hits(key: str, value, account: str, sibling_order: bool) -> list[str]:
+    """Reasons this key or value must not be published. Empty when it is safe."""
+    hits = []
+    name = str(key)
+    if name.lower() in FORBIDDEN_PUBLISHED_KEYS:
+        hits.append(f"key {name}")
+    if isinstance(value, str):
+        context = _order_context(name, value, sibling_order)
+        if context and UUID_RE.search(value):
+            hits.append("order uuid")
+        stripped = value.strip()
+        if _account_like(stripped) or (account and account in value):
+            hits.append("account number")
+    elif _number_is_env_account(value, account):
+        hits.append("account number")
+    return hits
+
+
+def _walk_identifier_problems(value, account: str, key: str, sibling_order: bool, path: str, hits: list[str]) -> None:
+    if isinstance(value, dict):
+        child_order = sibling_order or any(_key_mentions_order(str(name)) for name in value)
+        for raw_key, item in value.items():
+            name = str(raw_key)
+            child_path = f"{path}.{name}" if path else name
+            for reason in _identifier_hits(name, item, account, child_order):
+                hits.append(f"{child_path}: {reason}")
+            _walk_identifier_problems(item, account, name, child_order, child_path, hits)
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _walk_identifier_problems(item, account, key, sibling_order, f"{path}[{index}]", hits)
+
+
+def published_identifier_problems(directory: Path) -> list[str]:
+    """Scan data/*.json and data/*.csv for order ids and account numbers.
+
+    Fails on keys named order_id, fill_trade_id, account, account_number, or
+    rhs_account_number. Fails on a Robinhood order UUID in an order context
+    (the key or the value mentions an order, or a sibling key does). Fails on
+    an account-number-like value. When RH_AGENTIC_ACCOUNT is set, that exact
+    value is an account number too. The account is never hardcoded.
+    """
+    account = _env_account()
+    problems = []
+    paths = sorted(directory.glob("*.json")) + sorted(directory.glob("*.csv"))
+    for path in paths:
+        if path.suffix == ".json":
+            problems.extend(_json_identifier_problems(path, account))
+        else:
+            problems.extend(_csv_identifier_problems(path, account))
+    return problems
+
+
+def _json_identifier_problems(path: Path, account: str) -> list[str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"{path.name}: unreadable json ({exc})"]
+    hits: list[str] = []
+    _walk_identifier_problems(payload, account, "", False, "", hits)
+    return [f"{path.name}: {hit}" for hit in hits]
+
+
+def _csv_identifier_problems(path: Path, account: str) -> list[str]:
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+    except OSError as exc:
+        return [f"{path.name}: unreadable csv ({exc})"]
+    if not rows:
+        return []
+    headers = rows[0]
+    problems = []
+    for index, header in enumerate(headers):
+        for reason in _identifier_hits(header, "", account, False):
+            problems.append(f"{path.name}: header[{index}]: {reason}")
+        if _account_like(header.strip()) or (account and account in header):
+            problems.append(f"{path.name}: header[{index}]: account number")
+        if UUID_RE.search(header) and ORDER_WORD_RE.search(header):
+            problems.append(f"{path.name}: header[{index}]: order uuid")
+    sibling_order = any(_key_mentions_order(header) for header in headers)
+    for row_index, row in enumerate(rows[1:], start=2):
+        for index, cell in enumerate(row):
+            header = headers[index] if index < len(headers) else ""
+            where = f"{path.name}: row {row_index} {header or index}"
+            for reason in _identifier_hits(header, cell, account, sibling_order):
+                if reason.startswith("key "):
+                    continue
+                problems.append(f"{where}: {reason}")
+    return problems
 
 
 def install_sample(target: Path) -> None:
@@ -1824,7 +2043,12 @@ def build_model_scorecard(
     order_id_unique=None,
     signal_linkage=None,
 ) -> dict:
-    """Crypto scorecard from already-exported JSON. Does not invent fees."""
+    """Crypto scorecard from already-exported JSON. Does not invent fees.
+
+    order_id_unique is ignored. Order ids, fill/trade ids, and account
+    numbers are not part of the published scorecard.
+    """
+    del order_id_unique
     fills = closed_fill_stats(trades if isinstance(trades, list) else [], "crypto")
     if fills["order_id_available"]:
         fill_note = (
@@ -1855,19 +2079,18 @@ def build_model_scorecard(
     for model in model_payload.get("models") or []:
         if isinstance(model, dict) and str(model.get("sleeve") or "").strip().lower() == "crypto":
             trained = trained or _first_stamp(model, ("trained_at", "promoted_at", "fit_at"))
-    unique = order_id_unique if isinstance(order_id_unique, dict) else None
-    if unique:
-        unique = {key: value for key, value in unique.items() if key != "order_id"}
-    return {
+    published_fills = {
+        key: value for key, value in fills.items() if str(key).lower() not in DENY_KEYS
+    }
+    return scrub_published_identifiers({
         "sleeve": "crypto",
         "ticket": "T24e",
         "live_backend": live_backend_block(model_payload, oos_payload),
         "closed_fills": {
-            **fills,
+            **published_fills,
             "dedupe": "order-id" if fills["order_id_available"] else "scrubbed-rows",
             "note": fill_note,
         },
-        "order_id_unique": unique,
         "fee_drag": fees,
         "kill": kill_block(summary),
         "oos": oos_block(oos_payload),
@@ -1887,7 +2110,7 @@ def build_model_scorecard(
         else unknown_linkage(
             "Scrubbed Pages JSON has no signal_artifacts or signal_trade_outcomes counts. Not estimated."
         ),
-    }
+    })
 
 
 def _fee_rows_for_tape(rows: list) -> list:
@@ -4255,6 +4478,38 @@ def self_test() -> int:
         raise RuntimeError(f"plain scorecard {plain['fee_drag']} {plain['live_backend']}")
     if plain["closed_fills"]["wins"] != 1 or not usd_equal(plain["closed_fills"]["expectancy_usd"], 6.0):
         raise RuntimeError(f"plain fills {plain['closed_fills']}")
+    leaked = build_model_scorecard(
+        summary=[],
+        trades=[{"sleeve": "crypto", "side": "sell", "pnl_frac_of_book": 0.01}],
+        models={},
+        oos={"rows": []},
+        signal_linkage={
+            "status": "known",
+            "note": "sync order 6ab90000-0000-4000-8000-000000000004",
+            "order_id": "6ab90000-0000-4000-8000-000000000004",
+            "fill_trade_id": "fill-1",
+            "account": "123456789",
+            "account_number": "123456789",
+            "rhs_account_number": "RHACCT1234",
+            "ref": "123456789",
+        },
+    )
+    leaked_blob = json.dumps(leaked)
+    if (
+        "order_id" in leaked_blob
+        or "fill_trade_id" in leaked_blob
+        or "account_number" in leaked_blob
+        or "rhs_account_number" in leaked_blob
+        or "123456789" in leaked_blob
+        or "6ab90000" in leaked_blob
+        or "RHACCT1234" in leaked_blob
+    ):
+        raise RuntimeError(f"scorecard emitted an identifier: {leaked_blob}")
+    if "order_id_unique" in leaked or "order_id_available" in leaked.get("closed_fills", {}):
+        raise RuntimeError(f"scorecard kept an order-id field: {leaked_blob}")
+    problems = published_identifier_problems(DATA)
+    if problems:
+        raise RuntimeError("published data has identifiers:\n" + "\n".join(problems))
 
     print("self-test ok")
     return 0
