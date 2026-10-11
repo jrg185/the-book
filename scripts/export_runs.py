@@ -58,6 +58,7 @@ RUN_COLUMNS = (
     "id",
     "model_version_id",
     "model_version",
+    "model_version_name",
     "backend",
     "mode",
     "generated_at",
@@ -93,6 +94,7 @@ CSV_COLUMNS = (
     "id",
     "run_id",
     "model_version",
+    "model_version_name",
     "model_version_id",
     "backend",
     "mode",
@@ -256,13 +258,15 @@ def scrub_metrics(value, depth: int = 0):
 
 def project_run(row: dict, names: dict) -> dict | None:
     version_id = as_text(row.get("model_version_id"))
-    version = as_text(row.get("model_version")) or as_text(row.get("model_name"))
+    version_name = as_text(row.get("model_version_name"))
+    version = as_text(row.get("model_version")) or version_name or as_text(row.get("model_name"))
     if not version and version_id:
         version = names.get(version_id)
     public = {
         "id": public_key(row.get("id"), RUN_KEY_LABEL, "run"),
         "model_version_id": public_key(version_id, VERSION_KEY_LABEL, "mv"),
         "model_version": version,
+        "model_version_name": version_name or version,
         "backend": as_text(row.get("backend")),
         "mode": as_text(row.get("mode")),
         "generated_at": as_text(row.get("generated_at")),

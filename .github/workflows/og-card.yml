@@ -1,0 +1,95 @@
+name: OG card
+
+# Renders og.png (the X / Open Graph share card) from data/*.json once a day
+# and commits only that file. It does not touch Supabase, Robinhood, or the
+# Export KPI job. Pull requests run the front-end tests only.
+
+on:
+  schedule:
+    # 12:15 UTC daily, after the overnight crypto marks.
+    - cron: "15 12 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - og.js
+      - board.js
+      - derive.js
+      - scripts/render_og.mjs
+      - .github/workflows/og-card.yml
+  pull_request:
+    paths:
+      - og.js
+      - board.js
+      - charts.js
+      - derive.js
+      - app.js
+      - index.html
+      - runs.html
+      - runs/**
+      - styles.css
+      - scripts/render_og.mjs
+      - scripts/test_board_ui.mjs
+      - .github/workflows/og-card.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: og-card
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Front-end and share card tests
+        run: node --test scripts/test_board_ui.mjs
+
+  render:
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Card font
+        run: sudo apt-get install -y --no-install-recommends fonts-inter >/dev/null 2>&1 || echo "fonts-inter unavailable; using the system sans."
+
+      - name: Render og.png from data JSON
+        run: node scripts/render_og.mjs
+
+      - name: Commit og.png
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- og.png
+          if git diff --cached --quiet; then
+            echo "og.png unchanged."
+            exit 0
+          fi
+          git commit -m "Render daily og.png from data JSON"
+          # Export KPI commits data/ on its own schedule. Rebase onto it before pushing.
+          for delay in 4 8 16 32; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep "$delay"
+          done
+          exit 1

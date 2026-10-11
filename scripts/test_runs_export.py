@@ -161,6 +161,18 @@ class RunsExportTests(unittest.TestCase):
         self.assertEqual(high["n"], 2)
         self.assertAlmostEqual(high["label_rate"], 0.5, places=6)
 
+    def test_model_version_name_from_the_view_is_published(self):
+        self.assertIn("model_version_name", export_runs.RUN_COLUMNS)
+        self.assertIn("model_version_name", export_runs.CSV_COLUMNS)
+        run = {"id": "r1", "model_version_name": "lgbm_v1", "backend": "ml", "generated_at": "2026-10-11T00:00:00Z"}
+        bundle = export_runs.build_bundle([run], [], [], "2026-10-11T01:00:00Z")
+        self.assertEqual(bundle["runs"][0]["model_version_name"], "lgbm_v1")
+        self.assertEqual(bundle["runs"][0]["model_version"], "lgbm_v1")
+        self.assertIn(",lgbm_v1,", export_runs.bundle_csv(bundle))
+        runs, predictions, versions = dirty_rows()
+        bundle = export_runs.build_bundle(runs, predictions, versions, "2026-10-11T17:00:00Z")
+        self.assertEqual(bundle["runs"][0]["model_version_name"], "candidateone")
+
     def test_missing_column_is_dropped_and_missing_relations_do_not_raise(self):
         seen = []
 

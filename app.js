@@ -1,8 +1,30 @@
+import {
+  RANGES,
+  SITE_URL,
+  agoText,
+  curvePoints,
+  dailySharpe,
+  drawdownSeries,
+  drawdownStats,
+  etDayKey,
+  latestCall,
+  liveRails,
+  parseHash,
+  permalink,
+  railView,
+  rankModels,
+  redactIds,
+  seedReturn,
+  shareUrl,
+  tradeAnchors,
+  windowChange,
+  windowPoints,
+} from "./board.js";
+import { areaChart, sparkline } from "./charts.js";
+import { normalizeBundle, predictionsByRun, runAnchors, runModelLabel, runStats, versionNames } from "./runs/derive.js";
 import { cardOpenKey, defaultCardOpen, modelCardId, rememberOpen, storedOpen } from "./collapse.js";
-import { buildChart, sampleAt } from "./curves.js";
 import {
   closedFillStats,
-  cryptoBookView,
   cryptoOosModels,
   deriveSleeve,
   feeDragFromTrades,
@@ -10,9 +32,7 @@ import {
   formatUsd,
   formatWinPct,
   formatWinRecord,
-  headroomFill,
   cardPositionRows,
-  holdingRows,
   inferLiveBackend,
   labelFor,
   LIVE_SIGNAL_URL,
@@ -22,7 +42,6 @@ import {
   SEEDS_USD,
   sleeveKey,
   tone,
-  winStats,
   winTone,
 } from "./derive.js";
 import { posOpenKey } from "./positions.js";
@@ -44,21 +63,90 @@ import {
 } from "./tape.js";
 
 const statusEl = document.querySelector("#status");
-const boardEl = document.querySelector("#board");
+const heroEl = document.querySelector("#hero");
+const chipsEl = document.querySelector("#chips");
 const tapesEl = document.querySelector("#tapes");
 const positionsEl = document.querySelector("#positions");
 const curvesEl = document.querySelector("#curves");
+const curveChangeEl = document.querySelector("#curve-change");
+const rangeToggleEl = document.querySelector("#range-toggle");
+const railsEl = document.querySelector("#rails");
+const railsSourceEl = document.querySelector("#rails-source");
+const underwaterEl = document.querySelector("#underwater");
+const dayBannerEl = document.querySelector("#day-banner");
 const modelsEl = document.querySelector("#models");
 const panelSleeves = document.querySelector("#panel-sleeves");
 const panelModels = document.querySelector("#panel-models");
 const tabSleeves = document.querySelector("#tab-sleeves");
 const tabModels = document.querySelector("#tab-models");
+const toastEl = document.querySelector("#toast");
+
+const COLORS = { up: "#2fd17c", down: "#ff5d6c", flat: "#8b97a5", accent: "#f5b84b" };
+const RANGE_KEY = "the-book-curve-range";
+const FEED_PAGE = 25;
+
+const state = {
+  points: [],
+  range: "all",
+  dayFilter: null,
+  tapes: new Map(),
+};
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
+}
+
+function tip(text) {
+  const node = el("span", "tip", "?");
+  node.tabIndex = 0;
+  node.dataset.tip = text;
+  node.setAttribute("aria-label", text);
+  return node;
+}
+
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => {
+    toastEl.hidden = true;
+  }, 1800);
+}
+
+function shareButton(text, url, label = "Share on X") {
+  const link = el("a", "share-x");
+  link.href = shareUrl(text, url);
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.setAttribute("aria-label", label);
+  const glyph = el("span", "x-glyph", "\ud835\udd4f");
+  glyph.setAttribute("aria-hidden", "true");
+  link.append(glyph, document.createTextNode(label === "Share on X" ? "Share" : label));
+  return link;
+}
+
+function copyLinkButton(url) {
+  const button = el("button", "copy-link", "Copy link");
+  button.type = "button";
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Link copied");
+    } catch {
+      toast(url);
+    }
+  });
+  return button;
+}
+
+function watermark(asOf) {
+  const mark = el("p", "watermark");
+  mark.append(el("span", "wm-brand", "jrg185.github.io/the-book"));
+  if (asOf) mark.append(el("span", null, formatEt(asOf)));
+  return mark;
 }
 
 function mountCollapse({ heading, label, panel, storageKey, defaultOpen, collapsedHost = null }) {
@@ -123,17 +211,20 @@ function formatEt(value) {
   }).format(date);
 }
 
-function latestStamp(values) {
-  let best = null;
-  let bestMs = -Infinity;
-  for (const value of values) {
-    const date = parseTime(value);
-    if (date && date.getTime() >= bestMs) {
-      best = value;
-      bestMs = date.getTime();
-    }
-  }
-  return best;
+function formatEtDay(key) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+  if (!match) return String(key || "");
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function shortWhen(ms, long) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    ...(long ? { hour: "numeric", minute: "2-digit" } : {}),
+  }).format(new Date(ms));
 }
 
 async function loadJson(path, token) {
@@ -152,6 +243,23 @@ function agePhrase(ms) {
   return `${hours}h ${rest}m`;
 }
 
+function statusChip(meta, sleeveAsOf) {
+  const exportStatus = String(meta?.export_status || "").toLowerCase();
+  const refreshedAt = parseTime(meta?.fetched_at);
+  const snapshotAt = parseTime(sleeveAsOf);
+  const agedOut = refreshedAt != null && Date.now() - refreshedAt.getTime() > STALE_AFTER_MS;
+  const snapshotAge = snapshotAt == null ? null : Date.now() - snapshotAt.getTime();
+  const warehouse = String(meta?.warehouse_status || "").toLowerCase();
+  const mtmStale = meta?.source === "supabase" && snapshotAge != null && snapshotAge > SNAPSHOT_STALE_MS;
+  if (warehouse === "read-only") return { cls: "error", text: "Warehouse read-only" };
+  if (warehouse === "disk-full") return { cls: "error", text: "Warehouse disk full" };
+  if (exportStatus === "error") return { cls: "error", text: "Export failed" };
+  if (exportStatus === "stale" || agedOut) return { cls: "stale", text: "Stale snapshot" };
+  if (mtmStale) return { cls: "stale", text: "MTM stale" };
+  if (meta?.source === "supabase") return { cls: "live", text: "Live" };
+  return { cls: "sample", text: "Sample snapshot" };
+}
+
 function renderStatus(meta, sleeveAsOf) {
   statusEl.replaceChildren();
   const exportStatus = String(meta?.export_status || "").toLowerCase();
@@ -163,59 +271,23 @@ function renderStatus(meta, sleeveAsOf) {
   const mtmStale = meta?.source === "supabase" && snapshotAge != null && snapshotAge > SNAPSHOT_STALE_MS;
   const exportBroken = exportStatus === "error" || exportStatus === "stale" || agedOut;
   const frozenLabel = formatEt(meta?.snapshot_as_of || sleeveAsOf);
-  let chipClass = "chip sample";
-  let chipText = "Sample snapshot";
-  if (warehouse === "read-only") {
-    chipClass = "chip error";
-    chipText = "Warehouse read-only";
-  } else if (warehouse === "disk-full") {
-    chipClass = "chip error";
-    chipText = "Warehouse disk full";
-  } else if (exportStatus === "error") {
-    chipClass = "chip error";
-    chipText = "Export failed";
-  } else if (exportStatus === "stale" || agedOut) {
-    chipClass = "chip stale";
-    chipText = "Stale snapshot";
-  } else if (mtmStale) {
-    chipClass = "chip stale";
-    chipText = "MTM stale";
-  } else if (meta?.source === "supabase") {
-    chipClass = "chip live";
-    chipText = "Supabase export";
-  }
-  const chip = el("span", chipClass, chipText);
-  statusEl.append(chip);
+  const chip = statusChip(meta, sleeveAsOf);
+  statusEl.className = `status is-${chip.cls}`;
 
   const lines = el("div", "status-lines");
   const refreshed = formatEt(meta?.fetched_at);
-  const headline = el(
-    "p",
-    "status-copy",
-    refreshed ? `Last refreshed ${refreshed}` : "Last refreshed time is missing from this snapshot."
+  lines.append(
+    el("p", "status-copy", refreshed ? `Last refreshed ${refreshed}` : "Last refreshed time is missing from this snapshot.")
   );
-  lines.append(headline);
   const asOf = formatEt(sleeveAsOf);
   if (asOf) lines.append(el("p", "status-copy", `Sleeve as of ${asOf}`));
   if (warehouse === "read-only") {
     lines.append(
-      el(
-        "p",
-        "status-copy status-error",
-        frozenLabel
-          ? `warehouse read-only — snapshot frozen at ${frozenLabel}`
-          : "warehouse read-only — snapshot frozen"
-      )
+      el("p", "status-copy status-error", frozenLabel ? `warehouse read-only — snapshot frozen at ${frozenLabel}` : "warehouse read-only — snapshot frozen")
     );
   } else if (warehouse === "disk-full") {
     lines.append(
-      el(
-        "p",
-        "status-copy status-error",
-        frozenLabel
-          ? `warehouse disk full — snapshot frozen at ${frozenLabel}`
-          : "warehouse disk full — snapshot frozen"
-      )
+      el("p", "status-copy status-error", frozenLabel ? `warehouse disk full — snapshot frozen at ${frozenLabel}` : "warehouse disk full — snapshot frozen")
     );
   } else if (meta?.export_error) {
     lines.append(el("p", "status-copy status-error", String(meta.export_error)));
@@ -230,13 +302,7 @@ function renderStatus(meta, sleeveAsOf) {
       )
     );
   } else if (meta?.source === "supabase" && !asOf) {
-    lines.append(
-      el(
-        "p",
-        "status-copy status-warn",
-        "Sleeve as_of is missing, so this page cannot tell whether warehouse MTM moved."
-      )
-    );
+    lines.append(el("p", "status-copy status-warn", "Sleeve as_of is missing, so this page cannot tell whether warehouse MTM moved."));
   } else if (!refreshed && meta?.note) {
     lines.append(el("p", "status-copy", String(meta.note)));
   }
@@ -244,89 +310,366 @@ function renderStatus(meta, sleeveAsOf) {
   if (attempted && attempted !== refreshed && (exportStatus === "error" || exportStatus === "stale")) {
     lines.append(el("p", "status-copy", `Last export attempt ${attempted}`));
   }
-  statusEl.append(lines);
+  statusEl.append(el("span", `chip ${chip.cls}`, chip.text), lines);
 }
 
-function renderLiveBook(view, trades) {
-  const card = el("article", "sleeve crypto hero");
-  const head = el("header", "sleeve-head");
-  const title = el("h2");
-  head.append(title);
-  if (view.asOf) {
-    const when = el("time", null, formatEt(view.asOf));
-    when.dateTime = String(view.asOf);
-    head.append(when);
+function freshness(asOf) {
+  const node = el("span", "fresh");
+  node.dataset.asof = asOf || "";
+  const dot = el("i", "pulse");
+  dot.setAttribute("aria-hidden", "true");
+  node.append(dot, el("span", "fresh-text", ""));
+  paintFreshness(node);
+  return node;
+}
+
+function paintFreshness(node) {
+  const date = parseTime(node.dataset.asof);
+  const text = node.querySelector(".fresh-text");
+  if (!text) return;
+  text.textContent = date ? `Updated ${agoText(date.getTime())}` : "Update time unknown";
+  node.title = date ? formatEt(node.dataset.asof) : "";
+  node.classList.toggle("old", !date || Date.now() - date.getTime() > SNAPSHOT_STALE_MS);
+}
+
+function pnlChip(label, dollars, frac, extra) {
+  const chip = el("div", `pnl-chip ${tone(dollars)}`);
+  chip.append(el("span", "pc-label", label));
+  const value = el("span", "pc-value", formatUsd(dollars, { signed: true }));
+  chip.append(value);
+  if (frac != null) chip.append(el("span", "pc-frac", formatPct(frac, { signed: true, digits: 2 })));
+  if (extra) chip.append(tip(extra));
+  return chip;
+}
+
+function renderHero(view, meta, chip) {
+  heroEl.replaceChildren();
+  if (!view) {
+    heroEl.append(el("p", "empty", "Live book has no book_usd."));
+    return;
   }
-  head.append(el("p", "chip live", "Live"));
-  card.append(head);
+  const seedFrac = seedReturn(view.runningPnl);
+  const top = el("div", "hero-top");
+  const label = el("p", "eyebrow");
+  label.append(document.createTextNode("Account value"), tip("RH cash plus open lots. One crypto book. Equities are not a second book."));
+  const status = el("span", `chip ${chip.cls}`, chip.text);
+  top.append(label, status, freshness(view.asOf || meta?.fetched_at));
 
-  const panel = el("div", "card-panel");
-  panel.id = "card-panel-crypto";
-  const grid = el("div", "metrics");
-  const balance = metric("Running balance (book)", formatUsd(view.runningBalance), tone(view.runningBalance));
-  balance.append(el("p", "fine", "RH cash plus open lots."));
-  grid.append(balance);
-  grid.append(metric("Day P&L", formatUsd(view.dayPnl, { signed: true }), tone(view.dayPnl)));
-  grid.append(pnlMetric("Realized P&L", view.realizedPnl, view.realizedPnlFrac));
-  grid.append(pnlMetric("Unrealized P&L", view.unrealizedPnl, view.unrealizedPnlFrac));
-  const running = pnlMetric("Running P&L", view.runningPnl, view.runningPnlFrac);
-  running.append(el("p", "fine", `RH book versus the $${SEEDS_USD.combined} seed.`));
-  grid.append(running);
-
-  const kill = metric("Day kill rail");
-  kill.querySelector(".v").replaceChildren(
-    pair(formatPct(view.dayKillFrac), view.dayKill == null ? "" : formatUsd(view.dayKill))
+  const body = el("div", "hero-body");
+  const left = el("div", "hero-left");
+  left.append(el("p", `hero-value ${view.runningBalance == null ? "flat" : ""}`.trim(), formatUsd(view.runningBalance)));
+  const chips = el("div", "hero-chips");
+  chips.append(
+    pnlChip("All-time", view.runningPnl, seedFrac, `Running P&L: RH book versus the $${SEEDS_USD.combined} seed.`),
+    pnlChip("Today", view.dayPnl, null, "Day P&L, realized, from the Robinhood cash drop.")
   );
-  grid.append(kill);
+  left.append(chips);
 
-  const headroom = metric("Kill headroom");
-  const headroomValue = headroom.querySelector(".v");
-  headroomValue.replaceChildren(
-    pair(
-      view.killHeadroomFrac == null ? "\u2014" : `${formatPct(view.killHeadroomFrac)} of book`,
-      formatUsd(view.killHeadroom)
-    )
+  const split = el("dl", "hero-split");
+  for (const [name, dollars, hint] of [
+    ["Realized P&L", view.realizedPnl, "Running minus unrealized. Includes buy fees."],
+    ["Unrealized P&L", view.unrealizedPnl, "Open lots, mark versus cost."],
+    ["Running P&L", view.runningPnl, "Cash plus open lots minus the combined seed."],
+  ]) {
+    const dt = el("dt", null, name);
+    dt.title = hint;
+    split.append(dt, el("dd", tone(dollars), formatUsd(dollars, { signed: true })));
+  }
+  left.append(split);
+
+  const right = el("div", "hero-right");
+  const all = state.points;
+  const sleeve = all.length ? all[all.length - 1].frac - 1 : null;
+  right.append(sparkline(all, (p) => p.frac, COLORS[tone(sleeve)] || COLORS.flat, { width: 320, height: 96 }));
+  right.append(el("p", "fine", sleeve == null ? "No sleeve history yet." : `Crypto sleeve ${formatPct(sleeve, { signed: true, digits: 2 })} vs seed`));
+
+  body.append(left, right);
+  const actions = el("div", "card-actions");
+  const shareText = [
+    `The Book: ${formatUsd(view.runningBalance)} account value`,
+    view.runningPnl == null ? null : `${formatUsd(view.runningPnl, { signed: true })} (${formatPct(seedFrac, { signed: true, digits: 2 })}) all-time`,
+    view.dayPnl == null ? null : `${formatUsd(view.dayPnl, { signed: true })} today`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  actions.append(shareButton(shareText, SITE_URL), copyLinkButton(SITE_URL));
+  heroEl.append(top, body, actions, watermark(view.asOf));
+}
+
+function statChip(label, value, sub, valueTone, hint) {
+  const chip = el("div", "stat");
+  const k = el("div", "stat-k", label);
+  if (hint) k.append(tip(hint));
+  chip.append(k, el("div", `stat-v ${valueTone || ""}`.trim(), value));
+  if (sub) chip.append(el("div", "stat-sub", sub));
+  return chip;
+}
+
+function feeView(scorecard, trades) {
+  const fromTape = feeDragFromTrades(trades, "crypto");
+  const published = scorecard?.fee_drag;
+  const drag = published?.status === "known" ? published : fromTape;
+  if (!drag || drag.status !== "known" || (drag.fee_usd == null && drag.sell_fee_usd == null)) {
+    return {
+      value: "UNKNOWN",
+      toneClass: "flat",
+      frac: null,
+      note: published?.note || "No fee column on the scrubbed tape. Not estimated.",
+    };
+  }
+  const total = drag.fee_usd != null ? drag.fee_usd : drag.sell_fee_usd;
+  let note = drag.note || "Crypto fee dollars from the rows that were read.";
+  if (drag.sell_fee_usd != null && drag.fee_usd != null && drag.sell_fee_usd !== drag.fee_usd) {
+    note = `${note} Closed-sell fees ${formatUsd(drag.sell_fee_usd)}.`;
+  }
+  return {
+    value: formatUsd(total),
+    toneClass: total > 0 ? "down" : "flat",
+    frac: drag.fee_frac ?? null,
+    note,
+  };
+}
+
+function renderChips(trades, scorecard) {
+  chipsEl.replaceChildren();
+  const fills = closedFillStats(trades, "crypto");
+  const dd = drawdownStats(state.points);
+  const sharpe = dailySharpe(state.points);
+  const fee = feeView(scorecard, trades);
+  const count = trades.filter((row) => sleeveKey(row) === "crypto").length;
+  chipsEl.append(
+    statChip("Win rate", formatWinPct(fills.rate), `${formatWinRecord(fills)} closed sells`, winTone(fills), "Crypto sells with a finite P&L. Flat exits are excluded."),
+    statChip(
+      "Expectancy",
+      fills.expectancyFrac == null ? "\u2014" : formatPct(fills.expectancyFrac, { signed: true, digits: 2 }),
+      fills.expectancyUsd == null ? "per closed sell" : `${formatUsd(fills.expectancyUsd, { signed: true })} per closed sell`,
+      tone(fills.expectancyFrac),
+      "Mean P&L of decided crypto sells, as a fraction of the sleeve seed."
+    ),
+    statChip(
+      "Max drawdown",
+      formatPct(dd.max, { digits: 1 }),
+      dd.current == null ? "" : dd.current > -0.0005 ? "now at a high" : `now ${formatPct(dd.current, { digits: 1 })}`,
+      dd.max ? "down" : "flat",
+      "Worst fall from a running peak on the crypto sleeve curve."
+    ),
+    statChip(
+      "Sharpe",
+      sharpe.value == null ? "\u2014" : sharpe.value.toFixed(2),
+      sharpe.value == null ? `needs 5 daily returns (${sharpe.days})` : `${sharpe.days} daily returns`,
+      tone(sharpe.value),
+      "Daily returns of the crypto sleeve curve, annualized by \u221a365. Short samples are noisy."
+    ),
+    statChip("Fee drag", fee.value, fee.frac == null ? "" : `${formatPct(fee.frac, { digits: 1 })} of sleeve seed`, fee.toneClass, fee.note),
+    statChip("Fills", String(count), "crypto tape", "flat", "Rows on the scrubbed crypto tape, buys and sells.")
   );
-  const fill = headroomFill(view);
-  if (fill != null) {
-    const meter = el("div", "meter");
-    meter.setAttribute("role", "img");
-    meter.setAttribute(
-      "aria-label",
-      `Kill headroom ${formatPct(view.killHeadroomFrac)} of book against a ${formatPct(view.dayKillFrac)} rail`
+}
+
+function renderRange() {
+  rangeToggleEl.replaceChildren();
+  for (const range of RANGES) {
+    const button = el("button", null, range.label);
+    button.type = "button";
+    button.dataset.range = range.key;
+    button.setAttribute("aria-pressed", range.key === state.range ? "true" : "false");
+    button.addEventListener("click", () => {
+      state.range = range.key;
+      try {
+        localStorage.setItem(RANGE_KEY, range.key);
+      } catch {
+        /* private mode */
+      }
+      renderRange();
+      paintCurves();
+    });
+    rangeToggleEl.append(button);
+  }
+}
+
+function paintCurves() {
+  if (!curvesEl) return;
+  if (!state.points.length) {
+    curvesEl.replaceChildren(el("p", "empty", "Sleeve history is not in this snapshot yet."));
+    curveChangeEl.textContent = "";
+    return;
+  }
+  const points = windowPoints(state.points, state.range);
+  const all = state.range === "all";
+  const change = all ? points[points.length - 1].frac - 1 : windowChange(points);
+  curveChangeEl.replaceChildren();
+  const label = RANGES.find((range) => range.key === state.range)?.label || "";
+  if (change != null) {
+    curveChangeEl.append(
+      el("span", `delta ${tone(change)}`, formatPct(change, { signed: true, digits: 2 })),
+      document.createTextNode(all ? " vs seed, all time" : ` over ${label}`)
     );
-    const bar = el("span");
-    bar.style.width = `${fill}%`;
-    if (fill < 25) bar.className = "thin";
-    meter.append(bar);
-    headroom.append(meter);
   }
-  grid.append(headroom);
-
-  const target = metric("Day target");
-  const bits = [formatPct(view.dayTargetFrac, { signed: true })];
-  if (view.dayTarget != null) bits.push(formatUsd(view.dayTarget, { signed: true }));
-  target.querySelector(".v").replaceChildren(pair(bits[0], bits[1] || ""));
-  target.append(el("p", "fine", "Realized only"));
-  grid.append(target);
-
-  const stats = winStats(trades, "crypto");
-  const win = metric("Win %", formatWinPct(stats.rate), winTone(stats));
-  win.append(el("p", "fine", formatWinRecord(stats)));
-  grid.append(win);
-
-  panel.append(grid);
-  panel.append(el("p", "note", "Equities are $0 and are not a second book."));
-  card.append(panel);
-  mountCollapse({
-    heading: title,
-    label: view.label,
-    panel,
-    storageKey: cardOpenKey(view.sleeve),
-    defaultOpen: defaultCardOpen(view.sleeve),
-    collapsedHost: card,
+  areaChart(curvesEl, points, {
+    height: 240,
+    value: (p) => p.frac - 1,
+    baseline: 0,
+    color: COLORS[tone(change)] || COLORS.flat,
+    format: (v) => formatPct(v, { signed: true, digits: 1 }),
+    when: (ms, long) => shortWhen(ms, long || state.range === "24h"),
+    label: `Crypto sleeve return vs seed, ${label}`,
   });
-  return card;
+}
+
+function railBar({ title, value, detail, fill, toneClass, hint }) {
+  const row = el("div", "rail");
+  const head = el("div", "rail-head");
+  const name = el("span", "rail-name", title);
+  if (hint) name.append(tip(hint));
+  head.append(name, el("span", `rail-value ${toneClass || ""}`.trim(), value));
+  const track = el("div", "rail-track");
+  track.setAttribute("role", "meter");
+  track.setAttribute("aria-valuemin", "0");
+  track.setAttribute("aria-valuemax", "100");
+  track.setAttribute("aria-label", title);
+  if (fill != null) {
+    track.setAttribute("aria-valuenow", String(Math.round(fill * 100)));
+    const bar = el("span", toneClass || "");
+    bar.style.width = `${Math.max(0, Math.min(1, fill)) * 100}%`;
+    track.append(bar);
+  } else {
+    track.classList.add("unknown");
+  }
+  row.append(head, track, el("p", "rail-detail", detail));
+  return row;
+}
+
+function renderRisk(view, summary, scorecard) {
+  railsEl.replaceChildren();
+  const rails = liveRails(summary, scorecard);
+  const r = railView(view?.runningBalance, view?.dayPnl, rails);
+  railsSourceEl.textContent = rails.source
+    ? `Day rails from ${rails.source}${rails.asOf ? `, as of ${formatEt(rails.asOf)}` : ""}.`
+    : "No day rail is published in this snapshot.";
+
+  if (r.killFrac == null) {
+    railsEl.append(railBar({ title: "Day kill", value: "Not published", detail: "The warehouse export has no crypto day_kill_pct.", fill: null }));
+  } else {
+    const left = r.killUsedFrac == null ? null : 1 - r.killUsedFrac;
+    railsEl.append(
+      railBar({
+        title: "Day kill headroom",
+        value: formatUsd(r.headroomUsd),
+        detail: `${formatPct(r.killFrac)} rail = ${formatUsd(r.killUsd)} on ${formatUsd(r.balance)}. Today ${formatUsd(r.dayPnl, { signed: true })}.`,
+        fill: left,
+        toneClass: left == null ? "flat" : left < 0.25 ? "down" : left < 0.6 ? "warn" : "up",
+        hint: "Budget left before the day kill. A losing day spends it. A winning day does not add to it.",
+      })
+    );
+  }
+  if (r.targetFrac == null) {
+    railsEl.append(railBar({ title: "Day target", value: "Not published", detail: "The warehouse export has no crypto day_target_pct.", fill: null }));
+  } else {
+    railsEl.append(
+      railBar({
+        title: "Day target",
+        value: `${formatUsd(Math.max(0, r.dayPnl ?? 0))} / ${formatUsd(r.targetUsd, { signed: true })}`,
+        detail: `${formatPct(r.targetFrac, { signed: true })} of the running balance, realized only.`,
+        fill: r.targetProgress,
+        toneClass: "accent",
+        hint: "Progress of today's realized P&L toward the day target.",
+      })
+    );
+  }
+  const dd = drawdownStats(state.points);
+  const atHigh = dd.current != null && dd.current > -0.0005;
+  railsEl.append(
+    railBar({
+      title: "Below peak",
+      value: atHigh ? "At a high" : formatPct(dd.current, { digits: 1 }),
+      detail: dd.max == null ? "No sleeve history yet." : `Worst so far ${formatPct(dd.max, { digits: 1 })}${dd.maxAt ? ` on ${shortWhen(Date.parse(dd.maxAt))}` : ""}.`,
+      fill: dd.current == null || !dd.max ? 0 : Math.min(1, dd.current / dd.max),
+      toneClass: atHigh ? "up" : "down",
+      hint: "Current drawdown of the crypto sleeve as a share of its worst drawdown.",
+    })
+  );
+
+  paintUnderwater();
+}
+
+function paintUnderwater() {
+  areaChart(underwaterEl, drawdownSeries(state.points), {
+    height: 140,
+    value: (p) => p.dd,
+    baseline: 0,
+    color: COLORS.down,
+    invert: true,
+    format: (v) => formatPct(v, { digits: 1 }),
+    when: (ms, long) => shortWhen(ms, long),
+    label: "Crypto sleeve drawdown from running peak",
+    emptyText: "No sleeve history yet.",
+  });
+}
+
+function renderPositions(book, asOf) {
+  if (!positionsEl) return;
+  positionsEl.replaceChildren();
+  const rows = cardPositionRows(book);
+  const section = el("section", "pos");
+  const heading = el("h3", "sr-only-heading");
+  const panel = el("div", "pos-panel");
+  panel.id = "pos-panel-crypto";
+  mountCollapse({
+    heading,
+    label: "Crypto",
+    panel,
+    storageKey: posOpenKey("crypto"),
+    defaultOpen: true,
+  });
+  section.append(heading);
+  if (!rows.length) {
+    panel.append(el("p", "empty", "The live book has no holdings."));
+    section.append(panel);
+    positionsEl.append(section);
+    return;
+  }
+  const total = rows.reduce((sum, row) => sum + (row.valueUsd || 0), 0);
+  const wrap = el("div", "table-wrap");
+  const table = el("table", "cards-on-mobile");
+  const thead = el("thead");
+  const headRow = el("tr");
+  const labels = ["Ticker", "Qty", "Value", "Running P&L"];
+  for (const label of ["Ticker", "Qty", "Value", "Running P&L"]) {
+    const th = el("th", label === "Ticker" ? "" : "num", label);
+    th.scope = "col";
+    headRow.append(th);
+  }
+  thead.append(headRow);
+  const tbody = el("tbody");
+  for (const row of rows) {
+    const tr = el("tr", row.qty == null ? "cash-row" : "");
+    const ticker = el("td", "ticker");
+    ticker.dataset.label = labels[0];
+    ticker.append(el("span", "tk", row.ticker));
+    if (row.valueUsd != null && total > 0) {
+      const weight = el("span", "weight");
+      const bar = el("i");
+      bar.style.width = `${(row.valueUsd / total) * 100}%`;
+      weight.append(bar);
+      weight.title = `${formatPct(row.valueUsd / total)} of book`;
+      ticker.append(weight);
+    }
+    const cells = [
+      ticker,
+      el("td", "num", row.qty == null ? "cash" : String(row.qty)),
+      el("td", "num", formatUsd(row.valueUsd)),
+      el("td", `num ${row.runningPnl == null ? "" : tone(row.runningPnl)}`.trim(), row.runningPnl == null ? "\u2014" : formatUsd(row.runningPnl, { signed: true })),
+    ];
+    cells.forEach((cell, i) => {
+      cell.dataset.label = labels[i];
+    });
+    tr.append(...cells);
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  wrap.append(table);
+  panel.append(wrap, watermark(asOf));
+  section.append(panel);
+  positionsEl.append(section);
 }
 
 function readFrac(row, key) {
@@ -372,6 +715,8 @@ function fillLinked(parent, text, sleeve) {
   }
 }
 
+// Fee is fee_frac_of_book times the sleeve seed. Machine why strings show
+// only their label. The broker id inside them is never rendered.
 function tapeFields(sleeve, trade) {
   const shaped = deriveSleeve({ ...trade, sleeve });
   const seed = shaped.seed || deriveSleeve({ sleeve }).seed;
@@ -388,33 +733,47 @@ function tapeFields(sleeve, trade) {
     runningPnl: formatUsd(shaped.runningPnl, { signed: true }),
     runningBalance: formatUsd(shaped.runningBalance),
     pnl,
+    pnlFrac,
     runningPnlValue: shaped.runningPnl,
     runningBalanceValue: shaped.runningBalance,
-    why: why.text,
+    why: why.kind === "human" ? redactIds(why.text) : why.text,
     whyKind: why.kind,
-    whyUuid: why.uuid,
   };
 }
 
-function renderWhyCell(fields, sleeve) {
-  const cell = el("td", "why");
-  if (fields.whyKind === "machine") {
-    const stack = el("div", "why-stack");
-    stack.append(el("span", "why-label", fields.why));
-    const details = document.createElement("details");
-    details.className = "why-id";
-    const summary = document.createElement("summary");
-    summary.textContent = "Order id";
-    details.append(summary);
-    if (fields.whyUuid) details.append(el("span", "why-uuid", fields.whyUuid));
-    stack.append(details);
-    cell.append(stack);
-    cell.title = fields.why;
-    return cell;
+function tradeShareText(fields) {
+  const side = String(fields.side).toLowerCase();
+  const head = `${side === "sell" ? "Sold" : side === "buy" ? "Bought" : fields.side} ${fields.ticker} on The Book`;
+  const bits = [head];
+  if (side === "sell" && fields.pnl != null) {
+    bits.push(`${fields.tradePnl} (${formatPct(fields.pnlFrac, { signed: true, digits: 2 })} of book)`);
+  } else if (fields.notional !== "\u2014") {
+    bits.push(fields.notional);
   }
-  if (fields.why) {
-    fillLinked(cell, fields.why, sleeve);
+  bits.push(fields.time);
+  return bits.join(" · ");
+}
+
+function renderWhyCell(fields, sleeve, id) {
+  const cell = el("td", "why");
+  cell.dataset.label = "Why";
+  const body = el("span", "why-text");
+  if (fields.whyKind === "machine") {
+    body.append(el("span", "why-label", fields.why));
+  } else if (fields.why) {
+    fillLinked(body, fields.why, sleeve);
     cell.title = fields.why;
+  } else {
+    body.append(el("span", "why-label", "\u2014"));
+  }
+  cell.append(body);
+  if (id) {
+    const actions = el("span", "row-actions");
+    const link = el("a", "permalink", "#");
+    link.href = `#${id}`;
+    link.setAttribute("aria-label", `Permalink to ${fields.ticker} ${fields.side} at ${fields.time}`);
+    actions.append(link, shareButton(tradeShareText(fields), permalink(id), "Share on X"));
+    cell.append(actions);
   }
   return cell;
 }
@@ -432,14 +791,24 @@ function downloadCsv(filename, text) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-function appendTapeRow(tbody, sleeve, trade) {
+function appendTapeRow(tbody, sleeve, trade, id) {
   const fields = tapeFields(sleeve, trade);
   const tr = el("tr");
-  const side = el("td");
-  const pill = el("span", `pill ${trade.side || ""}`, fields.side);
-  side.append(pill);
-  tr.append(
-    el("td", null, fields.time),
+  if (id) tr.id = id;
+  const time = el("td", "time");
+  const dayKey = etDayKey(tradeStamp(trade));
+  if (dayKey) {
+    const dayLink = el("a", "day-link", fields.time);
+    dayLink.href = `#day-${dayKey}`;
+    dayLink.title = `All fills on ${formatEtDay(dayKey)}`;
+    time.append(dayLink);
+  } else {
+    time.textContent = fields.time;
+  }
+  const side = el("td", "side");
+  side.append(el("span", `pill ${trade.side || ""}`, fields.side));
+  const cells = [
+    time,
     el("td", "ticker", fields.ticker),
     side,
     el("td", "num", fields.notional),
@@ -447,12 +816,17 @@ function appendTapeRow(tbody, sleeve, trade) {
     el("td", `num ${tone(fields.pnl)}`, fields.tradePnl),
     el("td", `num ${tone(fields.runningPnlValue)}`, fields.runningPnl),
     el("td", `num ${tone(fields.runningBalanceValue)}`, fields.runningBalance),
-    renderWhyCell(fields, sleeve)
-  );
+    renderWhyCell(fields, sleeve, id),
+  ];
+  const labels = ["Time", "Ticker", "Side", "Notional", "Fee", "Trade P&L", "Running P&L", "Running balance", "Why"];
+  cells.forEach((cell, i) => {
+    cell.dataset.label = labels[i];
+  });
+  tr.append(...cells);
   tbody.append(tr);
 }
 
-function renderTape(sleeve, trades) {
+function renderTape(sleeve, trades, anchors) {
   const section = el("section", `tape ${sleeve}`);
   const head = el("div", "tape-head");
   const heading = el("h3");
@@ -463,19 +837,21 @@ function renderTape(sleeve, trades) {
     label: labelFor(sleeve),
     panel,
     storageKey: tapeOpenKey(sleeve),
-    defaultOpen: true,
+    defaultOpen: sleeve !== "equities",
   });
 
   const months = tapeMonthOptions(trades, tradeStamp);
   const monthKey = tapeMonthStorageKey(sleeve);
   let month = storedTapeMonth(localStorage, monthKey, months);
+  let showAll = false;
   const tools = el("div", "tape-tools");
+  let select = null;
 
   if (months.length) {
     const monthLabel = el("label", "tape-month");
     monthLabel.htmlFor = `tape-month-${sleeve}`;
     monthLabel.append(document.createTextNode("Month"));
-    const select = document.createElement("select");
+    select = document.createElement("select");
     select.id = `tape-month-${sleeve}`;
     const allOption = document.createElement("option");
     allOption.value = TAPE_MONTH_ALL;
@@ -507,7 +883,7 @@ function renderTape(sleeve, trades) {
   const exportBtn = document.createElement("button");
   exportBtn.type = "button";
   exportBtn.className = "tape-export";
-  exportBtn.textContent = "Download CSV";
+  exportBtn.textContent = "CSV";
   exportBtn.setAttribute("aria-label", `Download ${labelFor(sleeve)} CSV`);
   exportBtn.addEventListener("click", () => {
     const rows = filterTapeByMonth(trades, month, tradeStamp).map((trade) => tapeFields(sleeve, trade));
@@ -517,23 +893,17 @@ function renderTape(sleeve, trades) {
   head.append(heading, tools);
   section.append(head);
   if (sleeve === "equities") {
-    section.append(
-      el(
-        "p",
-        "note",
-        "Historical fills. Equities are not an open book."
-      )
-    );
+    section.append(el("p", "note", "Historical fills. Equities are not an open book."));
   }
 
   if (!trades.length) {
     panel.append(el("p", "empty", "No scrubbed fills."));
     section.append(panel);
-    return section;
+    return { section, reveal: () => false, paint: () => {} };
   }
 
   const wrap = el("div", "table-wrap");
-  const table = el("table");
+  const table = el("table", "cards-on-mobile");
   const captionText = `${labelFor(sleeve)} fills. Fee, trade P&L, running P&L, and running balance recover scrubbed fractions. They are not the live account book.`;
   const caption = el("caption", "sr-only", `${labelFor(sleeve)} fills`);
   const note = el("p", "tape-note", captionText);
@@ -548,59 +918,76 @@ function renderTape(sleeve, trades) {
   }
   thead.append(headRow);
   const tbody = el("tbody");
+  const more = el("button", "show-more");
+  more.type = "button";
+  more.addEventListener("click", () => {
+    showAll = true;
+    paintRows();
+  });
+
+  function visibleRows() {
+    if (state.dayFilter) return trades.filter((trade) => etDayKey(tradeStamp(trade)) === state.dayFilter);
+    return filterTapeByMonth(trades, month, tradeStamp);
+  }
 
   function paintRows() {
-    const visible = filterTapeByMonth(trades, month, tradeStamp);
+    const visible = visibleRows();
     count.textContent = fillCountText(visible.length, trades.length);
     tbody.replaceChildren();
     if (!visible.length) {
-      const tr = el("tr");
-      const td = el("td", null, "No fills in this month.");
+      const tr = el("tr", "empty-row");
+      const td = el("td", null, state.dayFilter ? "No fills on this day." : "No fills in this month.");
       td.colSpan = 9;
       tr.append(td);
       tbody.append(tr);
+      more.hidden = true;
       return;
     }
-    for (const trade of visible) appendTapeRow(tbody, sleeve, trade);
+    const shown = showAll || state.dayFilter ? visible : visible.slice(0, FEED_PAGE);
+    for (const trade of shown) appendTapeRow(tbody, sleeve, trade, anchors.get(trade));
+    more.hidden = shown.length === visible.length;
+    more.textContent = `Show all ${visible.length} fills`;
+  }
+
+  function reveal(id) {
+    const trade = trades.find((row) => anchors.get(row) === id);
+    if (!trade) return false;
+    month = TAPE_MONTH_ALL;
+    if (select) select.value = month;
+    showAll = true;
+    if (panel.hidden) heading.querySelector("button")?.click();
+    paintRows();
+    return true;
   }
 
   paintRows();
   table.append(caption, thead, tbody);
   wrap.append(table);
-  panel.append(wrap, note);
+  panel.append(wrap, more, note);
   section.append(panel);
-  return section;
-}
-
-function pnlMetric(label, dollars, frac) {
-  const node = metric(label);
-  const value = node.querySelector(".v");
-  value.classList.add(tone(dollars));
-  value.replaceChildren(
-    pair(formatUsd(dollars, { signed: true }), frac == null ? "" : formatPct(frac, { signed: true, digits: 2 }))
-  );
-  return node;
+  return { section, reveal, paint: paintRows };
 }
 
 function render(tradeRows, meta, book, summary) {
   const trades = Array.isArray(tradeRows) ? tradeRows : [];
   const books = shownBooks(book, summary);
   const view = books[0] || null;
-  renderStatus(meta || {}, warehouseSleeveAsOf(book, summary));
-  boardEl.replaceChildren();
-  if (!view) {
-    boardEl.append(el("p", "empty", "Live book has no book_usd."));
-  } else {
-    boardEl.append(renderLiveBook(view, trades));
-  }
+  const sleeveAsOf = warehouseSleeveAsOf(book, summary);
+  renderStatus(meta || {}, sleeveAsOf);
+  renderHero(view, meta, statusChip(meta || {}, sleeveAsOf));
 
   const grouped = new Map();
-  for (const trade of Array.isArray(tradeRows) ? tradeRows : []) {
+  for (const trade of trades) {
     const key = sleeveKey(trade);
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(trade);
   }
   tapesEl.replaceChildren();
+  state.tapes.clear();
+  const anchors = tradeAnchors(
+    trades.slice().sort((a, b) => String(tradeStamp(a)).localeCompare(String(tradeStamp(b)))),
+    tradeStamp
+  );
   for (const key of ["crypto", "equities"]) {
     const rows = (grouped.get(key) || []).slice().sort((a, b) => {
       const da = parseTime(tradeStamp(a));
@@ -610,181 +997,51 @@ function render(tradeRows, meta, book, summary) {
       if (am !== bm) return bm - am;
       return String(b.timestamp_et || "").localeCompare(String(a.timestamp_et || ""));
     });
-    tapesEl.append(renderTape(key, rows));
+    const tape = renderTape(key, rows, anchors);
+    state.tapes.set(key, tape);
+    tapesEl.append(tape.section);
   }
+  return view;
 }
 
-function renderPositions(book) {
-  if (!positionsEl) return;
-  positionsEl.replaceChildren();
-  const rows = cardPositionRows(book);
-  const section = el("section", "pos");
-  const heading = el("h3");
-  const panel = el("div", "pos-panel");
-  panel.id = "pos-panel-crypto";
-  mountCollapse({
-    heading,
-    label: "Crypto",
-    panel,
-    storageKey: posOpenKey("crypto"),
-    defaultOpen: true,
-  });
-  section.append(heading);
-  if (!rows.length) {
-    panel.append(el("p", "empty", "The live book has no holdings."));
-    section.append(panel);
-    positionsEl.append(section);
+function paintDayBanner(trades) {
+  if (!state.dayFilter) {
+    dayBannerEl.hidden = true;
+    dayBannerEl.replaceChildren();
     return;
   }
-  const wrap = el("div", "table-wrap");
-  const table = el("table");
-  const thead = el("thead");
-  const headRow = el("tr");
-  for (const label of ["Ticker", "Qty", "Value", "Running P&L"]) {
-    const th = el("th", label === "Ticker" ? "" : "num", label);
-    th.scope = "col";
-    headRow.append(th);
+  const day = state.dayFilter;
+  const rows = trades.filter((trade) => sleeveKey(trade) === "crypto" && etDayKey(tradeStamp(trade)) === day);
+  let pnl = 0;
+  let closed = 0;
+  for (const trade of rows) {
+    if (String(trade.side).toLowerCase() !== "sell") continue;
+    const frac = readFrac(trade, "pnl_frac_of_book") ?? readFrac(trade, "pnl_frac");
+    if (frac == null) continue;
+    pnl += seedTimes(SEEDS_USD.crypto, frac) ?? 0;
+    closed += 1;
   }
-  thead.append(headRow);
-  const tbody = el("tbody");
-  for (const row of rows) {
-    const tr = el("tr");
-    tr.append(
-      el("td", "ticker", row.ticker),
-      el("td", "num", row.qty == null ? "\u2014" : String(row.qty)),
-      el("td", "num", formatUsd(row.valueUsd)),
-      el(
-        "td",
-        `num ${row.runningPnl == null ? "" : tone(row.runningPnl)}`.trim(),
-        row.runningPnl == null ? "\u2014" : formatUsd(row.runningPnl, { signed: true })
-      )
-    );
-    tbody.append(tr);
-  }
-  table.append(thead, tbody);
-  wrap.append(table);
-  panel.append(wrap);
-  section.append(panel);
-  positionsEl.append(section);
-}
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-let curveMode = "all";
-let curvePayload = { series: [] };
-
-function svgEl(name, attrs) {
-  const node = document.createElementNS(SVG_NS, name);
-  for (const [key, value] of Object.entries(attrs || {})) node.setAttribute(key, String(value));
-  return node;
-}
-
-function curveReadout(sample) {
-  if (!sample || sample.values.crypto == null) return "No crypto history in this snapshot.";
-  const when = formatEt(sample.asOf);
-  const pct = formatPct(sample.values.crypto - 1, { signed: true, digits: 2 });
-  return `${when} · Crypto history ${pct}. This line is not the live account.`;
-}
-
-function paintCurves() {
-  if (!curvesEl) return;
-  curvesEl.replaceChildren();
-  if (!curvePayload || curvePayload.missing) {
-    curvesEl.append(el("p", "empty", "Sleeve history is not in this snapshot yet."));
-    return;
-  }
-  const chart = buildChart(curvePayload, "crypto");
-  if (chart.empty) {
-    curvesEl.append(
-      el("p", "empty", curveMode === "all" ? "No sleeve history in this snapshot." : "No points for this series.")
-    );
-    return;
-  }
-  const frame = el("div", "chart-frame");
-  const svg = svgEl("svg", { viewBox: `0 0 ${chart.width} ${chart.height}`, role: "img" });
-  const latest = sampleAt(chart, 1);
-  const title = svgEl("title");
-  title.textContent = `Equity curves. ${curveReadout(latest)}`;
-  svg.append(title);
-  for (const tick of chart.ticks) {
-    svg.append(
-      svgEl("line", {
-        x1: chart.plot.left,
-        x2: chart.plot.right,
-        y1: tick.y,
-        y2: tick.y,
-        stroke: "rgba(244,239,230,0.12)",
-      })
-    );
-    const label = svgEl("text", {
-      x: chart.plot.left - 8,
-      y: tick.y + 4,
-      "text-anchor": "end",
-      fill: "#b3a794",
-      "font-size": "11",
-      "font-family": "Outfit, sans-serif",
-    });
-    label.textContent = tick.frac.toFixed(3);
-    svg.append(label);
-  }
-  const t0 = formatEt(new Date(chart.t0).toISOString());
-  const t1 = formatEt(new Date(chart.t1).toISOString());
-  const x0 = svgEl("text", {
-    x: chart.plot.left,
-    y: chart.height - 8,
-    fill: "#b3a794",
-    "font-size": "11",
-    "font-family": "Outfit, sans-serif",
+  pnl = Math.round(pnl * 100) / 100;
+  dayBannerEl.hidden = false;
+  dayBannerEl.replaceChildren();
+  const text = el("div", "day-text");
+  text.append(el("strong", null, formatEtDay(day)), document.createTextNode(` · ${rows.length} crypto fills · ${closed} closed · `));
+  text.append(el("span", tone(pnl), `${formatUsd(pnl, { signed: true })} trade P&L`));
+  const actions = el("div", "card-actions");
+  const url = permalink(`day-${day}`);
+  actions.append(
+    shareButton(`The Book on ${formatEtDay(day)}: ${rows.length} crypto fills, ${formatUsd(pnl, { signed: true })} closed trade P&L`, url),
+    copyLinkButton(url)
+  );
+  const clear = el("a", "clear-day", "Clear");
+  clear.href = "#";
+  clear.addEventListener("click", (event) => {
+    event.preventDefault();
+    history.pushState(null, "", `${location.pathname}${location.search}`);
+    applyHash();
   });
-  x0.textContent = t0;
-  const x1 = svgEl("text", {
-    x: chart.plot.right,
-    y: chart.height - 8,
-    "text-anchor": "end",
-    fill: "#b3a794",
-    "font-size": "11",
-    "font-family": "Outfit, sans-serif",
-  });
-  x1.textContent = t1;
-  svg.append(x0, x1);
-  for (const series of chart.series) {
-    svg.append(
-      svgEl("polyline", {
-        fill: "none",
-        stroke: series.color,
-        "stroke-width": "2.25",
-        "stroke-linejoin": "round",
-        "stroke-linecap": "round",
-        points: series.points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" "),
-      })
-    );
-    const last = series.points[series.points.length - 1];
-    svg.append(svgEl("circle", { cx: last.x, cy: last.y, r: 3.5, fill: series.color }));
-  }
-  const readout = el("p", "curve-readout", curveReadout(latest));
-  svg.addEventListener("pointermove", (event) => {
-    const point = svg.createSVGPoint();
-    point.x = event.clientX;
-    point.y = event.clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return;
-    const loc = point.matrixTransform(ctm.inverse());
-    const span = chart.plot.right - chart.plot.left;
-    const ratio = span ? (loc.x - chart.plot.left) / span : 0;
-    readout.textContent = curveReadout(sampleAt(chart, ratio));
-  });
-  svg.addEventListener("pointerleave", () => {
-    readout.textContent = curveReadout(latest);
-  });
-  frame.append(svg);
-  const legend = el("div", "legend");
-  for (const series of chart.series) {
-    const item = el("span");
-    const swatch = el("i");
-    swatch.style.background = series.color;
-    item.append(swatch, document.createTextNode(labelFor(series.sleeve)));
-    legend.append(item);
-  }
-  curvesEl.append(frame, legend, readout);
+  actions.append(clear);
+  dayBannerEl.append(text, actions);
 }
 
 function showTab(name) {
@@ -854,29 +1111,6 @@ function fixedDigits(value, digits) {
   return n.toFixed(digits);
 }
 
-function feeView(scorecard, trades) {
-  const fromTape = feeDragFromTrades(trades, "crypto");
-  const published = scorecard?.fee_drag;
-  const drag = published?.status === "known" ? published : fromTape;
-  if (!drag || drag.status !== "known" || (drag.fee_usd == null && drag.sell_fee_usd == null)) {
-    return {
-      value: "UNKNOWN",
-      toneClass: "flat",
-      note: published?.note || "No fee column on the scrubbed tape. Not estimated.",
-    };
-  }
-  const total = drag.fee_usd != null ? drag.fee_usd : drag.sell_fee_usd;
-  let note = drag.note || "Crypto fee dollars from the rows that were read.";
-  if (drag.sell_fee_usd != null && drag.fee_usd != null && drag.sell_fee_usd !== drag.fee_usd) {
-    note = `${note} Closed-sell fees ${formatUsd(drag.sell_fee_usd)}.`;
-  }
-  return {
-    value: formatUsd(total),
-    toneClass: total > 0 ? "down" : "flat",
-    note,
-  };
-}
-
 function backendView(scorecard, models, oosPayload) {
   const published = scorecard?.live_backend;
   if (published && (published.id || published.note)) return published;
@@ -893,8 +1127,80 @@ function backendView(scorecard, models, oosPayload) {
   return inferred;
 }
 
-function renderCryptoScorecard(models, oosPayload, trades, scorecard, book) {
-  const card = el("article", "sleeve crypto model-card model-scorecard");
+function renderLatestCall(trades, backend) {
+  const card = el("article", "card shot latest-call");
+  const head = el("header", "card-head");
+  const titleWrap = el("div");
+  titleWrap.append(el("h2", null, "Latest call"), el("p", "sub", "What the desk did last, and why."));
+  head.append(titleWrap, el("span", "chip live", backend.id ? `live: ${backend.id}` : "live backend UNKNOWN"));
+  card.append(head);
+
+  const runSlot = el("div", "call latest-run");
+  runSlot.id = "latest-run";
+  runSlot.hidden = true;
+  card.append(runSlot);
+
+  const call = latestCall(trades, preferredWhy, tradeStamp);
+  if (call) {
+    const fields = tapeFields("crypto", call.trade);
+    const fill = el("div", "call");
+    const meta = el("p", "call-meta");
+    meta.append(el("span", `pill ${call.trade.side || ""}`, fields.side), el("strong", null, ` ${fields.ticker}`), document.createTextNode(` · ${fields.time}`));
+    fill.append(meta);
+    const quote = el("blockquote", "call-why");
+    fillLinked(quote, call.why, "crypto");
+    fill.append(quote);
+    card.append(fill);
+  } else {
+    card.append(el("p", "empty", "No fill with a written reason in this snapshot."));
+  }
+  card.append(el("p", "fine", backend.note || "Live backend is not stated in this snapshot."), watermark(null));
+  return card;
+}
+
+function renderModelRace(oosPayload, backend) {
+  const rows = rankModels(cryptoOosModels(oosPayload));
+  const card = el("article", "card shot model-race");
+  const head = el("header", "card-head");
+  const titleWrap = el("div");
+  titleWrap.append(el("h2", null, "Model leaderboard"), el("p", "sub", "Crypto out-of-sample, ranked by after-cost mean per trade."));
+  head.append(titleWrap);
+  card.append(head);
+  if (!rows.length) {
+    card.append(el("p", "empty", "No crypto out-of-sample rows in this snapshot."));
+    return card;
+  }
+  const max = Math.max(...rows.map((row) => Math.abs(row.afterCost ?? 0)), 1e-9);
+  const list = el("ol", "race");
+  rows.forEach((row, i) => {
+    const item = el("li", "race-row");
+    const name = el("div", "race-name");
+    name.append(el("span", "rank", String(i + 1)), el("strong", null, row.model));
+    if (row.promoted) name.append(el("span", "badge", "promoted"));
+    if (backend.id && row.model === backend.id) name.append(el("span", "badge live", "live"));
+    const bar = el("div", "race-bar");
+    const fill = el("span", tone(row.afterCost));
+    fill.style.width = `${(Math.abs(row.afterCost ?? 0) / max) * 50}%`;
+    if ((row.afterCost ?? 0) < 0) fill.style.right = "50%";
+    else fill.style.left = "50%";
+    bar.append(fill);
+    const nums = el("div", "race-nums");
+    nums.append(
+      el("span", tone(row.afterCost), row.afterCost == null ? "\u2014" : formatPct(row.afterCost, { signed: true, digits: 2 })),
+      el("span", "dim", `IR ${row.ir == null ? "\u2014" : row.ir.toFixed(2)}`),
+      el("span", "dim", `Sharpe ${row.sharpe == null ? "\u2014" : row.sharpe.toFixed(2)}`)
+    );
+    item.append(name, bar, nums);
+    list.append(item);
+  });
+  card.append(list);
+  const benchmark = oosPayload?.benchmark_note;
+  card.append(el("p", "fine", benchmark ? String(benchmark) : "IR is against the sleeve benchmark named in data/models_oos.json."), watermark(oosPayload?.updated_at));
+  return card;
+}
+
+function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summary) {
+  const card = el("article", "sleeve crypto model-card model-scorecard card");
   card.id = "crypto-scorecard";
   const head = el("header", "sleeve-head");
   const title = el("h2");
@@ -932,40 +1238,21 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book) {
   feeMetric.append(el("p", "fine", fee.note));
   grid.append(feeMetric);
 
-  const derived = cryptoBookView(book);
+  const view = shownBooks(book, summary)[0] || null;
+  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard));
   const headroom = metric("Kill headroom");
   const headroomValue = headroom.querySelector(".v");
-  if (!derived || derived.killHeadroomFrac == null) {
+  if (rails.headroomUsd == null) {
     headroomValue.textContent = "\u2014";
   } else {
-    headroomValue.replaceChildren(
-      pair(`${formatPct(derived.killHeadroomFrac)} of book`, formatUsd(derived.killHeadroom))
-    );
-    const fill = headroomFill(derived);
-    if (fill != null) {
-      const meter = el("div", "meter");
-      meter.setAttribute("role", "img");
-      meter.setAttribute(
-        "aria-label",
-        `Kill headroom ${formatPct(derived.killHeadroomFrac)} of book against a ${formatPct(derived.dayKillFrac)} rail`
-      );
-      const bar = el("span");
-      bar.style.width = `${fill}%`;
-      if (fill < 25) bar.className = "thin";
-      meter.append(bar);
-      headroom.append(meter);
-    }
+    headroomValue.replaceChildren(pair(`${formatPct(rails.headroomFrac)} of book`, formatUsd(rails.headroomUsd)));
   }
-  const rails = [];
-  if (derived?.dayKillFrac != null) {
-    rails.push(`Day kill ${formatPct(derived.dayKillFrac)} (${formatUsd(derived.dayKill)})`);
+  const railText = [];
+  if (rails.killFrac != null) railText.push(`Day kill ${formatPct(rails.killFrac)} (${formatUsd(rails.killUsd)})`);
+  if (rails.targetFrac != null) {
+    railText.push(`Day target ${formatPct(rails.targetFrac, { signed: true })} (${formatUsd(rails.targetUsd, { signed: true })}), realized only`);
   }
-  if (derived?.dayTargetFrac != null) {
-    rails.push(
-      `Day target ${formatPct(derived.dayTargetFrac, { signed: true })} (${formatUsd(derived.dayTarget, { signed: true })}), realized only`
-    );
-  }
-  headroom.append(el("p", "fine", rails.join(". ") || "Day rails are not in this snapshot."));
+  headroom.append(el("p", "fine", railText.join(". ") || "Day rails are not in this snapshot."));
   grid.append(headroom);
   panel.append(grid);
 
@@ -973,19 +1260,12 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book) {
   let fillNote = fills.orderIdAvailable
     ? `Duplicate order ids dropped: ${fills.deduped}. Flat exits excluded. T24b will improve joined-fill metrics.`
     : "Same rules as sleeve Win %: sell, finite P&L, flat zero excluded. The scrubbed tape has no order id, so rows are not collapsed. T24b will improve joined-fill metrics.";
-  if (
-    unique &&
-    Number.isFinite(unique.wins) &&
-    Number.isFinite(unique.losses) &&
-    (unique.wins !== fills.wins || unique.losses !== fills.losses)
-  ) {
+  if (unique && Number.isFinite(unique.wins) && Number.isFinite(unique.losses) && (unique.wins !== fills.wins || unique.losses !== fills.losses)) {
     fillNote = `Warehouse order-id unique closed sells are ${unique.wins}\u2013${unique.losses}. The headline matches sleeve Win % on the scrubbed tape. T24b will improve joined-fill metrics.`;
   }
   panel.append(el("p", "note", fillNote));
 
   const oosModels = cryptoOosModels(oosPayload);
-  const oosNote = oosPayload?.note || scorecard?.oos?.note;
-  const feeBps = scorecard?.oos?.fee_bps ?? 30;
   if (!oosModels.length) {
     panel.append(el("p", "note", "No crypto out-of-sample rows in this snapshot."));
   } else {
@@ -1019,13 +1299,17 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book) {
   }
   const benchmark = oosPayload?.benchmark_note || scorecard?.oos?.benchmark_note;
   if (benchmark) panel.append(el("p", "fine", String(benchmark)));
+  const oosNote = oosPayload?.note || scorecard?.oos?.note;
+  const feeBps = scorecard?.oos?.fee_bps;
   panel.append(
     el(
       "p",
       "note",
-      oosNote && String(oosNote).includes("30 bp")
+      oosNote
         ? String(oosNote)
-        : `Out-of-sample after-cost uses ${feeBps} bp. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that.`
+        : feeBps != null
+          ? `Out-of-sample after-cost uses ${feeBps} bp.`
+          : "The out-of-sample fee assumption is not in this snapshot."
     )
   );
 
@@ -1074,8 +1358,13 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
   if (payload?.as_of) freshBits.push(`Models as of ${formatEt(payload.as_of)}`);
   if (oosPayload?.updated_at) freshBits.push(`OOS updated ${formatEt(oosPayload.updated_at)}`);
   if (freshBits.length) modelsEl.append(el("p", "freshness", freshBits.join(" · ")));
+
+  const backend = backendView(scorecard, payload, oosPayload);
+  const top = el("div", "duo");
+  top.append(renderModelRace(oosPayload, backend), renderLatestCall(trades, backend));
+  modelsEl.append(top);
   if (payload && payload.note) modelsEl.append(el("p", "note", String(payload.note)));
-  modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book));
+  modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book, summary));
   if (!models.length && exported.length) {
     for (const row of exported) {
       models.push({
@@ -1099,7 +1388,7 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
   for (const model of models) {
     const mine = exported.filter((row) => sameSleeve(row, String(model.sleeve || "").toLowerCase()));
     for (const row of mine) used.add(row);
-    const card = el("article", "sleeve model-card");
+    const card = el("article", "sleeve model-card card");
     const sleeveName = String(model.sleeve || "").toLowerCase();
     if ((sleeveName === "crypto" || sleeveName === "equities") && !anchored.has(sleeveName)) {
       card.id = `model-${sleeveName}`;
@@ -1118,20 +1407,15 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
     panel.id = `card-panel-${storageId}`;
     if (sleeveName === "equities") {
       panel.append(
-        el(
-          "p",
-          "note",
-          "Paused. Equity modeling and place are not live. Crypto owns the Agentic book. This card is the last published research read."
-        )
+        el("p", "note", "Paused. Equity modeling and place are not live. Crypto owns the Agentic book. This card is the last published research read.")
       );
     }
     const list = el("dl");
-    const fields = [
+    for (const [label, value] of [
       ["Used", model.used],
       ["Training", model.training],
       ["Data", model.data_source],
-    ];
-    for (const [label, value] of fields) {
+    ]) {
       list.append(el("dt", null, label), el("dd", null, value == null || value === "" ? "\u2014" : String(value)));
     }
     list.append(el("dt", null, "OOS"));
@@ -1158,24 +1442,38 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
   }
   modelsEl.append(grid);
   const rest = exported.filter((row) => !used.has(row));
-  if (rest.length) {
-    const extra = el("p", "note", rest.map(summarizeOosRow).join("; "));
-    modelsEl.append(extra);
-  }
+  if (rest.length) modelsEl.append(el("p", "note", rest.map(summarizeOosRow).join("; ")));
 }
 
-function focusModel(hash) {
-  const id = String(hash || "").replace(/^#/, "");
-  if (!id || id === "models") return;
+function focusId(id) {
+  if (!id) return;
   const node = document.getElementById(id);
-  if (node) node.scrollIntoView({ block: "start" });
+  if (!node) return;
+  node.scrollIntoView({ block: "center" });
+  node.classList.remove("flash");
+  void node.offsetWidth;
+  node.classList.add("flash");
 }
 
-function openFromHash() {
-  const hash = location.hash;
-  if (hash === "#models" || hash.startsWith("#model-")) {
+let lastTrades = [];
+
+function applyHash() {
+  const target = parseHash(location.hash);
+  if (target.kind === "models") {
+    state.dayFilter = null;
     showTab("models");
-    focusModel(hash);
+    requestAnimationFrame(() => focusId(target.id === "models" ? "" : target.id));
+  } else {
+    showTab("sleeves");
+    state.dayFilter = target.kind === "day" ? target.day : null;
+    for (const tape of state.tapes.values()) tape.paint();
+    paintDayBanner(lastTrades);
+    if (target.kind === "day") {
+      requestAnimationFrame(() => document.querySelector("#feed-section")?.scrollIntoView({ block: "start" }));
+    } else if (target.kind === "trade") {
+      for (const tape of state.tapes.values()) if (tape.reveal(target.id)) break;
+      requestAnimationFrame(() => focusId(target.id));
+    }
   }
 }
 
@@ -1190,65 +1488,119 @@ async function loadLiveBook(token) {
   }
 }
 
-async function main() {
-  tabSleeves.addEventListener("click", () => {
-    showTab("sleeves");
-    if (location.hash.startsWith("#model")) history.pushState(null, "", `${location.pathname}${location.search}`);
-  });
-  tabModels.addEventListener("click", () => {
-    showTab("models");
-    history.pushState(null, "", "#models");
-  });
-  document.querySelectorAll('a[data-tab="models"]').forEach((anchor) => {
-    anchor.addEventListener("click", () => {
-      showTab("models");
-      requestAnimationFrame(() => focusModel(anchor.getAttribute("href")));
-    });
-  });
-  document.querySelectorAll("[data-curve]").forEach((button) => {
-    button.addEventListener("click", () => {
-      curveMode = button.getAttribute("data-curve") || "all";
-      document.querySelectorAll("[data-curve]").forEach((other) => {
-        other.setAttribute("aria-pressed", other === button ? "true" : "false");
-      });
-      paintCurves();
-    });
-  });
-  window.addEventListener("hashchange", openFromHash);
-  let meta = {};
+async function loadAll(meta) {
+  const token = meta.fetched_at || meta.export_attempted_at || Date.now();
+  const [summary, trades, models, oos, book, curves, scorecard] = await Promise.all([
+    loadJson("data/kpi_summary.json", token),
+    loadJson("data/kpi_trades_scrubbed.json", token),
+    loadJson("data/models.json", token).catch(() => ({ models: [], note: "data/models.json is not in this snapshot." })),
+    loadJson("data/models_oos.json", token).catch(() => ({ rows: [] })),
+    loadLiveBook(token),
+    loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
+    loadJson("data/model_scorecard.json", token).catch(() => null),
+  ]);
+  lastTrades = Array.isArray(trades) ? trades : [];
+  state.points = curvePoints(curves, "crypto");
+  const view = render(trades, meta, book, summary);
+  renderChips(lastTrades, scorecard);
+  renderRange();
+  paintCurves();
+  renderRisk(view, summary, scorecard);
+  renderPositions(book, view?.asOf);
+  renderModels(models, oos, meta, summary, lastTrades, scorecard, book);
+  applyHash();
+  loadJson("data/runs.json", token)
+    .then((raw) => paintLatestRun(normalizeBundle(raw)))
+    .catch(() => null);
+}
+
+// runs.json is large, so it loads after the board paints.
+function paintLatestRun(bundle) {
+  const slot = document.querySelector("#latest-run");
+  if (!slot) return;
+  const runs = [...bundle.runs].sort((a, b) => String(b.generated_at || "").localeCompare(String(a.generated_at || "")));
+  const run = runs[0];
+  if (!run) return;
+  const names = versionNames(bundle);
+  const stats = runStats(predictionsByRun(bundle).get(run.id));
+  const meta = el("p", "call-meta");
+  meta.append(
+    el("strong", null, runModelLabel(run, names)),
+    document.createTextNode([run.generated_at ? ` · ${formatEt(run.generated_at)}` : "", run.backend ? ` · ${run.backend}` : "", run.mode ? ` · ${run.mode}` : ""].join(""))
+  );
+  const link = el("a", "more-link", "All scoring runs \u2192");
+  link.href = `runs/#${runAnchors(runs)[0]}`;
+  slot.replaceChildren(
+    el("p", "eyebrow", "Latest scoring run"),
+    meta,
+    el("p", "call-decision", `${stats.n} symbols · ${stats.buy} buy · ${stats.sell} sell · ${stats.flat} flat`),
+    link
+  );
+  slot.hidden = false;
+}
+
+async function readMeta() {
   try {
-    meta = await loadJson("data/meta.json", Date.now());
+    return await loadJson("data/meta.json", Date.now());
   } catch {
-    meta = {
+    return {
       export_status: "error",
       export_error: "data/meta.json did not load. The board cannot confirm this snapshot is fresh.",
     };
   }
-  const token = meta.fetched_at || meta.export_attempted_at || Date.now();
+}
+
+async function main() {
   try {
-    const [summary, trades, models, oos, book, curves, scorecard] = await Promise.all([
-      loadJson("data/kpi_summary.json", token),
-      loadJson("data/kpi_trades_scrubbed.json", token),
-      loadJson("data/models.json", token).catch(() => ({ models: [], note: "data/models.json is not in this snapshot." })),
-      loadJson("data/models_oos.json", token).catch(() => ({ rows: [] })),
-      loadLiveBook(token),
-      loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
-      loadJson("data/model_scorecard.json", token).catch(() => null),
-    ]);
-    render(trades, meta, book, summary);
-    renderPositions(book);
-    curvePayload = curves;
-    paintCurves();
-    renderModels(models, oos, meta, summary, trades, scorecard, book);
-    openFromHash();
+    const saved = localStorage.getItem(RANGE_KEY);
+    if (RANGES.some((range) => range.key === saved)) state.range = saved;
+  } catch {
+    /* private mode */
+  }
+  tabSleeves.addEventListener("click", () => {
+    if (location.hash.startsWith("#model")) history.pushState(null, "", `${location.pathname}${location.search}`);
+    showTab("sleeves");
+  });
+  tabModels.addEventListener("click", () => {
+    history.pushState(null, "", "#models");
+    showTab("models");
+  });
+  document.querySelectorAll('a[data-tab="models"]').forEach((anchor) => {
+    anchor.addEventListener("click", () => {
+      showTab("models");
+      requestAnimationFrame(() => focusId(String(anchor.getAttribute("href") || "").replace(/^#/, "")));
+    });
+  });
+  window.addEventListener("hashchange", applyHash);
+
+  let meta = await readMeta();
+  try {
+    await loadAll(meta);
   } catch (error) {
     renderStatus(meta);
     const lines = statusEl.querySelector(".status-lines") || statusEl;
     lines.append(el("p", "status-copy status-error", "KPI JSON did not load."));
-    boardEl.replaceChildren(el("p", "empty", String(error.message || error)));
+    heroEl.replaceChildren(el("p", "empty", String(error.message || error)));
     if (positionsEl) positionsEl.replaceChildren(el("p", "empty", "Open positions did not load."));
     if (curvesEl) curvesEl.replaceChildren(el("p", "empty", "Sleeve history did not load."));
   }
+
+  let width = window.innerWidth;
+  window.addEventListener("resize", () => {
+    if (Math.abs(window.innerWidth - width) < 24) return;
+    width = window.innerWidth;
+    paintCurves();
+    paintUnderwater();
+  });
+
+  setInterval(() => document.querySelectorAll(".fresh").forEach(paintFreshness), 30_000);
+  setInterval(async () => {
+    const next = await readMeta();
+    if (next.fetched_at && next.fetched_at !== meta.fetched_at) {
+      meta = next;
+      loadAll(meta).catch(() => {});
+    }
+  }, 5 * 60_000);
 }
 
 main();

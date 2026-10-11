@@ -2,67 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Scoring runs · The Book</title>
-  <meta name="description" content="Recent scoring runs, predictions, model versions, and calibration. Public fractions only.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%2312110e' width='32' height='32'/%3E%3Crect fill='%23e3a15a' x='6' y='8' width='8' height='16'/%3E%3Crect fill='%237eb8c4' x='18' y='14' width='8' height='10'/%3E%3C/svg%3E">
+  <meta name="description" content="Every scoring run on The Book: model version, per-symbol predictions, out-of-sample metrics, and calibration. Public fractions only.">
+  <link rel="canonical" href="https://jrg185.github.io/the-book/runs/">
+  <meta name="theme-color" content="#0b0d10">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="The Book">
+  <meta property="og:title" content="Scoring runs · The Book">
+  <meta property="og:description" content="Model versions, out-of-sample metrics, calibration, and every per-symbol prediction. Read-only.">
+  <meta property="og:url" content="https://jrg185.github.io/the-book/runs/">
+  <meta property="og:image" content="https://jrg185.github.io/the-book/og.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Book scoreboard: account value, all-time P&amp;L, crypto sleeve curve, and risk stats.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Scoring runs · The Book">
+  <meta name="twitter:description" content="Model versions, out-of-sample metrics, calibration, and every per-symbol prediction. Read-only.">
+  <meta name="twitter:image" content="https://jrg185.github.io/the-book/og.png">
+  <meta name="twitter:image:alt" content="The Book scoreboard: account value, all-time P&amp;L, crypto sleeve curve, and risk stats.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%230b0d10' width='32' height='32' rx='7'/%3E%3Crect fill='%23f5b84b' x='7' y='7' width='18' height='18' rx='4'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css">
 </head>
 <body>
-  <header class="top">
-    <div>
-      <p class="eyebrow">The Book</p>
-      <h1>Scoring runs</h1>
-    </div>
-    <p class="lede">Recent scoring runs, per-symbol predictions, model versions, and calibration. Resolved rows only enter log loss and Brier. Dollar amounts, fill ids, order ids, and account fields stay off this page.</p>
-    <nav class="repo-links" aria-label="Board links">
-      <a href="../">KPI board</a>
-      <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
+  <header class="masthead">
+    <a class="brand" href="../" aria-label="The Book home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">The Book</span>
+    </a>
+    <nav class="tabs" aria-label="Pages">
+      <a class="tab-link" href="../">Book</a>
+      <a class="tab-link" href="../#models">Models</a>
+      <a class="tab-link" href="./" aria-current="page">Runs</a>
     </nav>
   </header>
+
+  <p class="lede">Every scoring run: which model version scored it, what it said per symbol, and how those calls resolved. Fractions only. Dollar amounts, fill ids, order ids, and account fields stay off this page.</p>
+
   <section id="status" class="status" aria-live="polite">
     <p class="status-copy">Loading scoring runs…</p>
   </section>
+
   <main>
-    <section class="book-block" id="calibration-section" aria-labelledby="calibration-heading">
-      <div class="block-head">
-        <h2 id="calibration-heading">Calibration</h2>
-        <p>Binned p_up against the realized label rate on resolved rows.</p>
-      </div>
+    <section class="card hero shot runs-hero" id="runs-hero" aria-labelledby="runs-hero-heading">
+      <h1 class="sr-only" id="runs-hero-heading">Scoring runs</h1>
+      <div id="runs-summary"></div>
+    </section>
+
+    <section class="card" id="versions-section" aria-labelledby="versions-heading">
+      <header class="card-head">
+        <div>
+          <h2 id="versions-heading">Model versions</h2>
+          <p class="sub">Status and out-of-sample metrics from the public registry.</p>
+        </div>
+      </header>
+      <div id="versions" class="version-grid"></div>
+    </section>
+
+    <section class="card shot" id="calibration-section" aria-labelledby="calibration-heading">
+      <header class="card-head">
+        <div>
+          <h2 id="calibration-heading">Calibration</h2>
+          <p class="sub">Binned p_up against the realized label rate. Only resolved rows count toward log loss and Brier.</p>
+        </div>
+      </header>
       <div id="calibration"></div>
     </section>
-    <section class="book-block" id="versions-section" aria-labelledby="versions-heading">
-      <div class="block-head">
-        <h2 id="versions-heading">Model versions</h2>
-        <p>Status and out-of-sample metrics from the public registry.</p>
-      </div>
-      <div id="versions"></div>
-    </section>
-    <section class="book-block" id="runs-section" aria-labelledby="runs-heading">
-      <div class="block-head">
-        <h2 id="runs-heading">Latest runs</h2>
-        <p>Model version, backend, mode, and the last bar on each scoring run.</p>
-      </div>
+
+    <section class="card" id="runs-section" aria-labelledby="runs-heading">
+      <header class="card-head">
+        <div>
+          <h2 id="runs-heading">Latest runs</h2>
+          <p class="sub">Model version, backend, mode, and what each run called. Tap a run to see its predictions.</p>
+        </div>
+      </header>
       <div id="runs"></div>
     </section>
-    <section class="book-block" id="predictions-section" aria-labelledby="predictions-heading">
-      <div class="block-head">
-        <h2 id="predictions-heading">Predictions</h2>
-        <p>Per-symbol probability, side, conviction, and the resolved label when it exists.</p>
-      </div>
+
+    <section class="card" id="predictions-section" aria-labelledby="predictions-heading">
+      <header class="card-head">
+        <div>
+          <h2 id="predictions-heading">Predictions</h2>
+          <p class="sub">Per-symbol probability, side, conviction, and the resolved label when it exists.</p>
+        </div>
+      </header>
       <div id="predictions"></div>
     </section>
   </main>
-  <footer>
+
+  <footer class="foot">
     <p>Static page. It reads <code>data/runs.json</code> only and does not place orders.</p>
-    <nav class="repo-links" aria-label="Board links">
+    <nav class="repo-links" aria-label="Footer links">
       <a href="../">KPI board</a>
       <a href="https://github.com/jrg185/the-book" target="_blank" rel="noopener">The Book repo</a>
     </nav>
   </footer>
+  <div id="toast" class="toast" role="status" hidden></div>
   <noscript>This page needs JavaScript to read the committed JSON snapshot.</noscript>
   <script type="module" src="app.js"></script>
 </body>
