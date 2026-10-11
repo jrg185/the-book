@@ -224,6 +224,14 @@ Pages is a legacy site: branch `main`, path `/` (repository root). Pushing `inde
 
 The site is https://jrg185.github.io/the-book/
 
+### Share card, permalinks, and runs
+
+- `og.png` is the X / Open Graph card. The **OG card** workflow (`.github/workflows/og-card.yml`) runs `node scripts/render_og.mjs` daily: `og.js` builds an SVG from `data/*.json` and headless Chrome rasterizes it. That workflow commits only `og.png` and does not touch Export KPI. Run it from the Actions tab to refresh the card by hand.
+- Day rails on the page come from the crypto row of `data/kpi_summary.json` (then `model_scorecard.kill`). The front end has no rail, seed, fee, or price constants. A rail the export does not publish shows as "Not published".
+- Permalinks: `#day-YYYY-MM-DD` filters the feed to one ET day, and `#trade-YYYYMMDD-HHMMSS-ticker-side` jumps to one fill. They are built from the fill time, ticker, and side only. Order, fill, and account ids are never read or shown, and pasted UUIDs in free text are masked.
+- `runs.html` reads the optional `data/runs.json` (a list, or `{ runs: [...] }`). Id-shaped keys are ignored. A missing file shows an empty state.
+- `node --test scripts/test_board_ui.mjs` covers these.
+
 ## Local preview
 
 ```bash
