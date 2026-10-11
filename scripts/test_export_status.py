@@ -354,7 +354,8 @@ class PublishedIdentifierTests(unittest.TestCase):
                         "sleeve": "crypto",
                         "win_rate": 0.484848,
                         "id": "rules",
-                        "model_run": "6ab90000-0000-4000-8000-0000000000aa",
+                        "model_run": "run_6ab900000000",
+                        "redacted": "00000000-0000-4000-8000-000000000001",
                     }
                 ),
                 encoding="utf-8",
