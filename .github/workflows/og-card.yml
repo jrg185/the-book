@@ -36,7 +36,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: og-card
+  group: og-card-main
   cancel-in-progress: false
 
 jobs:
@@ -80,16 +80,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- og.png
-          if git diff --cached --quiet; then
-            echo "og.png unchanged."
-            exit 0
-          fi
-          git commit -m "Render daily og.png from data JSON"
           # Export KPI commits data/ on its own schedule. Rebase onto it before pushing.
-          for delay in 4 8 16 32; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              exit 0
-            fi
-            sleep "$delay"
-          done
-          exit 1
+          scripts/push_with_retry.sh "Render daily og.png from data JSON"
