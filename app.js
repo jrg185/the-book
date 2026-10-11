@@ -14,7 +14,6 @@ import {
   railView,
   rankModels,
   redactIds,
-  runRows,
   seedReturn,
   shareUrl,
   tradeAnchors,
@@ -22,6 +21,7 @@ import {
   windowPoints,
 } from "./board.js";
 import { areaChart, sparkline } from "./charts.js";
+import { normalizeBundle, predictionsByRun, runAnchors, runModelLabel, runStats, versionNames } from "./runs/derive.js";
 import { cardOpenKey, defaultCardOpen, modelCardId, rememberOpen, storedOpen } from "./collapse.js";
 import {
   closedFillStats,
@@ -1127,7 +1127,7 @@ function backendView(scorecard, models, oosPayload) {
   return inferred;
 }
 
-function renderLatestCall(trades, backend, runs) {
+function renderLatestCall(trades, backend) {
   const card = el("article", "card shot latest-call");
   const head = el("header", "card-head");
   const titleWrap = el("div");
@@ -1135,23 +1135,10 @@ function renderLatestCall(trades, backend, runs) {
   head.append(titleWrap, el("span", "chip live", backend.id ? `live: ${backend.id}` : "live backend UNKNOWN"));
   card.append(head);
 
-  const latestRun = runs[0] || null;
-  if (latestRun) {
-    const run = el("div", "call");
-    const meta = el("p", "call-meta");
-    meta.append(
-      el("strong", null, latestRun.model || "Run"),
-      document.createTextNode(latestRun.startedAt ? ` · ${formatEt(latestRun.startedAt)}` : ""),
-      document.createTextNode(latestRun.status ? ` · ${latestRun.status}` : "")
-    );
-    run.append(meta);
-    if (latestRun.decision) run.append(el("p", "call-decision", latestRun.decision));
-    if (latestRun.summary) run.append(el("blockquote", "call-why", latestRun.summary));
-    const link = el("a", "more-link", "All runs \u2192");
-    link.href = "runs.html";
-    run.append(link);
-    card.append(run);
-  }
+  const runSlot = el("div", "call latest-run");
+  runSlot.id = "latest-run";
+  runSlot.hidden = true;
+  card.append(runSlot);
 
   const call = latestCall(trades, preferredWhy, tradeStamp);
   if (call) {
@@ -1164,7 +1151,7 @@ function renderLatestCall(trades, backend, runs) {
     fillLinked(quote, call.why, "crypto");
     fill.append(quote);
     card.append(fill);
-  } else if (!latestRun) {
+  } else {
     card.append(el("p", "empty", "No fill with a written reason in this snapshot."));
   }
   card.append(el("p", "fine", backend.note || "Live backend is not stated in this snapshot."), watermark(null));
@@ -1362,7 +1349,7 @@ function renderSignalLinkage(scorecard) {
   );
 }
 
-function renderModels(payload, oosPayload, meta, summary, trades, scorecard, book, runs) {
+function renderModels(payload, oosPayload, meta, summary, trades, scorecard, book) {
   modelsEl.replaceChildren();
   const models = payload && Array.isArray(payload.models) ? payload.models.slice() : [];
   const exported = oosRows(oosPayload);
@@ -1374,7 +1361,7 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
 
   const backend = backendView(scorecard, payload, oosPayload);
   const top = el("div", "duo");
-  top.append(renderModelRace(oosPayload, backend), renderLatestCall(trades, backend, runs));
+  top.append(renderModelRace(oosPayload, backend), renderLatestCall(trades, backend));
   modelsEl.append(top);
   if (payload && payload.note) modelsEl.append(el("p", "note", String(payload.note)));
   modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book, summary));
@@ -1503,7 +1490,7 @@ async function loadLiveBook(token) {
 
 async function loadAll(meta) {
   const token = meta.fetched_at || meta.export_attempted_at || Date.now();
-  const [summary, trades, models, oos, book, curves, scorecard, runsPayload] = await Promise.all([
+  const [summary, trades, models, oos, book, curves, scorecard] = await Promise.all([
     loadJson("data/kpi_summary.json", token),
     loadJson("data/kpi_trades_scrubbed.json", token),
     loadJson("data/models.json", token).catch(() => ({ models: [], note: "data/models.json is not in this snapshot." })),
@@ -1511,7 +1498,6 @@ async function loadAll(meta) {
     loadLiveBook(token),
     loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
     loadJson("data/model_scorecard.json", token).catch(() => null),
-    loadJson("data/runs.json", token).catch(() => null),
   ]);
   lastTrades = Array.isArray(trades) ? trades : [];
   state.points = curvePoints(curves, "crypto");
@@ -1521,8 +1507,36 @@ async function loadAll(meta) {
   paintCurves();
   renderRisk(view, summary, scorecard);
   renderPositions(book, view?.asOf);
-  renderModels(models, oos, meta, summary, lastTrades, scorecard, book, runRows(runsPayload));
+  renderModels(models, oos, meta, summary, lastTrades, scorecard, book);
   applyHash();
+  loadJson("data/runs.json", token)
+    .then((raw) => paintLatestRun(normalizeBundle(raw)))
+    .catch(() => null);
+}
+
+// runs.json is large, so it loads after the board paints.
+function paintLatestRun(bundle) {
+  const slot = document.querySelector("#latest-run");
+  if (!slot) return;
+  const runs = [...bundle.runs].sort((a, b) => String(b.generated_at || "").localeCompare(String(a.generated_at || "")));
+  const run = runs[0];
+  if (!run) return;
+  const names = versionNames(bundle);
+  const stats = runStats(predictionsByRun(bundle).get(run.id));
+  const meta = el("p", "call-meta");
+  meta.append(
+    el("strong", null, runModelLabel(run, names)),
+    document.createTextNode([run.generated_at ? ` · ${formatEt(run.generated_at)}` : "", run.backend ? ` · ${run.backend}` : "", run.mode ? ` · ${run.mode}` : ""].join(""))
+  );
+  const link = el("a", "more-link", "All scoring runs \u2192");
+  link.href = `runs/#${runAnchors(runs)[0]}`;
+  slot.replaceChildren(
+    el("p", "eyebrow", "Latest scoring run"),
+    meta,
+    el("p", "call-decision", `${stats.n} symbols · ${stats.buy} buy · ${stats.sell} sell · ${stats.flat} flat`),
+    link
+  );
+  slot.hidden = false;
 }
 
 async function readMeta() {

@@ -1,7 +1,7 @@
 // Scoreboard helpers. No DOM, no network. Every number comes from data/*.json
 // or config/*.json. Rails, seeds, fees, and prices are never written here.
 
-import { asFraction, killRemainingUsd, num, pick, SEEDS_USD, sleeveKey } from "./derive.js";
+import { asFraction, killRemainingUsd, num, SEEDS_USD, sleeveKey } from "./derive.js";
 
 export const SITE_URL = "https://jrg185.github.io/the-book/";
 
@@ -245,46 +245,6 @@ export function agoText(ms, now = Date.now()) {
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
-}
-
-const ID_KEY_RE = /(^|_)(id|ids|uuid)$|order|fill_id|account|client_ref/i;
-
-function textField(row, keys) {
-  const value = pick(row, keys);
-  return value == null ? "" : redactIds(value);
-}
-
-// data/runs.json is optional. Accepts a list or { runs | rows }. Only named,
-// display-safe fields are read. Any id-shaped key is ignored outright.
-export function runRows(payload) {
-  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.runs) ? payload.runs : Array.isArray(payload?.rows) ? payload.rows : [];
-  const rows = [];
-  for (const raw of list) {
-    if (!raw || typeof raw !== "object") continue;
-    const row = {};
-    for (const [key, value] of Object.entries(raw)) if (!ID_KEY_RE.test(key)) row[key] = value;
-    const started = pick(row, ["started_at", "start", "ts", "timestamp", "as_of", "created_at", "ran_at"]);
-    const ms = Date.parse(started);
-    rows.push({
-      startedAt: Number.isNaN(ms) ? null : started,
-      ms: Number.isNaN(ms) ? null : ms,
-      endedAt: pick(row, ["ended_at", "finished_at", "end"]),
-      model: textField(row, ["model", "backend", "name", "agent"]),
-      status: textField(row, ["status", "state", "outcome", "result"]),
-      decision: textField(row, ["decision", "action", "call", "signal"]),
-      summary: textField(row, ["summary", "reasoning", "rationale", "note", "notes", "why"]),
-      trades: num(pick(row, ["trades", "n_trades", "fills", "n_fills", "orders_placed"])),
-      pnlFrac: num(pick(row, ["pnl_frac", "pnl_frac_of_book", "return_frac", "running_pnl_frac"])),
-      tickers: Array.isArray(row.tickers) ? row.tickers.map((t) => redactIds(t)).filter(Boolean) : [],
-    });
-  }
-  rows.sort((a, b) => (b.ms ?? -Infinity) - (a.ms ?? -Infinity));
-  return rows;
-}
-
-export function runsUpdatedAt(payload) {
-  if (!payload || Array.isArray(payload)) return null;
-  return pick(payload, ["updated_at", "generated_at", "as_of"]);
 }
 
 // Ranked by after-cost mean, the metric the OOS table promotes on.

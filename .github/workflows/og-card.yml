@@ -24,9 +24,9 @@ on:
       - charts.js
       - derive.js
       - app.js
-      - runs.js
       - index.html
       - runs.html
+      - runs/**
       - styles.css
       - scripts/render_og.mjs
       - scripts/test_board_ui.mjs

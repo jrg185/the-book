@@ -13,7 +13,6 @@ import {
   railView,
   rankModels,
   redactIds,
-  runRows,
   seedReturn,
   shareUrl,
   tradeAnchors,
@@ -24,6 +23,16 @@ import {
 import { cryptoBookView, killRemainingUsd, SEEDS_USD } from "../derive.js";
 import { buildOgSvg, ogSnapshot, xmlEscape } from "../og.js";
 import { preferredWhy } from "../tape.js";
+import {
+  normalizeBundle,
+  oosChips,
+  predictionsByRun,
+  runAnchors,
+  runModelLabel,
+  runModelName,
+  runStats,
+  versionNames,
+} from "../runs/derive.js";
 
 const src = (name) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
 const data = (name) => JSON.parse(src(`data/${name}`));
@@ -35,7 +44,7 @@ const trades = data("kpi_trades_scrubbed.json");
 const curves = data("sleeve_curves.json");
 const meta = data("meta.json");
 
-const FRONT = ["app.js", "board.js", "og.js", "runs.js", "charts.js", "index.html", "runs.html"];
+const FRONT = ["app.js", "board.js", "og.js", "charts.js", "index.html", "runs.html", "runs/index.html", "runs/app.js", "runs/derive.js"];
 
 test("day rails come from the warehouse export, then the scorecard, never a constant", () => {
   const crypto = summary.find((row) => row.sleeve === "crypto");
@@ -89,7 +98,7 @@ test("front end has no rail, fee, or seed constants of its own", () => {
     assert.equal(text.includes("--10%") || text.includes("+2.5%"), false, `${file} rail copy`);
   }
   const seeds = JSON.parse(src("config/book_seeds.json")).seeds.map((row) => String(row.seed_usd));
-  for (const file of ["app.js", "board.js", "og.js", "runs.js", "index.html", "runs.html"]) {
+  for (const file of FRONT) {
     const text = src(file);
     for (const seed of seeds) {
       assert.equal(new RegExp(`\\$${seed}\\b`).test(text), false, `${file} $${seed}`);
@@ -161,23 +170,65 @@ test("free text masks pasted broker ids and keeps agent links", () => {
   assert.equal(app.includes(".uuid"), false);
 });
 
-test("runs reader degrades on a missing file and never reads id fields", () => {
-  assert.deepEqual(runRows(null), []);
-  assert.deepEqual(runRows({}), []);
-  const rows = runRows({
-    updated_at: "2026-10-11T16:00:00Z",
+test("runs page names the model from model_version_name and keeps run ids out of links", () => {
+  const bundle = normalizeBundle({
+    source: "supabase",
+    fetched_at: "2026-10-11T17:00:00Z",
     runs: [
-      { run_id: "r-1", started_at: "2026-10-11T15:00:00Z", model: "rules", status: "ok", summary: "Bought ARB. ref 4f7c2a8e-1b2d-4c3e-9f10-112233445566", order_ids: ["x"], account_number: "A1", trades: 2, pnl_frac: 0.004 },
-      { id: "r-0", started_at: "2026-10-10T15:00:00Z", model: "lgbm", decision: "hold" },
+      { id: "4f7c2a8e-1b2d-4c3e-9f10-112233445566", model_version_name: "lgbm_v1", backend: "ml", generated_at: "2026-10-11T16:31:53+00:00" },
+      { id: "r-2", model_version_id: "v-2", backend: "ml", generated_at: "2026-10-11T16:31:53+00:00" },
+      { id: "r-3", backend: "rules", generated_at: "2026-10-10T10:00:00+00:00" },
+      { id: "r-4", backend: "ml", generated_at: "2026-10-10T09:00:00+00:00" },
     ],
+    predictions: [
+      { run_id: "r-2", symbol: "BTC", side: "buy", p_up: 0.6, label_up_net30: true, resolved_at: "2026-10-12T00:00:00Z" },
+      { run_id: "r-2", symbol: "ETH", side: "sell", p_up: 0.4, label_up_net30: true, resolved_at: "2026-10-12T00:00:00Z" },
+      { run_id: "r-2", symbol: "SOL", side: "flat", p_up: 0.5 },
+    ],
+    model_versions: [{ id: "v-2", name: "lgbm_no_dow", status: "candidate" }],
   });
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0].model, "rules");
-  assert.equal(rows[0].trades, 2);
-  assert.equal(rows[0].summary.includes("4f7c"), false);
-  const blob = JSON.stringify(rows);
-  for (const banned of ["r-1", "r-0", "A1", "order_ids", "account"]) assert.equal(blob.includes(banned), false, banned);
-  assert.equal(rows[1].decision, "hold");
+  const names = versionNames(bundle);
+  assert.equal(runModelName(bundle.runs[0], names), "lgbm_v1");
+  assert.equal(runModelName(bundle.runs[1], names), "lgbm_no_dow");
+  assert.equal(runModelLabel(bundle.runs[2], names), "Rules engine");
+  assert.equal(runModelLabel(bundle.runs[3], names), "Unnamed model");
+  const anchors = runAnchors(bundle.runs);
+  assert.deepEqual(anchors, ["run-20261011-163153", "run-20261011-163153-2", "run-20261010-100000", "run-20261010-090000"]);
+  for (const id of anchors) assert.equal(/4f7c|r-\d/.test(id), false, id);
+  const stats = runStats(predictionsByRun(bundle).get("r-2"));
+  assert.deepEqual([stats.n, stats.buy, stats.sell, stats.flat, stats.calls, stats.hits], [3, 1, 1, 1, 2, 1]);
+  assert.equal(stats.hitRate, 0.5);
+
+  const real = normalizeBundle(data("runs.json"));
+  assert.ok(real.runs.length > 0);
+  for (const run of real.runs) assert.equal(typeof runModelLabel(run, versionNames(real)), "string");
+  const realAnchors = runAnchors(real.runs);
+  assert.equal(new Set(realAnchors).size, realAnchors.length);
+  for (const id of realAnchors) assert.match(id, /^run-\d{8}-\d{6}(-\d+)?$/);
+  const page = src("runs/app.js");
+  assert.equal(page.includes("option.value = run.id"), false);
+  assert.equal(page.includes("tr.id = run.id"), false);
+});
+
+test("out-of-sample metrics become ordered chips without private keys", () => {
+  const chips = oosChips({ auc: 0.5303, hit_rate: 0.524, buy_mean_net: 0.0053, sell_mean_net: -0.0029, n_flat: 414038, fee_usd: 1, account_x: 2, extra: 3 });
+  assert.deepEqual(chips.map((chip) => chip.key), ["auc", "hit_rate", "buy_mean_net", "sell_mean_net", "n_flat", "extra"]);
+  assert.equal(chips[0].value, "0.5303");
+  assert.equal(chips[1].value, "52.4%");
+  assert.equal(chips[2].value, "+0.53%");
+  assert.equal(chips[2].tone, "up");
+  assert.equal(chips[3].tone, "down");
+  assert.equal(chips[4].value, "414k");
+  assert.deepEqual(oosChips(null), []);
+  for (const version of normalizeBundle(data("runs.json")).modelVersions) {
+    if (version.oos_metrics && typeof version.oos_metrics === "object") assert.ok(oosChips(version.oos_metrics).length > 0, version.name);
+  }
+});
+
+test("runs.html only redirects to the one runs page", () => {
+  const html = src("runs.html");
+  assert.match(html, /http-equiv="refresh" content="0; url=runs\/"/);
+  assert.equal(html.includes("<script type=\"module\""), false);
 });
 
 test("curve windows, drawdown, and Sharpe read the crypto sleeve fractions", () => {
@@ -239,7 +290,7 @@ test("share card is built from data JSON and carries no ids", () => {
 });
 
 test("pages carry Open Graph and large-image Twitter cards", () => {
-  for (const file of ["index.html", "runs.html"]) {
+  for (const file of ["index.html", "runs/index.html"]) {
     const html = src(file);
     assert.match(html, /<meta property="og:title" content="[^"]+">/, file);
     assert.match(html, /<meta property="og:description" content="[^"]+">/, file);

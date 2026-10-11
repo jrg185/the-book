@@ -32,7 +32,8 @@ test("crypto closed fills match sleeve win rules and the scrubbed tape", () => {
   }
   assert.equal(stats.wins + stats.losses, stats.decided);
   assert.equal(stats.orderIdAvailable, false);
-  assert.equal(fills.order_id_available, false);
+  assert.equal(Object.hasOwn(fills, "order_id_available"), false);
+  assert.equal(Object.hasOwn(read("model_scorecard.json"), "order_id_unique"), false);
   assert.equal(fills.dedupe, "scrubbed-rows");
   assert.equal(typeof stats.expectancyUsd, "number");
   assert.equal(Number.isFinite(stats.expectancyUsd), true);

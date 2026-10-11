@@ -32,9 +32,10 @@ GitHub Actions then writes the scrubbed views into the repo:
 - `public.kpi_summary` → `data/kpi_summary.json`
 - `public.kpi_trades_scrubbed` → `data/kpi_trades_scrubbed.json`
 - `public.models_oos` → `data/models_oos.json` when that view exists
+- `public.runs_public`, `public.run_predictions_public`, and `public.model_versions_public` → `data/runs.json` and `data/runs.csv`. Safe columns only. A missing or empty relation is logged and does not fail the export
 - provenance → `data/meta.json`
 
-Pages serves that committed JSON. The browser only fetches `data/*.json`.
+Pages serves that committed JSON. The browser only fetches `data/*.json`. Scoring runs are on [`runs/`](runs/).
 
 Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml) (same bytes as [`scripts/export-kpi.yml`](scripts/export-kpi.yml)).
 
@@ -229,7 +230,7 @@ The site is https://jrg185.github.io/the-book/
 - `og.png` is the X / Open Graph card. The **OG card** workflow (`.github/workflows/og-card.yml`) runs `node scripts/render_og.mjs` daily: `og.js` builds an SVG from `data/*.json` and headless Chrome rasterizes it. That workflow commits only `og.png` and does not touch Export KPI. Run it from the Actions tab to refresh the card by hand.
 - Day rails on the page come from the crypto row of `data/kpi_summary.json` (then `model_scorecard.kill`). The front end has no rail, seed, fee, or price constants. A rail the export does not publish shows as "Not published".
 - Permalinks: `#day-YYYY-MM-DD` filters the feed to one ET day, and `#trade-YYYYMMDD-HHMMSS-ticker-side` jumps to one fill. They are built from the fill time, ticker, and side only. Order, fill, and account ids are never read or shown, and pasted UUIDs in free text are masked.
-- `runs.html` reads the optional `data/runs.json` (a list, or `{ runs: [...] }`). Id-shaped keys are ignored. A missing file shows an empty state.
+- [`runs/`](runs/) reads `data/runs.json` through `runs/derive.js`. It shows the model versions with their out-of-sample metrics as chips, calibration, the latest runs, and per-run predictions. The model name comes from `model_version_name`, then `model_version`, then the registry name for `model_version_id`. Run links are `#run-YYYYMMDD-HHMMSS` from `generated_at`, so they never carry a run id. `runs.html` only redirects to `runs/`.
 - `node --test scripts/test_board_ui.mjs` covers these.
 
 ## Local preview
