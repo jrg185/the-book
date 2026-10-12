@@ -1,6 +1,6 @@
 {
   "source": "supabase",
-  "fetched_at": "2026-10-12T01:40:36Z",
+  "fetched_at": "2026-10-12T01:41:56Z",
   "runs": [
     {
       "id": "run_b255f8c6944c",
@@ -193341,8 +193341,8 @@
     "n_resolved": 13334,
     "n_scored": 13259,
     "n_unscored": 75,
-    "logloss": 0.674531,
-    "brier": 0.24062,
+    "logloss": 0.674533,
+    "brier": 0.240621,
     "bins": [
       {
         "lo": 0.0,
@@ -193368,16 +193368,16 @@
       {
         "lo": 0.3,
         "hi": 0.4,
-        "n": 5050,
-        "mean_p_up": 0.366793,
-        "label_rate": 0.364158
+        "n": 5051,
+        "mean_p_up": 0.366798,
+        "label_rate": 0.364284
       },
       {
         "lo": 0.4,
         "hi": 0.5,
-        "n": 7248,
-        "mean_p_up": 0.434387,
-        "label_rate": 0.428532
+        "n": 7247,
+        "mean_p_up": 0.434392,
+        "label_rate": 0.428453
       },
       {
         "lo": 0.5,
@@ -193415,7 +193415,12 @@
         "label_rate": null
       }
     ],
-    "scope": "all_predictions"
+    "scope": "all_predictions",
+    "full_precision": {
+      "n_scored": 3357,
+      "logloss": 0.675129,
+      "brier": 0.241322
+    }
   },
   "sources": {
     "runs": "runs_public",
