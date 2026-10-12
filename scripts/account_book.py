@@ -10,7 +10,10 @@ so every buy fee that cash already paid shows up there.
 Per-trade pnl_trade_usd is unchanged: a sell nets its own fee, and a buy
 does not move that column or the lot's average cost.
 
-Cash is the same read the export uses. Signed Robinhood REST when the API
+Cash is one read per run. Refresh calls read_cash and writes the values,
+source, and as_of onto the shared marks file (/tmp/the-book-kpi-marks.json,
+run-id stamped). Export reuses that stamp while it is fresh. A missing or
+stale file is not a silent second read. Signed Robinhood REST when the API
 key and private key are set, otherwise data/rh_cash.json (USD plus USDC).
 A missing drop does not invent seed + trade P&L + open mark-to-market.
 """
@@ -30,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "account_book.json"
 MARKS_NAME = "the-book-kpi-marks.json"
 CASH_KEYS = ("USD", "USDC")
+CASH_DAY_KEYS = ("day_realized_usd", "day_realized_gross_usd", "day_sell_fees_usd")
+CASH_SOURCES = ("robinhood", "rh_cash.json")
 CENT = Decimal("0.01")
 MICRO = Decimal("0.000001")
 
@@ -284,6 +289,159 @@ def read_cash(env: dict | None = None, data_dir: Path | None = None) -> tuple[di
     if drop is not None:
         return drop, "rh_cash.json"
     return None, None
+
+
+def _cash_text(value) -> str | None:
+    amount = _dec(value)
+    if amount is None or not amount.is_finite():
+        return None
+    return format(amount, "f")
+
+
+def _load_marks_file() -> dict | None:
+    path = marks_path()
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def save_shared_cash(cash: dict | None, source: str | None, as_of: str) -> Path:
+    """Record the cash this refresh used so export does not read it again.
+
+    The file is the same quote set export already age-checks. source is
+    robinhood, rh_cash.json, or None when both reads missed. as_of is the
+    snapshot clock that cash was applied to. values are the lines that read
+    returned, including an optional day figure from the desk drop.
+    """
+    path = marks_path()
+    payload = _load_marks_file() or {}
+    if not str(payload.get("run_id") or "").strip():
+        payload["run_id"] = (os.environ.get("KPI_MARKS_RUN_ID") or "").strip() or uuid.uuid4().hex
+    if not str(payload.get("written_at") or "").strip():
+        payload["written_at"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if not str(payload.get("as_of") or "").strip():
+        payload["as_of"] = as_of
+    values = None
+    if isinstance(cash, dict):
+        values = {}
+        for key in (*CASH_KEYS, *CASH_DAY_KEYS):
+            if key not in cash or cash.get(key) in (None, ""):
+                continue
+            text = _cash_text(cash.get(key))
+            if text is None:
+                continue
+            values[key] = text
+        drop_as_of = cash.get("as_of")
+        if isinstance(drop_as_of, str) and drop_as_of.strip():
+            values["as_of"] = drop_as_of.strip()
+        if not any(key in values for key in CASH_KEYS):
+            values = None
+    origin = source if source in CASH_SOURCES else None
+    if values is None:
+        origin = None
+    payload["cash"] = {
+        "source": origin,
+        "as_of": as_of,
+        "run_id": payload.get("run_id"),
+        "values": values,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def _shared_cash_usable(payload: dict) -> str | None:
+    """None when this payload's cash stamp can be reused. Otherwise a reason."""
+    if not _marks_are_fresh(payload):
+        return "stale"
+    expected_run = (os.environ.get("KPI_MARKS_RUN_ID") or "").strip()
+    stamped = str(payload.get("run_id") or "")
+    if expected_run and stamped != expected_run:
+        return "run_id"
+    cash = payload.get("cash")
+    if not isinstance(cash, dict):
+        return "missing"
+    if expected_run and str(cash.get("run_id") or "") != expected_run:
+        return "run_id"
+    if not str(cash.get("as_of") or "").strip():
+        return "unreadable"
+    return None
+
+
+def _cash_from_stamp(stamp: dict) -> tuple[dict | None, str | None] | None:
+    """(cash, source) from a usable stamp. None when the stamp is not usable."""
+    source = stamp.get("source")
+    raw = stamp.get("values")
+    if raw is None:
+        if source not in (None, ""):
+            return None
+        return None, None
+    if not isinstance(raw, dict):
+        return None
+    if source not in CASH_SOURCES:
+        return None
+    cash: dict = {}
+    for key in CASH_KEYS:
+        if key not in raw:
+            continue
+        amount = _dec(raw.get(key))
+        if amount is None or not amount.is_finite():
+            return None
+        cash[key] = amount
+    if not any(key in cash for key in CASH_KEYS):
+        return None
+    for key in CASH_DAY_KEYS:
+        if key not in raw or raw.get(key) in (None, ""):
+            continue
+        amount = _dec(raw.get(key))
+        if amount is None or not amount.is_finite():
+            return None
+        cash[key] = float(amount)
+    drop_as_of = raw.get("as_of")
+    if isinstance(drop_as_of, str) and drop_as_of.strip():
+        cash["as_of"] = drop_as_of.strip()
+    return cash, source
+
+
+def load_shared_cash() -> tuple[dict | None, str | None] | None:
+    """Cash refresh wrote, when the marks file is fresh for this run.
+
+    None when the file is missing, unreadable, stale, for another run id,
+    or has no cash stamp. (None, None) when refresh recorded that cash was
+    absent, so export does not try a later read that can disagree.
+    """
+    path = marks_path()
+    if not path.is_file():
+        print("shared cash marks file is missing", file=sys.stderr)
+        return None
+    payload = _load_marks_file()
+    if payload is None:
+        print("shared cash marks file is unreadable", file=sys.stderr)
+        return None
+    reason = _shared_cash_usable(payload)
+    if reason == "stale":
+        print("shared cash marks are stale", file=sys.stderr)
+        return None
+    if reason == "run_id":
+        print("shared cash marks run id does not match this run", file=sys.stderr)
+        return None
+    if reason == "missing":
+        print("shared cash marks have no cash stamp", file=sys.stderr)
+        return None
+    if reason is not None:
+        print("shared cash marks file is unreadable", file=sys.stderr)
+        return None
+    loaded = _cash_from_stamp(payload["cash"])
+    if loaded is None:
+        print("shared cash marks file is unreadable", file=sys.stderr)
+        return None
+    return loaded
 
 
 def _refresh():

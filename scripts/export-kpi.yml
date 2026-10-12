@@ -177,6 +177,7 @@ jobs:
           RH_API_KEY: ${{ secrets.RH_API_KEY }}
           RH_BASE64_PRIVATE_KEY: ${{ secrets.RH_BASE64_PRIVATE_KEY }}
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
+          KPI_MARKS_RUN_ID: ${{ github.run_id }}
         run: python3 scripts/refresh_kpi_snapshots.py
 
       # Apply order: migration, then this seed sync, then the export reads the view.
@@ -196,6 +197,9 @@ jobs:
           RH_BASE64_PRIVATE_KEY: ${{ secrets.RH_BASE64_PRIVATE_KEY }}
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
           KPI_REFRESH_EXPECTED: "1"
+          KPI_MARKS_RUN_ID: ${{ github.run_id }}
+        # Cash is the stamp refresh wrote into /tmp/the-book-kpi-marks.json.
+        # A missing or stale stamp fails this step instead of reading again.
         run: python3 scripts/export_kpi.py
 
       - name: Commit refreshed JSON
