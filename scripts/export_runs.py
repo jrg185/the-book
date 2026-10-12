@@ -52,7 +52,18 @@ PAGE_SIZE = 1000
 # Calibration reads every prediction (few columns) so aggregates are not cut by
 # RUN_LIMIT or PREDICTION_LIMIT. Pages of PAGE_SIZE; this is a runaway guard only.
 CALIBRATION_LIMIT = 5_000_000
-CALIBRATION_COLUMNS = ("run_id", "bar_time", "symbol", "p_up", "label_up_net30", "resolved_at")
+CALIBRATION_COLUMNS = ("run_id", "bar_time", "symbol", "p_up", "label_up_net30", "resolved_at", "p_up_source")
+# p_up_source value for probabilities read straight from the model payload (full precision).
+FULL_PRECISION_SOURCE = "payload"
+
+
+def full_precision_calibration(rows: list):
+    """Scores over payload-sourced p_up only. None when the source column is absent."""
+    if not any(isinstance(row, dict) and "p_up_source" in row for row in rows):
+        return None
+    subset = [row for row in rows if isinstance(row, dict) and row.get("p_up_source") == FULL_PRECISION_SOURCE]
+    scores = calibrate(subset)
+    return {"n_scored": scores["n_scored"], "logloss": scores["logloss"], "brier": scores["brier"]}
 
 RUN_SOURCES = ("runs_public", "scoring_runs")
 PREDICTION_SOURCES = ("run_predictions_public", "run_predictions")
@@ -732,8 +743,10 @@ def collect(read_rows, fetched_at: str):
     if calibration_rows is not None:
         bundle["calibration"] = calibrate(calibration_rows)
         bundle["calibration"]["scope"] = "all_predictions"
+        bundle["calibration"]["full_precision"] = full_precision_calibration(calibration_rows)
     else:
         bundle["calibration"]["scope"] = "exported_predictions"
+        bundle["calibration"]["full_precision"] = None
     bundle["sources"] = {
         "runs": run_source,
         "predictions": pred_source,
