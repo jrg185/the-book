@@ -104,7 +104,8 @@ jobs:
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
         run: |
           if [ -z "${RH_API_KEY}" ] || [ -z "${RH_BASE64_PRIVATE_KEY}" ]; then
-            echo "Hourly Actions poll skipped: RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. No Robinhood call."
+            # Without these secrets fills only arrive by a sync_rh_json dispatch. Say so loudly.
+            echo "::warning title=Robinhood fills not polled::RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. kpi_trades only gets fills from a sync_rh_json dispatch. No Robinhood call."
             exit 0
           fi
           python3 -m pip install --disable-pip-version-check --break-system-packages 'pynacl>=1.5,<2'
