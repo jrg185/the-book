@@ -22,12 +22,14 @@ and dispatch Export KPI. Actions upserts with the repo Supabase secrets,
 refreshes marks, and exports. It also stores the next poll timestamp in
 data/rh_kpi_sync_cursor.json when that file changes.
 
-  gh workflow run export-kpi.yml --repo jrg185/the-book -f sync_rh_json="$(cat fills.json)"
+  python3 scripts/upsert_fills_direct.py fills.json
+  gh workflow run export-kpi.yml --repo jrg185/the-book
 
+Do not pass fills as a workflow input. Actions prints those inputs.
 A local upsert is the same mapper, if SUPABASE_URL and
 SUPABASE_SERVICE_ROLE_KEY are in the environment:
 
-  python3 scripts/sync_rh_kpi_trades.py --from-json fills.json
+  python3 scripts/upsert_fills_direct.py fills.json
 
 Optional later: Actions cron 0 * * * * calls --from-rh when RH_API_KEY and
 RH_BASE64_PRIVATE_KEY are both set. If either is absent, that step exits 0
@@ -1567,6 +1569,7 @@ def public_sync_message(message: str) -> str:
         secret = (os.environ.get(name) or "").strip()
         if len(secret) >= 6:
             text = text.replace(secret, "[redacted]")
+    text = UUID_RE.sub("[redacted]", text)
     lowered = text.lower()
     if "read-only" in lowered or "readonly" in lowered or "disk full" in lowered or "25006" in text:
         text = "RH fill sync failed. kpi_trades was not changed."
@@ -2682,7 +2685,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         return sync(from_json=args.from_json, from_rh=args.from_rh)
     except SyncError as exc:
-        print(str(exc), file=sys.stderr)
+        print(public_sync_message(str(exc)), file=sys.stderr)
         if args.self_test or args.dry_run:
             return 1
         try:
