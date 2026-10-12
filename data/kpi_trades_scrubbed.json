@@ -1692,6 +1692,18 @@
     "fee_frac_of_book": 0.0006
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-12T13:29:28.111825+00:00",
+    "ticker": "PYTH",
+    "side": "sell",
+    "notional_frac_of_book": 0.112933,
+    "pnl_frac_of_book": 0.004691,
+    "why": "Trail exit: PYTH bid 0.085757 fell below the cost +5% floor 0.085836 (cost 0.081749) on the 9:28am fast-mover watch; sold the remaining 65%.",
+    "running_pnl_frac": 0.118205,
+    "running_balance_frac": 1.118205,
+    "fee_frac_of_book": 0.001067
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
