@@ -1,6 +1,6 @@
 {
   "source": "supabase",
-  "fetched_at": "2026-10-12T19:09:06Z",
+  "fetched_at": "2026-10-12T19:15:27Z",
   "runs": [
     {
       "id": "run_a05986ac78b4",
@@ -207559,6 +207559,36 @@
   ],
   "model_versions": [
     {
+      "id": "mv_03aab04a4e9b",
+      "name": "chronos_2",
+      "parent": null,
+      "status": "shadow",
+      "oos_metrics": {},
+      "trained_at": null,
+      "promoted_at": null,
+      "created_at": "2026-10-12T19:09:26.258589+00:00"
+    },
+    {
+      "id": "mv_d5e3e583f282",
+      "name": "chronos_bolt_small",
+      "parent": null,
+      "status": "shadow",
+      "oos_metrics": {},
+      "trained_at": null,
+      "promoted_at": null,
+      "created_at": "2026-10-12T19:09:26.258589+00:00"
+    },
+    {
+      "id": "mv_e198d46b080c",
+      "name": "kronos_small",
+      "parent": null,
+      "status": "shadow",
+      "oos_metrics": {},
+      "trained_at": null,
+      "promoted_at": null,
+      "created_at": "2026-10-12T19:09:26.258589+00:00"
+    },
+    {
       "id": "mv_5d29b31c92b0",
       "name": "lgbm_no_dow",
       "parent": "lgbm_v1",
@@ -207638,6 +207668,16 @@
       "trained_at": "2026-09-27T23:15:27+00:00",
       "promoted_at": "2026-09-27T23:15:27+00:00",
       "created_at": "2026-10-11T17:19:21.425404+00:00"
+    },
+    {
+      "id": "mv_d71f7b9d9e94",
+      "name": "timesfm_2_5_200m",
+      "parent": null,
+      "status": "shadow",
+      "oos_metrics": {},
+      "trained_at": null,
+      "promoted_at": null,
+      "created_at": "2026-10-12T19:09:26.258589+00:00"
     }
   ],
   "calibration": {
