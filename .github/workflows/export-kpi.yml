@@ -5,9 +5,9 @@ name: Export KPI
 # Cron 0 * * * * polls only when RH_API_KEY and RH_BASE64_PRIVATE_KEY are
 # both set. Hourly Actions poll skipped otherwise, exit 0. No Robinhood call.
 # That poll reads RH_AGENTIC_ACCOUNT and fails if the secret is unset.
-# Tonight Crypto Desk polls MCP get_crypto_orders and workflow_dispatch the JSON.
-# Bonus: repository_dispatch rh-fill or workflow_dispatch sync_rh_json writes
-# a temp file, upserts kpi_trades, then continues with refresh and export.
+# Tonight Crypto Desk upserts fills with scripts/upsert_fills_direct.py, then
+# workflow_dispatch with no payload. Workflow inputs are public Actions logs.
+# Bonus: repository_dispatch rh-fill writes a temp file and upserts kpi_trades.
 # The */15 cron only refreshes marks. A bad requested payload exits non-zero
 # and stamps data/meta.json. A failed refresh does the same.
 # Pull requests only self-test. ROBINHOOD_TOKEN is not used.
@@ -32,12 +32,6 @@ on:
       - "data/**"
   pull_request:
   workflow_dispatch:
-    inputs:
-      sync_rh_json:
-        description: "On-fill JSON (one order, a list, or results/data). Empty skips the sync. This Action does not poll Robinhood."
-        required: false
-        type: string
-        default: ""
   repository_dispatch:
     types: [rh-fill]
 
@@ -62,6 +56,9 @@ jobs:
         env:
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
         run: python3 scripts/sync_rh_kpi_trades.py --self-test
+
+      - name: Fills stay off the public log
+        run: python3 -m unittest scripts/test_fills_private.py
 
       - name: Realized FIFO and recon
         run: |
@@ -104,8 +101,8 @@ jobs:
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
         run: |
           if [ -z "${RH_API_KEY}" ] || [ -z "${RH_BASE64_PRIVATE_KEY}" ]; then
-            # Without these secrets fills only arrive by a sync_rh_json dispatch. Say so loudly.
-            echo "::warning title=Robinhood fills not polled::RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. kpi_trades only gets fills from a sync_rh_json dispatch. No Robinhood call."
+            # Without these secrets fills only arrive by scripts/upsert_fills_direct.py. Say so loudly.
+            echo "::warning title=Robinhood fills not polled::RH_API_KEY and RH_BASE64_PRIVATE_KEY are unset. kpi_trades only gets fills from scripts/upsert_fills_direct.py. No Robinhood call."
             exit 0
           fi
           python3 -m pip install --disable-pip-version-check --break-system-packages 'pynacl>=1.5,<2'
@@ -113,8 +110,6 @@ jobs:
 
       - name: Stage on-fill JSON
         id: stage
-        env:
-          SYNC_RH_JSON: ${{ github.event.inputs.sync_rh_json }}
         run: |
           python3 - <<'PY'
           import json, os, sys
@@ -122,14 +117,28 @@ jobs:
 
           dest = Path("/tmp/rh-fill.json")
           name = os.environ.get("GITHUB_EVENT_NAME") or ""
-          raw = os.environ.get("SYNC_RH_JSON") or ""
           output = os.environ.get("GITHUB_OUTPUT")
 
           def publish(path: str) -> None:
               if output:
                   with open(output, "a", encoding="utf-8") as handle:
                       handle.write(f"feed={path}\n")
-              print(f"staged {path}")
+              print("staged fills feed")
+
+          if name == "workflow_dispatch":
+              event_path = os.environ.get("GITHUB_EVENT_PATH") or ""
+              event = {}
+              if event_path and Path(event_path).is_file():
+                  try:
+                      event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+                  except (OSError, json.JSONDecodeError):
+                      sys.exit("workflow event could not be read. Fills were not accepted.")
+              inputs = event.get("inputs") if isinstance(event, dict) else None
+              if isinstance(inputs, dict) and any(str(value or "").strip() for value in inputs.values()):
+                  sys.exit(
+                      "This workflow does not accept a fills payload. "
+                      "Run scripts/upsert_fills_direct.py, then dispatch Export KPI with no inputs."
+                  )
 
           if name == "repository_dispatch":
               event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
@@ -138,13 +147,6 @@ jobs:
                   sys.exit("rh-fill dispatch needs a client_payload object. kpi_trades was not changed.")
               dest.write_text(json.dumps(client), encoding="utf-8")
               publish(str(dest))
-          elif raw.strip():
-              text = raw.strip()
-              if text[0] in "{[":
-                  dest.write_text(raw, encoding="utf-8")
-                  publish(str(dest))
-              else:
-                  publish(text)
           elif os.environ.get("RH_FILLS_PATH"):
               publish(os.environ["RH_FILLS_PATH"])
           elif Path("data/rh_fills.json").is_file():
