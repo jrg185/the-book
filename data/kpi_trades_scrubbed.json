@@ -1680,6 +1680,18 @@
     "fee_frac_of_book": 0.0011
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-12T10:50:45.07702+00:00",
+    "ticker": "PYTH",
+    "side": "sell",
+    "notional_frac_of_book": 0.063167,
+    "pnl_frac_of_book": 0.004862,
+    "why": "+5% vs cost first profit take: PYTH bid 0.088116 cleared take 0.085846 (cost 0.081758); sold 35% at the 6:48am check-in.",
+    "running_pnl_frac": 0.113514,
+    "running_balance_frac": 1.113514,
+    "fee_frac_of_book": 0.0006
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
