@@ -358,6 +358,28 @@ test("rails that round to the same cents still follow the running balance", () =
   assertLiveRails(view, book);
 });
 
+test("a published summary rail replaces the committed export", () => {
+  const derive = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
+  assert.equal(/dayKillFrac\s*[:=]\s*-?\d/.test(derive), false);
+  assert.equal(/dayTargetFrac\s*[:=]\s*-?\d/.test(derive), false);
+  const crypto = summary.find((row) => row.sleeve === "crypto");
+  assert.equal(LIVE_RAILS.source, "data/kpi_summary.json");
+  assert.equal(LIVE_RAILS.dayKillFrac, Number(crypto.day_kill_pct));
+  assert.equal(LIVE_RAILS.dayTargetFrac, Number(crypto.day_target_pct));
+  const book = {
+    running_balance_usd: 400,
+    day_pnl_usd: -10,
+    holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: 400 }],
+  };
+  const view = cryptoBookView(book, [{ sleeve: "crypto", day_kill_pct: -0.2, day_target_pct: 0.05 }]);
+  assertCentsEqual(view.dayKill, railDollars(400, -0.2));
+  assertCentsEqual(view.dayTarget, railDollars(400, 0.05));
+  assertCentsEqual(view.killHeadroom, killRemainingUsd(400, -10, -0.2));
+  const committed = cryptoBookView(book);
+  assertCentsEqual(committed.dayKill, railDollars(400, LIVE_RAILS.dayKillFrac));
+  assertCentsEqual(committed.dayTarget, railDollars(400, LIVE_RAILS.dayTargetFrac));
+});
+
 test("the published book is the holdings sum, and the rails use the running balance", () => {
   const books = shownBooks(live);
   const sum = holdingsSum(live);

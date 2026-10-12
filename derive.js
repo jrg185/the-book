@@ -7,18 +7,14 @@
 // This file never talks to Supabase.
 
 import { SEEDS_USD } from "./book_seeds.js";
+import summaryPublished from "./data/kpi_summary.json" with { type: "json" };
+import scorecardPublished from "./data/model_scorecard.json" with { type: "json" };
 
 export { SEEDS_USD };
 
 // Public signal file. Its book_usd is the signal book, not the published account. No secret.
 export const LIVE_SIGNAL_URL =
   "https://raw.githubusercontent.com/jrg185/agentic-crypto-signals/main/signals/latest.json";
-
-// Same rails the crypto sleeve already uses. Dollars are these fractions of the running balance.
-export const LIVE_RAILS = {
-  dayKillFrac: -0.1,
-  dayTargetFrac: 0.025,
-};
 
 const SLEEVE_ORDER = ["combined", "crypto", "equities"];
 
@@ -52,6 +48,43 @@ export function sleeveKey(row) {
     .toLowerCase();
 }
 
+// Day kill and day target are the crypto rails the export already publishes.
+// The crypto row of data/kpi_summary.json wins. The scorecard kill block is
+// the fallback. A rail neither file publishes stays null.
+export function publishedRails(summary, scorecard) {
+  const rows = Array.isArray(summary) ? summary : [];
+  const crypto = rows.find((row) => sleeveKey(row) === "crypto") || null;
+  const kill = scorecard && typeof scorecard.kill === "object" ? scorecard.kill : null;
+  const fromSummaryKill = asFraction(crypto?.day_kill_pct);
+  const fromSummaryTarget = asFraction(crypto?.day_target_pct);
+  const dayKillFrac = fromSummaryKill ?? asFraction(kill?.day_kill_pct);
+  const dayTargetFrac = fromSummaryTarget ?? asFraction(kill?.day_target_pct);
+  let source = null;
+  if (fromSummaryKill != null || fromSummaryTarget != null) source = "data/kpi_summary.json";
+  else if (dayKillFrac != null || dayTargetFrac != null) source = "data/model_scorecard.json";
+  return {
+    dayKillFrac,
+    dayTargetFrac,
+    source,
+    asOf: crypto?.as_of || kill?.as_of || null,
+  };
+}
+
+// The committed export. Callers that already hold a summary should pass it.
+export const LIVE_RAILS = publishedRails(summaryPublished, scorecardPublished);
+
+function railsFor(summary) {
+  if (summary == null) return LIVE_RAILS;
+  const published = publishedRails(summary, null);
+  if (published.dayKillFrac == null && published.dayTargetFrac == null) return LIVE_RAILS;
+  return {
+    dayKillFrac: published.dayKillFrac ?? LIVE_RAILS.dayKillFrac,
+    dayTargetFrac: published.dayTargetFrac ?? LIVE_RAILS.dayTargetFrac,
+    source: published.source,
+    asOf: published.asOf,
+  };
+}
+
 export function seedFor(row, seeds) {
   const table = seeds == null ? SEEDS_USD : seeds;
   const explicit = num(pick(row, ["start", "seed", "start_usd", "seed_usd", "book_usd"]));
@@ -70,11 +103,12 @@ export function money(seed, frac) {
   return Math.round((seed * frac + Number.EPSILON) * 100) / 100;
 }
 
-// Headroom inside the day-kill rail. dayKillFrac is the signed LIVE_RAILS
-// fraction. The budget is that fraction's magnitude times the running balance.
-// A negative day P&L spends the budget. A positive day does not add to it.
-// The result is never below zero. Export writes the same dollars from the
-// same LIVE_RAILS fraction. There is no second copy of the fraction here.
+// Headroom inside the day-kill rail. dayKillFrac is the signed published
+// fraction (LIVE_RAILS when the caller omits it). The budget is that
+// fraction's magnitude times the running balance. A negative day P&L spends
+// the budget. A positive day does not add to it. The result is never below
+// zero. Export writes the same dollars from the same published fraction.
+// There is no second copy of the fraction here.
 export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAILS.dayKillFrac) {
   const balance = num(runningBalance);
   const frac = num(dayKillFrac);
@@ -169,7 +203,8 @@ function accountUnrealizedUsd(book) {
 // Day P&L is the dollar on the file. Export fills it from the cash drop
 // when that drop has day_realized_usd. The day kill and the day target are
 // fractions of the same total as RUNNING BALANCE. Kill headroom is
-// max(0, |dayKillFrac| × that total + min(day P&L, 0)), using LIVE_RAILS.
+// max(0, |dayKillFrac| × that total + min(day P&L, 0)), using the published
+// crypto rail (the summary row when it has one, otherwise LIVE_RAILS).
 // When the RH total is known, running P&L is that total minus the combined
 // seed. Unrealized is the open lots' mark versus cost. Realized is running
 // minus unrealized, so the three match the cash-and-lots book.
@@ -280,7 +315,9 @@ export function cryptoBookView(book, summary) {
   if (bookUsd == null && rail == null) return null;
   // Same headroom export writes on kill_remaining_usd: the day-kill budget
   // on the running balance, reduced by a negative day, floored at zero.
-  const killHeadroom = runningBalance != null ? killRemainingUsd(runningBalance, dayPnl) : killStored;
+  const rails = railsFor(summary);
+  const killHeadroom =
+    runningBalance != null ? killRemainingUsd(runningBalance, dayPnl, rails.dayKillFrac) : killStored;
   const reconciled = reconciledPnl(book);
   let realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
@@ -304,10 +341,10 @@ export function cryptoBookView(book, summary) {
     asOf: warehouseSleeveAsOf(book, summary),
     signalGeneratedAt: book?.generated_at || null,
     dayPnl,
-    dayKillFrac: LIVE_RAILS.dayKillFrac,
-    dayKill: money(rail, LIVE_RAILS.dayKillFrac),
-    dayTargetFrac: LIVE_RAILS.dayTargetFrac,
-    dayTarget: money(rail, LIVE_RAILS.dayTargetFrac),
+    dayKillFrac: rails.dayKillFrac,
+    dayKill: money(rail, rails.dayKillFrac),
+    dayTargetFrac: rails.dayTargetFrac,
+    dayTarget: money(rail, rails.dayTargetFrac),
     killHeadroom,
     killHeadroomFrac: rail == null || rail === 0 || killHeadroom == null ? null : killHeadroom / rail,
     realizedPnl,
