@@ -1704,6 +1704,18 @@
     "fee_frac_of_book": 0.001067
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-12T15:02:06.168974+00:00",
+    "ticker": "ENA",
+    "side": "sell",
+    "notional_frac_of_book": 0.087933,
+    "pnl_frac_of_book": 0.002108,
+    "why": "Trail exit: ENA bid 0.22285 fell below the cost +5% floor 0.226172 (cost 0.215402) on the 11:01am fast-mover watch; sold the remaining 65%.",
+    "running_pnl_frac": 0.120313,
+    "running_balance_frac": 1.120313,
+    "fee_frac_of_book": 0.000833
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
