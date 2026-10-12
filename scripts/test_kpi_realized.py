@@ -1178,3 +1178,147 @@ def test_failed_robinhood_read_refresh_and_export_share_the_drop(monkeypatch, tm
     assert export_kpi.usd_equal(combined["running_pnl_usd"], published["running_pnl_usd"])
     assert export_kpi.usd_equal(combined["realized_pnl_usd"], published["realized_pnl_usd"])
     assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], published["unrealized_pnl_usd"])
+
+
+def test_refresh_cash_is_reused_when_export_rest_fails(monkeypatch, tmp_path, capsys):
+    """REST can succeed for refresh and fail for export. Both publish the first read."""
+    fills, marks = _sample_book()
+    path = tmp_path / "the-book-kpi-marks.json"
+    monkeypatch.setenv("KPI_MARKS_PATH", str(path))
+    monkeypatch.setenv("KPI_MARKS_RUN_ID", "run-shared")
+    (tmp_path / "rh_cash.json").write_text(
+        json.dumps(
+            {
+                "USD": 1,
+                "USDC": 1,
+                "as_of": "2026-06-02T00:00:00Z",
+                "day_realized_usd": -1.25,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "live_book.json").write_text(
+        json.dumps(
+            {
+                "book_usd": 1,
+                "day_pnl_usd": 0,
+                "kill_remaining_usd": 1,
+                "running_balance_usd": 1,
+                "running_pnl_usd": 0,
+                "realized_pnl_usd": 0,
+                "unrealized_pnl_usd": 0,
+                "holdings": [
+                    {"ticker": "USD", "sleeve": "crypto", "value_usd": 1},
+                    {"ticker": "USDC", "sleeve": "crypto", "value_usd": 1},
+                ],
+                "positions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls = {"n": 0}
+    rest_cash = {"USD": 80.25, "USDC": 4.75}
+
+    def rest_then_fail(_env=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return dict(rest_cash)
+        raise RuntimeError("Robinhood cash read failed. Holdings were not refreshed.")
+
+    monkeypatch.setattr(export_kpi, "load_rh_cash", rest_then_fail)
+    monkeypatch.setattr(export_kpi, "DATA", tmp_path)
+    env = {"RH_API_KEY": "k", "RH_BASE64_PRIVATE_KEY": "p", "RH_AGENTIC_ACCOUNT": "acct"}
+    as_of = "2026-06-02T00:00:00Z"
+    account_book.save_marks(marks, as_of)
+    refresh_cash, refresh_origin = account_book.read_cash(env, tmp_path)
+    account_book.save_shared_cash(refresh_cash, refresh_origin, as_of)
+    account_book.mark_unchanged(set())
+    shared = account_book.load_shared_cash()
+    assert shared is not None
+    export_cash, export_origin = shared
+    assert calls["n"] == 1
+    assert refresh_origin == export_origin == "robinhood"
+    assert account_book.cash_total(refresh_cash) == account_book.cash_total(export_cash) == Decimal("85")
+    stamped = json.loads(path.read_text(encoding="utf-8"))
+    assert stamped["run_id"] == stamped["cash"]["run_id"] == "run-shared"
+    assert stamped["cash"]["source"] == "robinhood"
+    assert stamped["cash"]["as_of"] == as_of
+    assert "marks" in stamped
+    rows, _opens = refresh.build_rows(fills, marks, {}, as_of, cash=refresh_cash)
+    combined = {row["sleeve"]: row for row in rows}["combined"]
+    positions = export_kpi.card_positions(fills, marks)
+    published = export_kpi.refresh_live_book(tmp_path, fetch=False, cash=export_cash, positions=positions)
+    assert export_kpi.usd_equal(combined["running_balance_usd"], published["running_balance_usd"])
+    assert export_kpi.usd_equal(combined["running_pnl_usd"], published["running_pnl_usd"])
+    assert export_kpi.usd_equal(combined["realized_pnl_usd"], published["realized_pnl_usd"])
+    assert export_kpi.usd_equal(combined["unrealized_pnl_usd"], published["unrealized_pnl_usd"])
+    assert calls["n"] == 1
+
+    stale = json.loads(path.read_text(encoding="utf-8"))
+    stale["written_at"] = "2020-01-01T00:00:00Z"
+    path.write_text(json.dumps(stale), encoding="utf-8")
+    assert account_book.load_shared_cash() is None
+    assert "stale" in capsys.readouterr().err
+    try:
+        export_kpi.resolve_run_cash(True)
+    except RuntimeError as exc:
+        assert "Refusing a second cash read" in str(exc)
+    else:
+        raise AssertionError("a stale stamp after refresh read cash again")
+    assert calls["n"] == 1
+
+    path.write_text(json.dumps(stale), encoding="utf-8")
+    fallback_cash, fallback_origin = export_kpi.resolve_run_cash(False)
+    warned = capsys.readouterr().err
+    assert "stale" in warned
+    assert "export read cash itself" in warned
+    assert calls["n"] == 2
+    assert fallback_origin == "rh_cash.json"
+    assert account_book.cash_total(fallback_cash) == Decimal("2")
+    assert account_book.cash_total(fallback_cash) != account_book.cash_total(refresh_cash)
+    assert fallback_cash["day_realized_usd"] == -1.25
+
+    path.unlink()
+    assert account_book.load_shared_cash() is None
+    assert "missing" in capsys.readouterr().err
+    try:
+        export_kpi.resolve_run_cash(True)
+    except RuntimeError as exc:
+        assert "missing or stale" in str(exc)
+    else:
+        raise AssertionError("a missing marks file after refresh read cash again")
+    assert calls["n"] == 2
+
+    account_book.save_marks(marks, as_of)
+    account_book.save_shared_cash(refresh_cash, refresh_origin, as_of)
+    other = json.loads(path.read_text(encoding="utf-8"))
+    other["run_id"] = "other-run"
+    other["cash"]["run_id"] = "other-run"
+    path.write_text(json.dumps(other), encoding="utf-8")
+    assert account_book.load_shared_cash() is None
+    assert "run id" in capsys.readouterr().err
+
+    account_book.save_marks(marks, as_of)
+    account_book.save_shared_cash(
+        {
+            "USD": "3.5",
+            "USDC": "1.5",
+            "day_realized_usd": -1.25,
+            "as_of": "2026-06-01T00:00:00Z",
+        },
+        "rh_cash.json",
+        as_of,
+    )
+    reused, drop_origin = account_book.load_shared_cash()
+    assert drop_origin == "rh_cash.json"
+    assert reused["day_realized_usd"] == -1.25
+    assert reused["as_of"] == "2026-06-01T00:00:00Z"
+    assert account_book.cash_total(reused) == Decimal("5")
+    account_book.save_shared_cash(None, None, as_of)
+    absent_cash, absent_origin = account_book.load_shared_cash()
+    assert absent_cash is None and absent_origin is None
+
+    main_src = Path(export_kpi.__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
+    assert main_src.find("load_shared_cash(") < main_src.find("account_book.read_cash(")
+    assert "Refusing a second cash read" in main_src
+    assert "RH_API_KEY" not in Path(account_book.__file__).read_text(encoding="utf-8").split("def save_shared_cash", 1)[1].split("def _shared_cash_usable", 1)[0]
