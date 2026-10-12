@@ -4672,13 +4672,11 @@ def main(argv: list[str] | None = None) -> int:
             assert_summary_fresh(bundle["kpi_summary"], unchanged=account_book.unchanged_sleeves())
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
-        # Same path as refresh. Unset keys skip REST. A failed or incomplete
-        # GET is logged and the desk drop is used. Cash is missing only when
-        # that drop fails too, and the lines already on the file stay.
-        # Live balances are not hardcoded here.
-        import account_book
-
-        cash, origin = account_book.read_cash()
+        # Refresh already wrote this run's cash onto the shared marks file.
+        # Reuse that stamp. A missing or stale file fails closed when a
+        # refresh was expected, and otherwise reads cash itself and logs it.
+        # Unset keys skip REST. Live balances are not hardcoded here.
+        cash, origin = resolve_run_cash(refresh_expected)
         if origin == "rh_cash.json" and not (
             (os.environ.get("RH_API_KEY") or "").strip()
             and (os.environ.get("RH_BASE64_PRIVATE_KEY") or "").strip()
@@ -4724,6 +4722,31 @@ def main(argv: list[str] | None = None) -> int:
         + ", ".join(f"{name}={bundle['meta']['row_counts'][name]}" for name in VIEWS)
     )
     return 0
+
+
+def resolve_run_cash(refresh_expected: bool):
+    """Reuse the cash refresh wrote onto the shared marks file.
+
+    A fresh stamp for this run is the cash both steps publish. A missing
+    or stale file is logged. When this export follows a refresh, a second
+    read can disagree with the snapshot, so the export fails closed. A
+    standalone export reads cash itself and logs that.
+    """
+    import account_book
+
+    shared = account_book.load_shared_cash()
+    if shared is not None:
+        return shared
+    if refresh_expected:
+        raise RuntimeError(
+            "shared cash marks are missing or stale. "
+            "Refusing a second cash read that can disagree with the snapshot."
+        )
+    print(
+        "warning: shared cash marks missing or stale; export read cash itself",
+        file=sys.stderr,
+    )
+    return account_book.read_cash()
 
 
 if __name__ == "__main__":

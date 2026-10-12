@@ -13,9 +13,10 @@ set. Running P&L is that balance minus the combined seed. Equities lots
 stay on the equities sleeve row and are not in this balance.
 Unrealized keeps the Robinhood basis (buy fee stays out of average cost).
 Realized is running P&L minus unrealized, so buy fees land there through
-cash. A failed Robinhood cash read falls back to the desk drop. When cash
-is still missing, the previous combined dollars and the previous combined
-as_of stay. It does not insert a new combined clock, and it does not fall
+cash. A failed Robinhood cash read falls back to the desk drop. The cash this
+run used, its source, and as_of are written onto the shared marks file so
+export does not read cash again. When cash is still missing, the previous
+combined dollars and the previous combined as_of stay. It does not insert a new combined clock, and it does not fall
 back to seed + trade P&L + open mark-to-market.
 Per-trade pnl_trade_usd is still the close leg only. avg_cost is the open
 cost that matches those stored close dollars. A FIFO close leaves the
@@ -1126,6 +1127,7 @@ def refresh(dry_run: bool) -> int:
 
     account_book.save_marks(marks, as_of)
     cash, origin = account_book.read_cash(env, Path(__file__).resolve().parents[1] / "data")
+    account_book.save_shared_cash(cash, origin, as_of)
     if origin:
         print(f"account cash from {origin}", file=sys.stderr)
     rows, opens = build_rows(trades, marks, priors, as_of, cash=cash)
