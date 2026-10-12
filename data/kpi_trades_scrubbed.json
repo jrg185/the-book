@@ -1716,6 +1716,18 @@
     "fee_frac_of_book": 0.000833
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-12T17:05:41.194515+00:00",
+    "ticker": "ALGO",
+    "side": "sell",
+    "notional_frac_of_book": 0.089767,
+    "pnl_frac_of_book": 0.004001,
+    "why": "Trail exit: ALGO bid 0.12280878 fell below cost+5% floor 0.123524 (cost 0.117642) on the 1:03pm check-in; sold remaining scaled lot 218.8.",
+    "running_pnl_frac": 0.124314,
+    "running_balance_frac": 1.124314,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
