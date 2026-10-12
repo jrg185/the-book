@@ -1,5 +1,6 @@
 import { agoText, permalink, shareUrl, SITE_URL } from "../board.js";
 import {
+  fullPrecisionLine,
   countLabel,
   emptyBundle,
   formatProb,
@@ -338,6 +339,8 @@ function renderCalibration(bundle) {
     stat("Log loss", formatScore(calibration.logloss), "Lower is better"),
     stat("Brier", formatScore(calibration.brier), "0.25 is a coin flip"),
   );
+  const fullLine = fullPrecisionLine(calibration.fullPrecision);
+  if (fullLine) chips.append(el("p", "calib-note", fullLine));
   const legend = el("div", "legend");
   for (const [cls, text] of [
     ["calib-bar", "Realized label rate"],

@@ -98,6 +98,21 @@ def dirty_rows():
 
 
 class RunsExportTests(unittest.TestCase):
+    def test_full_precision_calibration_uses_payload_rows_only(self):
+        rows = [
+            {"p_up": 0.9, "label_up_net30": True, "p_up_source": "payload"},
+            {"p_up": 0.2, "label_up_net30": False, "p_up_source": "payload"},
+            {"p_up": 0.5, "label_up_net30": True, "p_up_source": "thesis_2dp"},
+            {"p_up": None, "label_up_net30": True, "p_up_source": "payload"},
+        ]
+        full = export_runs.full_precision_calibration(rows)
+        self.assertEqual(full["n_scored"], 2)
+        self.assertAlmostEqual(full["brier"], (0.1 ** 2 + 0.2 ** 2) / 2, places=6)
+        self.assertEqual(set(full), {"n_scored", "logloss", "brier"})
+        main = export_runs.calibrate(rows)
+        self.assertEqual(main["n_scored"], 3)
+        self.assertIsNone(export_runs.full_precision_calibration([{"p_up": 0.5, "label_up_net30": True}]))
+
     def test_calibration_covers_all_predictions_not_just_exported(self):
         runs, predictions, versions = dirty_rows()
         extra = []

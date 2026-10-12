@@ -86,6 +86,11 @@ export function formatReturn(value) {
   return `${sign}${points.toFixed(2)}%`;
 }
 
+export function fullPrecisionLine(fullPrecision) {
+  if (!fullPrecision || !fullPrecision.nScored) return "";
+  return `Full-precision only: n=${fullPrecision.nScored.toLocaleString("en-US")}, logloss ${formatScore(fullPrecision.logloss)}, Brier ${formatScore(fullPrecision.brier)}`;
+}
+
 export function formatScore(value) {
   const number = asNumber(value);
   if (number == null) return "";
@@ -333,6 +338,15 @@ function normalizeVersion(row) {
   return version;
 }
 
+function normalizeFullPrecision(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    nScored: Number.isInteger(raw.n_scored) ? raw.n_scored : 0,
+    logloss: asNumber(raw.logloss),
+    brier: asNumber(raw.brier),
+  };
+}
+
 function normalizeCalibration(raw) {
   const body = raw && typeof raw === "object" ? raw : {};
   const bins = Array.isArray(body.bins) ? body.bins : [];
@@ -342,6 +356,7 @@ function normalizeCalibration(raw) {
     nUnscored: Number.isInteger(body.n_unscored) ? body.n_unscored : null,
     logloss: asNumber(body.logloss),
     brier: asNumber(body.brier),
+    fullPrecision: normalizeFullPrecision(body.full_precision),
     bins: bins.map((slot) => ({
       lo: asNumber(slot && slot.lo),
       hi: asNumber(slot && slot.hi),

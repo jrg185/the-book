@@ -109,3 +109,12 @@ test("the runs page does not format dollars or keep private fields", () => {
   assert.equal(emptyBundle().source, "empty");
   assert.equal(emptyBundle().calibration.nResolved, 0);
 });
+
+test("full-precision calibration line", async () => {
+  const { fullPrecisionLine } = await import("../runs/derive.js");
+  assert.equal(fullPrecisionLine(null), "");
+  assert.equal(fullPrecisionLine({ nScored: 0, logloss: null, brier: null }), "");
+  const line = fullPrecisionLine({ nScored: 3357, logloss: 0.69, brier: 0.248 });
+  assert.match(line, /^Full-precision only: n=3,357, logloss /);
+  assert.match(line, /Brier /);
+});
