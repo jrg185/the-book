@@ -1668,6 +1668,18 @@
     "fee_frac_of_book": 0.0006
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-12T06:21:41+00:00",
+    "ticker": "UNI",
+    "side": "sell",
+    "notional_frac_of_book": 0.114767,
+    "pnl_frac_of_book": 0.004218,
+    "why": "Trail exit on kept lot: bid 7.66531 fell under floor 7.67842 (cost +5%)",
+    "running_pnl_frac": 0.108652,
+    "running_balance_frac": 1.108652,
+    "fee_frac_of_book": 0.0011
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
