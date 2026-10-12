@@ -344,7 +344,7 @@ MIGRATION_HINT = (
     "with SUPABASE_DB_URL before this sync. kpi_trades was not changed."
 )
 MISSING_SB = (
-    "RH fill sync needs SUPABASE_SERVICE_ROLE_KEY or SUPABASE_DB_URL. "
+    "RH fill sync needs SIGNALS_SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SERVICE_ROLE_KEY, or a valid SUPABASE_DB_URL. "
     "kpi_trades was not changed."
 )
 
@@ -1231,7 +1231,8 @@ def row_payload(rows: list[dict], include_notes: bool) -> list[dict]:
 
 def upsert_rest(base_url: str, key: str, rows: list[dict]) -> None:
     path = "/rest/v1/kpi_trades?on_conflict=order_id"
-    headers = {"Prefer": "resolution=ignore-duplicates,return=minimal"}
+    # Fresh rows are new order ids (drop_known), so a merge only matters on a race.
+    headers = {"Prefer": "resolution=merge-duplicates,return=minimal"}
     try:
         rest_call(base_url, key, path, method="POST", body=row_payload(rows, True), extra_headers=headers)
     except SyncError as exc:
@@ -1513,7 +1514,35 @@ def env_values() -> dict[str, str]:
         "RH_BASE64_PRIVATE_KEY",
         "RH_AGENTIC_ACCOUNT",
     )
-    return {name: (os.environ.get(name) or "").strip() for name in names}
+    env = {name: (os.environ.get(name) or "").strip() for name in names}
+    signals_key = (os.environ.get("SIGNALS_SUPABASE_SERVICE_ROLE_KEY") or "").strip()
+    if signals_key:
+        env["SUPABASE_SERVICE_ROLE_KEY"] = signals_key
+    if not valid_db_url(env["SUPABASE_DB_URL"]):
+        env["SUPABASE_DB_URL"] = ""
+    return env
+
+
+DB_URL_PLACEHOLDERS = ("placeholder", "your-", "your_", "<", "[", "xxxx", "changeme")
+
+
+def valid_db_url(value: str) -> bool:
+    """A real postgres URL: scheme, host, password, database, no placeholder text."""
+    text = (value or "").strip()
+    if not text or any(mark in text.lower() for mark in DB_URL_PLACEHOLDERS):
+        return False
+    try:
+        parts = urllib.parse.urlsplit(text)
+        host = parts.hostname
+        password = parts.password
+    except ValueError:
+        return False
+    return (
+        parts.scheme in {"postgres", "postgresql"}
+        and bool(host)
+        and bool(password)
+        and bool(parts.path.strip("/"))
+    )
 
 
 def feed_requested(env: dict[str, str], from_json: str | None, default_feed: Path) -> bool:
@@ -1558,6 +1587,7 @@ def load_requested_orders(env: dict[str, str], from_json: str | None, default_fe
 def public_sync_message(message: str) -> str:
     text = message
     for name in (
+        "SIGNALS_SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_DB_URL",
         "SYNC_RH_JSON",

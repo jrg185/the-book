@@ -149,5 +149,117 @@ class FillsPrivateTests(unittest.TestCase):
         self.assertIn("[redacted]", redacted)
 
 
+class _Resp:
+    def __init__(self, body):
+        self._body = json.dumps(body).encode("utf-8") if body is not None else b""
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+SELL_ID = "22222222-2222-4222-8222-222222222222"
+
+
+def _stored_buy() -> dict:
+    return {
+        "sleeve": "crypto", "ticker": "GRT", "side": "buy", "qty": "100",
+        "avg_price": "0.05", "timestamp_et": "2026-09-28T14:00:00-04:00",
+        "why": None, "pnl_trade_usd": "0", "order_id": ORDER_ID, "fee_usd": "0",
+    }
+
+
+def _sell_fill() -> dict:
+    fill = _fill(SELL_ID)
+    fill.update({"side": "sell", "average_price": "0.07", "fee": "0", "created_at": "2026-09-29T18:00:00Z"})
+    return fill
+
+
+class RestBackendTests(unittest.TestCase):
+    ENV = {
+        "SIGNALS_SUPABASE_SERVICE_ROLE_KEY": "signals-test-key",
+        "SUPABASE_SERVICE_ROLE_KEY": "other-project-key",
+        "SUPABASE_DB_URL": "postgres://placeholder",
+        "SUPABASE_URL": "",
+    }
+
+    def test_env_prefers_signals_key_and_drops_placeholder_db_url(self):
+        with mock.patch.dict(os.environ, self.ENV, clear=False):
+            env = sync.env_values()
+        self.assertEqual(env["SUPABASE_SERVICE_ROLE_KEY"], "signals-test-key")
+        self.assertEqual(env["SUPABASE_DB_URL"], "")
+        self.assertIn("bsnqwgbshwszbjncglqx", sync.DEFAULT_URL)
+
+    def test_valid_db_url(self):
+        self.assertTrue(sync.valid_db_url("postgresql://u:pw@db.example.co:5432/postgres"))
+        for bad in ("", "postgres://placeholder", "https://x.co", "postgres://u@h/db",
+                    "postgresql://u:[YOUR-PASSWORD]@h/db", "not a url"):
+            self.assertFalse(sync.valid_db_url(bad), bad)
+
+    def test_sync_upserts_over_rest_with_merge_duplicates(self):
+        calls = []
+
+        def urlopen(request, timeout=0):
+            calls.append(request)
+            if request.get_method() == "GET":
+                return _Resp([_stored_buy()])
+            return _Resp(None)
+
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fills.json"
+            path.write_text(json.dumps([_sell_fill()]), encoding="utf-8")
+            with (
+                mock.patch.dict(os.environ, self.ENV, clear=False),
+                mock.patch.object(sync.urllib.request, "urlopen", urlopen),
+                mock.patch.object(sync, "apply_migration", side_effect=AssertionError("no psycopg")),
+                mock.patch.object(sync, "remember_cursor"),
+            ):
+                out = io.StringIO()
+                with redirect_stdout(out), redirect_stderr(io.StringIO()):
+                    code = upsert_fills_direct.main([str(path)])
+        self.assertEqual(code, 0)
+        self.assertIn("warehouse=rest", out.getvalue())
+        self.assertIsNone(UUID_RE.search(out.getvalue()))
+        posts = [c for c in calls if c.get_method() == "POST"]
+        self.assertEqual(len(posts), 1)
+        post = posts[0]
+        self.assertTrue(post.full_url.startswith(sync.DEFAULT_URL + "/rest/v1/kpi_trades?on_conflict=order_id"))
+        self.assertIn("resolution=merge-duplicates", post.get_header("Prefer"))
+        self.assertEqual(post.get_header("Apikey"), "signals-test-key")
+        body = json.loads(post.data.decode("utf-8"))
+        self.assertEqual(body[0]["order_id"], SELL_ID)
+        self.assertEqual(sync.dec(body[0]["pnl_trade_usd"]), sync.dec("2"))
+
+    def test_dry_run_reads_rest_and_reprices_without_ids(self):
+        rows = [_stored_buy(), {**_stored_buy(), "side": "sell", "avg_price": "0.07",
+                                "timestamp_et": "2026-09-29T14:00:00-04:00",
+                                "pnl_trade_usd": "2", "order_id": SELL_ID}]
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fills.json"
+            path.write_text(json.dumps([_sell_fill()]), encoding="utf-8")
+            env = {"SUPABASE_SERVICE_ROLE_KEY": "k", "SUPABASE_DB_URL": "", "SUPABASE_URL": ""}
+            with mock.patch.object(sync, "fetch_trades_rest", return_value=rows):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    code = upsert_fills_direct.main([str(path), "--dry-run", "--reprice"], env=env)
+                plain = io.StringIO()
+                with redirect_stdout(plain):
+                    upsert_fills_direct.main([str(path), "--dry-run"], env=env)
+        self.assertEqual(code, 0)
+        self.assertIn("upserted=1", out.getvalue())
+        self.assertIn("pnl=2", out.getvalue())
+        self.assertIn("upserted=0", plain.getvalue())
+        self.assertIsNone(UUID_RE.search(out.getvalue() + plain.getvalue()))
+
+    def test_public_message_redacts_signals_key(self):
+        with mock.patch.dict(os.environ, self.ENV, clear=False):
+            self.assertNotIn("signals-test-key", sync.public_sync_message("bad signals-test-key"))
+
+
 if __name__ == "__main__":
     unittest.main()

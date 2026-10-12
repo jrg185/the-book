@@ -163,7 +163,8 @@ python3 scripts/sync_rh_kpi_trades.py --print-cursor
 Call Robinhood Trading MCP `get_crypto_orders` with `rhs_account_number` set to `RH_AGENTIC_ACCOUNT`, `state` `filled`, and `updated_at_gte` set to the printed timestamp. If the response has `next`, call again with `cursor` set to that value until `next` is absent. Save the orders as one JSON document (`{"results":[...]}` or `{"data":{"results":[...]}}` or a list). USDC is skipped by the script. Sleeve is `crypto` or `equities` from asset class.
 
 Fills stay off the public Actions log. Workflow inputs are printed there.
-From the desk or the box, with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set:
+From the desk or the box, with `SIGNALS_SUPABASE_SERVICE_ROLE_KEY` set (falls back to `SUPABASE_SERVICE_ROLE_KEY`; `SUPABASE_URL` defaults to the agentic-signals project). No Postgres URL is needed. Preview first with `--dry-run`, which reads stored rows over REST and prints ticker/side/qty/pnl only:
+`python3 scripts/upsert_fills_direct.py fills.json --dry-run`
 `python3 scripts/upsert_fills_direct.py fills.json`
 `gh workflow run export-kpi.yml --repo jrg185/the-book`
 That upserts `kpi_trades` by order id, prints counts only, and never prints an order id. The workflow run has no fill payload. When `data/rh_kpi_sync_cursor.json` changes, the export commit stores the next poll timestamp. Pull before the next hour.
@@ -197,7 +198,7 @@ A local upsert, without Actions, is the same mapper:
 python3 scripts/upsert_fills_direct.py fills.json
 ```
 
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` perform that upsert. `SUPABASE_DB_URL` is optional and is not on the repo today. REST is enough after the SQL below has been applied. A new `order_id` is `POST /rest/v1/kpi_trades?on_conflict=order_id` with `Prefer: resolution=ignore-duplicates`, so qty and price are not rewritten. When that order is already stored, a human `why` / `notes` / `exit` on a later payload is a PATCH of those columns only, and only while the stored why is still empty or a machine stub.
+`SIGNALS_SUPABASE_SERVICE_ROLE_KEY` (preferred) or `SUPABASE_SERVICE_ROLE_KEY`, plus `SUPABASE_URL` (default: the agentic-signals project), perform that upsert over REST. `SUPABASE_DB_URL` is optional and is used, through psycopg, only when it is a real postgres URL; a placeholder is ignored. REST is enough after the SQL below has been applied. Stored rows are read over REST to seed the FIFO pricer, and an order id already stored is not sent again. A new `order_id` is `POST /rest/v1/kpi_trades?on_conflict=order_id` with `Prefer: resolution=merge-duplicates`; re-sending identical values leaves the row unchanged. `--dry-run --reprice` prices stored fills as if new, to check P&L. When that order is already stored, a human `why` / `notes` / `exit` on a later payload is a PATCH of those columns only, and only while the stored why is still empty or a machine stub.
 
 The pull-request check only runs `--self-test`. If a fill was sent and the JSON is bad, the sync exits 1 and stamps `data/meta.json` (**Export failed**). A scheduled run with no payload skips the sync and still refreshes.
 
