@@ -168,6 +168,16 @@ class BookSeedLoaderTests(unittest.TestCase):
                     hits.append(f"{rel}:{lineno}: {line.strip()}")
         self.assertEqual(hits, [])
 
+    def test_browser_modules_do_not_use_json_import_attributes(self):
+        hits = []
+        for rel in production_files():
+            if rel.suffix != ".js":
+                continue
+            text = (ROOT / rel).read_text(encoding="utf-8")
+            if 'type: "json"' in text or "type: 'json'" in text:
+                hits.append(str(rel))
+        self.assertEqual(hits, [])
+
     def test_slice_and_fee_residual_are_not_seed_literals(self):
         self.assertEqual(money_seed_hits('return "error", raw[:300], "stale-snapshot"'), [])
         self.assertEqual(money_seed_hits('fee == "14.800000"'), [])

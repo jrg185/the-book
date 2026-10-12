@@ -9,6 +9,7 @@ import {
   holdingRows,
   killRemainingUsd,
   LIVE_RAILS,
+  loadPublishedRails,
   mergeLiveBook,
   openPositionRows,
   reconciledPnl,
@@ -362,6 +363,8 @@ test("a published summary rail replaces the committed export", () => {
   const derive = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
   assert.equal(/dayKillFrac\s*[:=]\s*-?\d/.test(derive), false);
   assert.equal(/dayTargetFrac\s*[:=]\s*-?\d/.test(derive), false);
+  assert.equal(derive.includes('type: "json"'), false);
+  assert.equal(derive.includes("type: 'json'"), false);
   const crypto = summary.find((row) => row.sleeve === "crypto");
   assert.equal(LIVE_RAILS.source, "data/kpi_summary.json");
   assert.equal(LIVE_RAILS.dayKillFrac, Number(crypto.day_kill_pct));
@@ -378,6 +381,26 @@ test("a published summary rail replaces the committed export", () => {
   const committed = cryptoBookView(book);
   assertCentsEqual(committed.dayKill, railDollars(400, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(committed.dayTarget, railDollars(400, LIVE_RAILS.dayTargetFrac));
+});
+
+test("rails load through fetch and keep the published summary", async () => {
+  const urls = [];
+  const loaded = await loadPublishedRails(async (url) => {
+    urls.push(String(url));
+    const name = String(url).includes("model_scorecard.json") ? "model_scorecard.json" : "kpi_summary.json";
+    return {
+      ok: true,
+      json: async () => JSON.parse(readFileSync(new URL(`../data/${name}`, import.meta.url), "utf8")),
+    };
+  });
+  assert.equal(urls.length, 2);
+  assert.equal(urls.some((url) => url.includes("kpi_summary.json")), true);
+  assert.equal(urls.some((url) => url.includes("model_scorecard.json")), true);
+  const crypto = summary.find((row) => row.sleeve === "crypto");
+  assert.equal(loaded, LIVE_RAILS);
+  assert.equal(loaded.source, "data/kpi_summary.json");
+  assert.equal(loaded.dayKillFrac, Number(crypto.day_kill_pct));
+  assert.equal(loaded.dayTargetFrac, Number(crypto.day_target_pct));
 });
 
 test("the published book is the holdings sum, and the rails use the running balance", () => {

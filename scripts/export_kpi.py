@@ -3173,6 +3173,8 @@ def _assert_published_rails() -> None:
     derive = (ROOT / "derive.js").read_text(encoding="utf-8")
     if _RAIL_LITERAL.search(derive):
         raise RuntimeError("derive.js hardcoded a rail fraction")
+    if 'type: "json"' in derive or "type: 'json'" in derive:
+        raise RuntimeError("derive.js uses a JSON import attribute")
     summary = json.loads((DATA / "kpi_summary.json").read_text(encoding="utf-8"))
     crypto = next(row for row in summary if isinstance(row, dict) and _sleeve_name(row) == "crypto")
     rails = live_rails()
