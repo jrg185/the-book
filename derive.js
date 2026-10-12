@@ -7,8 +7,7 @@
 // This file never talks to Supabase.
 
 import { SEEDS_USD } from "./book_seeds.js";
-import summaryPublished from "./data/kpi_summary.json" with { type: "json" };
-import scorecardPublished from "./data/model_scorecard.json" with { type: "json" };
+import { readJsonUrl } from "./json_load.js";
 
 export { SEEDS_USD };
 
@@ -70,8 +69,32 @@ export function publishedRails(summary, scorecard) {
   };
 }
 
-// The committed export. Callers that already hold a summary should pass it.
-export const LIVE_RAILS = publishedRails(summaryPublished, scorecardPublished);
+// Filled by loadPublishedRails(). The page also passes the summary it fetched.
+export const LIVE_RAILS = {
+  dayKillFrac: null,
+  dayTargetFrac: null,
+  source: null,
+  asOf: null,
+};
+
+export function adoptPublishedRails(summary, scorecard) {
+  const rails = publishedRails(summary, scorecard);
+  LIVE_RAILS.dayKillFrac = rails.dayKillFrac;
+  LIVE_RAILS.dayTargetFrac = rails.dayTargetFrac;
+  LIVE_RAILS.source = rails.source;
+  LIVE_RAILS.asOf = rails.asOf;
+  return LIVE_RAILS;
+}
+
+// Browser: fetch the committed export. Node: read the same files from disk.
+// A caller that already holds the summary passes it to adoptPublishedRails.
+export async function loadPublishedRails(fetchImpl) {
+  const summary = await readJsonUrl(new URL("./data/kpi_summary.json", import.meta.url), fetchImpl);
+  const scorecard = await readJsonUrl(new URL("./data/model_scorecard.json", import.meta.url), fetchImpl);
+  return adoptPublishedRails(summary, scorecard);
+}
+
+await loadPublishedRails();
 
 function railsFor(summary) {
   if (summary == null) return LIVE_RAILS;

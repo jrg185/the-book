@@ -32,6 +32,7 @@ import {
   formatUsd,
   formatWinPct,
   formatWinRecord,
+  adoptPublishedRails,
   cardPositionRows,
   inferLiveBackend,
   labelFor,
@@ -1500,6 +1501,7 @@ async function loadAll(meta) {
     loadJson("data/model_scorecard.json", token).catch(() => null),
   ]);
   lastTrades = Array.isArray(trades) ? trades : [];
+  if (Array.isArray(summary)) adoptPublishedRails(summary, scorecard);
   state.points = curvePoints(curves, "crypto");
   const view = render(trades, meta, book, summary);
   renderChips(lastTrades, scorecard);

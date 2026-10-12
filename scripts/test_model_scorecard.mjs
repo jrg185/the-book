@@ -118,6 +118,8 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   const deriveSrc = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
   assert.equal(/dayKillFrac\s*[:=]\s*-?\d/.test(deriveSrc), false);
   assert.equal(/dayTargetFrac\s*[:=]\s*-?\d/.test(deriveSrc), false);
+  assert.equal(deriveSrc.includes('type: "json"'), false);
+  assert.equal(deriveSrc.includes("type: 'json'"), false);
 });
 
 test("book-fraction tolerance is half of 0.01 percent", () => {

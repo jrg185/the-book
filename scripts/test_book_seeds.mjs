@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { currentSeeds, SEEDS_USD, seedRows } from "../book_seeds.js";
 import { closedFillStats, feeDragFromTrades, money, SEEDS_USD as derivedSeeds } from "../derive.js";
 import { assertCentsEqual } from "./cents.mjs";
+
+test("the seed loader does not use a JSON import attribute", () => {
+  const src = readFileSync(new URL("../book_seeds.js", import.meta.url), "utf8");
+  assert.equal(src.includes('type: "json"'), false);
+  assert.equal(src.includes("type: 'json'"), false);
+});
 
 test("derive.js uses the config loader", () => {
   assert.deepEqual(derivedSeeds, SEEDS_USD);

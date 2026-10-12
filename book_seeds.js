@@ -1,5 +1,8 @@
 // Load config/book_seeds.json. That file is the only seed source.
-import seedConfig from "./config/book_seeds.json" with { type: "json" };
+// The browser fetches it. Node reads the file. There is no JSON import.
+import { readJsonUrl } from "./json_load.js";
+
+let seedConfig = null;
 
 function isIsoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -51,4 +54,5 @@ export function currentSeeds(config = seedConfig, on = null) {
   return out;
 }
 
-export const SEEDS_USD = currentSeeds();
+seedConfig = await readJsonUrl(new URL("./config/book_seeds.json", import.meta.url));
+export const SEEDS_USD = currentSeeds(seedConfig);
