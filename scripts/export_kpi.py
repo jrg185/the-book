@@ -2338,37 +2338,68 @@ def usd_differ(left, right) -> bool:
 
 
 _LIVE_RAILS: dict[str, Decimal] | None = None
+_RAIL_LITERAL = re.compile(r"day(?:Kill|Target)Frac\s*[:=]\s*-?\d")
+
+
+def published_rails(summary, scorecard) -> dict:
+    """Crypto day kill and day target from the published export.
+
+    The crypto row of kpi_summary wins. The scorecard kill block is the
+    fallback. Same order as derive.js publishedRails. Fractions above 1 in
+    absolute value are percent points.
+    """
+    rows = summary if isinstance(summary, list) else []
+    crypto = next((row for row in rows if isinstance(row, dict) and _sleeve_name(row) == "crypto"), None)
+    kill = scorecard.get("kill") if isinstance(scorecard, dict) and isinstance(scorecard.get("kill"), dict) else None
+    from_summary_kill = as_fraction(None if crypto is None else crypto.get("day_kill_pct"))
+    from_summary_target = as_fraction(None if crypto is None else crypto.get("day_target_pct"))
+    kill_frac = from_summary_kill if from_summary_kill is not None else as_fraction(None if kill is None else kill.get("day_kill_pct"))
+    target_frac = (
+        from_summary_target
+        if from_summary_target is not None
+        else as_fraction(None if kill is None else kill.get("day_target_pct"))
+    )
+    source = None
+    if from_summary_kill is not None or from_summary_target is not None:
+        source = "data/kpi_summary.json"
+    elif kill_frac is not None or target_frac is not None:
+        source = "data/model_scorecard.json"
+
+    def dec(value):
+        if value is None:
+            return None
+        return Decimal(str(value))
+
+    return {
+        "dayKillFrac": dec(kill_frac),
+        "dayTargetFrac": dec(target_frac),
+        "source": source,
+    }
 
 
 def live_rails() -> dict[str, Decimal]:
-    """dayKillFrac and dayTargetFrac from derive.js LIVE_RAILS.
+    """dayKillFrac and dayTargetFrac from the published crypto rail.
 
-    The card and this export share that object. This module does not keep
+    derive.js LIVE_RAILS reads the same two files. This module does not keep
     a second copy of the fractions.
     """
     global _LIVE_RAILS
     if _LIVE_RAILS is not None:
         return _LIVE_RAILS
-    text = (ROOT / "derive.js").read_text(encoding="utf-8")
-    match = re.search(r"export const LIVE_RAILS\s*=\s*\{([^}]+)\}", text)
-    if not match:
-        raise RuntimeError("derive.js LIVE_RAILS is missing")
-    body = match.group(1)
-    rails: dict[str, Decimal] = {}
-    for key in ("dayKillFrac", "dayTargetFrac"):
-        found = re.search(rf"{key}\s*:\s*(-?\d+(?:\.\d+)?)", body)
-        if not found:
-            raise RuntimeError(f"derive.js LIVE_RAILS has no {key}")
-        rails[key] = Decimal(found.group(1))
-    _LIVE_RAILS = rails
-    return rails
+    summary = json.loads((DATA / "kpi_summary.json").read_text(encoding="utf-8"))
+    scorecard = json.loads((DATA / "model_scorecard.json").read_text(encoding="utf-8"))
+    rails = published_rails(summary, scorecard)
+    if rails["dayKillFrac"] is None or rails["dayTargetFrac"] is None:
+        raise RuntimeError("published live rails are missing dayKillFrac or dayTargetFrac")
+    _LIVE_RAILS = {"dayKillFrac": rails["dayKillFrac"], "dayTargetFrac": rails["dayTargetFrac"]}
+    return _LIVE_RAILS
 
 
 def kill_remaining_usd(running_balance, day_pnl) -> float | None:
     """max(0, |dayKillFrac| × running balance + min(day P&L, 0)).
 
-    dayKillFrac is the signed rail from derive.js LIVE_RAILS. The budget is
-    its magnitude. A positive day does not increase headroom. The net day
+    dayKillFrac is the signed rail from the published crypto row. The budget
+    is its magnitude. A positive day does not increase headroom. The net day
     figure is used as-is. This does not apply a fee rate.
     """
     if running_balance is None:
@@ -3138,8 +3169,32 @@ def write_bundle(target: Path, bundle: dict) -> None:
     write_model_scorecard(target, bundle)
 
 
+def _assert_published_rails() -> None:
+    derive = (ROOT / "derive.js").read_text(encoding="utf-8")
+    if _RAIL_LITERAL.search(derive):
+        raise RuntimeError("derive.js hardcoded a rail fraction")
+    summary = json.loads((DATA / "kpi_summary.json").read_text(encoding="utf-8"))
+    crypto = next(row for row in summary if isinstance(row, dict) and _sleeve_name(row) == "crypto")
+    rails = live_rails()
+    expected_kill = Decimal(str(as_fraction(crypto.get("day_kill_pct"))))
+    expected_target = Decimal(str(as_fraction(crypto.get("day_target_pct"))))
+    if rails["dayKillFrac"] != expected_kill or rails["dayTargetFrac"] != expected_target:
+        raise RuntimeError(f"live rails {rails} are not the published crypto row")
+    if published_rails(summary, None)["source"] != "data/kpi_summary.json":
+        raise RuntimeError("crypto summary rail was not the source")
+    scorecard = json.loads((DATA / "model_scorecard.json").read_text(encoding="utf-8"))
+    fallback = published_rails([], scorecard)
+    if fallback["source"] != "data/model_scorecard.json":
+        raise RuntimeError("scorecard rail fallback was not used")
+    if fallback["dayKillFrac"] != Decimal(str(as_fraction(scorecard["kill"]["day_kill_pct"]))):
+        raise RuntimeError("scorecard kill rail was not read")
+    if published_rails([], {})["dayKillFrac"] is not None:
+        raise RuntimeError("a missing rail invented a fraction")
+
+
 def self_test() -> int:
     """Mixed history passes; a cohort whose latest rows are all stale fails."""
+    _assert_published_rails()
     marks = (0.1, 0.2)
     raw_lot = marks[0] + marks[1]
     rounded_lot = js_round_cents(raw_lot)

@@ -106,12 +106,18 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assertFracEqual(derived.killHeadroomFrac, scorecard.kill.kill_headroom_frac);
   assertCentsEqual(derived.killHeadroom, scorecard.kill.kill_headroom_usd);
   assert.equal(Number.isFinite(scorecard.kill.kill_headroom_usd), true);
+  assert.equal(LIVE_RAILS.source, "data/kpi_summary.json");
+  assertFracEqual(LIVE_RAILS.dayKillFrac, Number(crypto.day_kill_pct));
+  assertFracEqual(LIVE_RAILS.dayTargetFrac, Number(crypto.day_target_pct));
   assertFracEqual(derived.dayKillFrac, scorecard.kill.day_kill_pct);
   assertFracEqual(derived.dayKillFrac, LIVE_RAILS.dayKillFrac);
   assertCentsEqual(derived.dayKill, scorecard.kill.day_kill_usd);
   assertCentsEqual(derived.dayKill, money(derived.seed, LIVE_RAILS.dayKillFrac));
   assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
   assertFracEqual(derived.dayTargetFrac, LIVE_RAILS.dayTargetFrac);
+  const deriveSrc = readFileSync(new URL("../derive.js", import.meta.url), "utf8");
+  assert.equal(/dayKillFrac\s*[:=]\s*-?\d/.test(deriveSrc), false);
+  assert.equal(/dayTargetFrac\s*[:=]\s*-?\d/.test(deriveSrc), false);
 });
 
 test("book-fraction tolerance is half of 0.01 percent", () => {

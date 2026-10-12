@@ -1,7 +1,7 @@
 // Scoreboard helpers. No DOM, no network. Every number comes from data/*.json
 // or config/*.json. Rails, seeds, fees, and prices are never written here.
 
-import { asFraction, killRemainingUsd, num, SEEDS_USD, sleeveKey } from "./derive.js";
+import { killRemainingUsd, num, publishedRails, SEEDS_USD, sleeveKey } from "./derive.js";
 
 export const SITE_URL = "https://jrg185.github.io/the-book/";
 
@@ -30,22 +30,14 @@ export function seedReturn(runningPnl, seeds = SEEDS_USD) {
 
 // Day rails come from the warehouse export: the crypto row of kpi_summary,
 // then the scorecard kill block. A rail that neither file publishes stays null.
+// publishedRails in derive.js is that read. This file does not keep a fraction.
 export function liveRails(summary, scorecard) {
-  const rows = Array.isArray(summary) ? summary : [];
-  const crypto = rows.find((row) => sleeveKey(row) === "crypto") || null;
-  const kill = scorecard && typeof scorecard.kill === "object" ? scorecard.kill : null;
-  const fromSummaryKill = asFraction(crypto?.day_kill_pct);
-  const fromSummaryTarget = asFraction(crypto?.day_target_pct);
-  const killFrac = fromSummaryKill ?? asFraction(kill?.day_kill_pct);
-  const targetFrac = fromSummaryTarget ?? asFraction(kill?.day_target_pct);
-  let source = null;
-  if (fromSummaryKill != null || fromSummaryTarget != null) source = "data/kpi_summary.json";
-  else if (killFrac != null || targetFrac != null) source = "data/model_scorecard.json";
+  const rails = publishedRails(summary, scorecard);
   return {
-    killFrac,
-    targetFrac,
-    source,
-    asOf: crypto?.as_of || kill?.as_of || null,
+    killFrac: rails.dayKillFrac,
+    targetFrac: rails.dayTargetFrac,
+    source: rails.source,
+    asOf: rails.asOf,
   };
 }
 
