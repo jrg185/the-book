@@ -1752,6 +1752,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-13T22:53:44.107132+00:00",
+    "ticker": "CRV",
+    "side": "buy",
+    "notional_frac_of_book": 0.230633,
+    "pnl_frac_of_book": 0.0,
+    "why": "6:46pm ET check-in: artifact fdea202 (first post-#116 code) CRV p_up 0.521 >= live gate 0.52; new name; sized min(slot 12% x live book $93.00, live kill room $69.84, cash) = $69.84; exit = +5% take (35%) then trail at cost+5%",
+    "running_pnl_frac": 0.137644,
+    "running_balance_frac": 1.137644,
+    "fee_frac_of_book": 0.0022
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
