@@ -39,7 +39,7 @@ Pages serves that committed JSON. The browser only fetches `data/*.json`. Scorin
 
 Workflow: [`.github/workflows/export-kpi.yml`](.github/workflows/export-kpi.yml) (same bytes as [`scripts/export-kpi.yml`](scripts/export-kpi.yml)).
 
-- `workflow_dispatch`, `repository_dispatch` type `rh-fill`, pull requests (position math and the RH fill mapper), and pushes to `main` other than `data/**`
+- `workflow_dispatch`, `repository_dispatch` type `rh-fill` (no payload), pull requests (position math and the RH fill mapper), and pushes to `main` other than `data/**`
 - schedule: `0 * * * *` is the Robinhood poll and skips when `RH_API_KEY` or `RH_BASE64_PRIVATE_KEY` is unset. When the poll runs, it reads `RH_AGENTIC_ACCOUNT` and fails if that secret is unset. Mark refresh stays every 15 minutes on weekdays from 13:00–21:45 UTC, and hourly outside that window including weekends. Those mark crons do not call Robinhood
 - Desk fills are upserted by `scripts/upsert_fills_direct.py` before a `workflow_dispatch` that has no payload. A secrets-backed hourly poll still upserts `public.kpi_trades`, then the same run refreshes `kpi_sleeve_snapshots` and exports. A bad requested payload, or a failed refresh, does not commit KPI JSON
 - Reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `SUPABASE_DB_URL` is optional
@@ -169,28 +169,15 @@ From the desk or the box, with `SIGNALS_SUPABASE_SERVICE_ROLE_KEY` set (falls ba
 `gh workflow run export-kpi.yml --repo jrg185/the-book`
 That upserts `kpi_trades` by order id, prints counts only, and never prints an order id. The workflow run has no fill payload. When `data/rh_kpi_sync_cursor.json` changes, the export commit stores the next poll timestamp. Pull before the next hour.
 
-Bonus, not the standing path: send one fill as soon as you see it. Crypto or Equities Desk can use the same schema.
+Bonus, not the standing path: upsert one fill as soon as you see it, then kick export with an empty dispatch. Do not put fills in `workflow_dispatch` inputs or `repository_dispatch` `client_payload`. Those fields are stored on the public Actions run.
 
 ```bash
-gh api repos/jrg185/the-book/dispatches --method POST --input - <<'JSON'
-{
-  "event_type": "rh-fill",
-  "client_payload": {
-    "id": "11111111-1111-4111-8111-111111111111",
-    "currency_code": "GRT",
-    "side": "buy",
-    "state": "filled",
-    "cumulative_quantity": "100",
-    "average_price": "0.05",
-    "rounded_executed_notional": "5",
-    "fee": "0.01",
-    "created_at": "2026-09-28T18:00:00Z"
-  }
-}
-JSON
+python3 scripts/upsert_fills_direct.py fills.json
+gh workflow run export-kpi.yml --repo jrg185/the-book
+# or: gh api repos/jrg185/the-book/dispatches -f event_type=rh-fill
 ```
 
-`client_payload` must be a JSON object. One order, `{"results":[...]}`, or `{"data":{"results":[...]}}` all work. A list is not valid as `client_payload`. A list is the file `scripts/upsert_fills_direct.py` reads. The Action does not take that file as a workflow input. A `repository_dispatch` still writes its object to `/tmp/rh-fill.json` and runs `scripts/sync_rh_kpi_trades.py --from-json`. The same run then refreshes sleeve snapshots and exports. USDC and funding pairs are skipped. `sleeve` is `crypto` or `equities` from `asset_class` (a bare equity symbol also maps to `equities`). An object with `"asset_class": "equity"` and `"symbol": "QCOM"` is sleeve `equities`. Extra MCP fields and account numbers are not written. The Robinhood id is stored in `order_id` only. `why` and `notes` stay null unless the fill carries a human `why`, `notes`, `note`, or `exit`. A desk `exit` string is folded into `notes` and is not its own column. A machine `RH Agentic backfill|sync order <uuid>` string and the bare placeholder `backfill from RH` are not stored. On conflict, why/notes are updated only when the new why is human and the stored why is empty or a machine stub. A stored human why is left unchanged, including when a later payload is empty or a stub. A later hourly poll can attach ledger why, notes, or exit to an existing stub by `order_id`.
+The mapper reads a local file (one order, a list, `{"results":[...]}`, or `{"data":{"results":[...]}}`). USDC and funding pairs are skipped. `sleeve` is `crypto` or `equities` from `asset_class` (a bare equity symbol also maps to `equities`). An object with `"asset_class": "equity"` and `"symbol": "QCOM"` is sleeve `equities`. Extra MCP fields and account numbers are not written. The Robinhood id is stored in `order_id` only. `why` and `notes` stay null unless the fill carries a human `why`, `notes`, `note`, or `exit`. A desk `exit` string is folded into `notes` and is not its own column. A machine `RH Agentic backfill|sync order <uuid>` string and the bare placeholder `backfill from RH` are not stored. On conflict, why/notes are updated only when the new why is human and the stored why is empty or a machine stub. A stored human why is left unchanged, including when a later payload is empty or a stub. A later hourly poll can attach ledger why, notes, or exit to an existing stub by `order_id`.
 
 A local upsert, without Actions, is the same mapper:
 
@@ -200,7 +187,7 @@ python3 scripts/upsert_fills_direct.py fills.json
 
 `SIGNALS_SUPABASE_SERVICE_ROLE_KEY` (preferred) or `SUPABASE_SERVICE_ROLE_KEY`, plus `SUPABASE_URL` (default: the agentic-signals project), perform that upsert over REST. `SUPABASE_DB_URL` is optional and is used, through psycopg, only when it is a real postgres URL; a placeholder is ignored. REST is enough after the SQL below has been applied. Stored rows are read over REST to seed the FIFO pricer, and an order id already stored is not sent again. A new `order_id` is `POST /rest/v1/kpi_trades?on_conflict=order_id` with `Prefer: resolution=merge-duplicates`; re-sending identical values leaves the row unchanged. `--dry-run --reprice` prices stored fills as if new, to check P&L. When that order is already stored, a human `why` / `notes` / `exit` on a later payload is a PATCH of those columns only, and only while the stored why is still empty or a machine stub.
 
-The pull-request check only runs `--self-test`. If a fill was sent and the JSON is bad, the sync exits 1 and stamps `data/meta.json` (**Export failed**). A scheduled run with no payload skips the sync and still refreshes.
+The pull-request check only runs `--self-test`. A `workflow_dispatch` or `rh-fill` dispatch that still carries a fills payload fails closed without printing it. A scheduled run with no payload skips Robinhood unless the hourly poll secrets are set, then refreshes.
 
 Apply [`scripts/migrate_kpi_trades_order_id.sql`](scripts/migrate_kpi_trades_order_id.sql) before the first upsert. It adds nullable `order_id text`, copies uuids out of `RH Agentic backfill order <uuid>` / `RH Agentic sync order <uuid>`, and creates a unique index. When `SUPABASE_DB_URL` is set, the sync runs that file itself. A repeat `order_id` updates `why` and `notes` only when the new why is human and the stored why is empty or a machine stub. A stored human why is not replaced.
 
