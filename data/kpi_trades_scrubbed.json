@@ -1740,6 +1740,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-13T20:48:15.31617+00:00",
+    "ticker": "STRK",
+    "side": "buy",
+    "notional_frac_of_book": 0.14,
+    "pnl_frac_of_book": 0.0,
+    "why": "4:46pm ET check-in: artifact 5a7fb65 STRK p_up 0.545 >= live gate 0.52; add to held STRK; exit = new lot +5% take (35%) then trail at cost+5%",
+    "running_pnl_frac": 0.137644,
+    "running_balance_frac": 1.137644,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
