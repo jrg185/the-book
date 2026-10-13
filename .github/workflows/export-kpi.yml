@@ -6,8 +6,8 @@ name: Export KPI
 # both set. Hourly Actions poll skipped otherwise, exit 0. No Robinhood call.
 # That poll reads RH_AGENTIC_ACCOUNT and fails if the secret is unset.
 # Tonight Crypto Desk upserts fills with scripts/upsert_fills_direct.py, then
-# workflow_dispatch with no payload. Workflow inputs are public Actions logs.
-# Bonus: repository_dispatch rh-fill writes a temp file and upserts kpi_trades.
+# workflow_dispatch or repository_dispatch rh-fill with no payload. Workflow
+# inputs and client_payload are public Actions event data. Do not send fills.
 # The */15 cron only refreshes marks. A bad requested payload exits non-zero
 # and stamps data/meta.json. A failed refresh does the same.
 # Pull requests only self-test. ROBINHOOD_TOKEN is not used.
@@ -108,66 +108,8 @@ jobs:
           python3 -m pip install --disable-pip-version-check --break-system-packages 'pynacl>=1.5,<2'
           python3 scripts/sync_rh_kpi_trades.py --from-rh
 
-      - name: Stage on-fill JSON
-        id: stage
-        run: |
-          python3 - <<'PY'
-          import json, os, sys
-          from pathlib import Path
-
-          dest = Path("/tmp/rh-fill.json")
-          name = os.environ.get("GITHUB_EVENT_NAME") or ""
-          output = os.environ.get("GITHUB_OUTPUT")
-
-          def publish(path: str) -> None:
-              if output:
-                  with open(output, "a", encoding="utf-8") as handle:
-                      handle.write(f"feed={path}\n")
-              print("staged fills feed")
-
-          if name == "workflow_dispatch":
-              event_path = os.environ.get("GITHUB_EVENT_PATH") or ""
-              event = {}
-              if event_path and Path(event_path).is_file():
-                  try:
-                      event = json.loads(Path(event_path).read_text(encoding="utf-8"))
-                  except (OSError, json.JSONDecodeError):
-                      sys.exit("workflow event could not be read. Fills were not accepted.")
-              inputs = event.get("inputs") if isinstance(event, dict) else None
-              if isinstance(inputs, dict) and any(str(value or "").strip() for value in inputs.values()):
-                  sys.exit(
-                      "This workflow does not accept a fills payload. "
-                      "Run scripts/upsert_fills_direct.py, then dispatch Export KPI with no inputs."
-                  )
-
-          if name == "repository_dispatch":
-              event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-              client = event.get("client_payload")
-              if not isinstance(client, dict) or not client:
-                  sys.exit("rh-fill dispatch needs a client_payload object. kpi_trades was not changed.")
-              dest.write_text(json.dumps(client), encoding="utf-8")
-              publish(str(dest))
-          elif os.environ.get("RH_FILLS_PATH"):
-              publish(os.environ["RH_FILLS_PATH"])
-          elif Path("data/rh_fills.json").is_file():
-              publish("data/rh_fills.json")
-          else:
-              print("No fill payload. Scheduled Export KPI does not poll Robinhood.")
-              if output:
-                  with open(output, "a", encoding="utf-8") as handle:
-                      handle.write("feed=\n")
-          PY
-
-      - name: Sync RH fills into kpi_trades
-        if: steps.stage.outputs.feed != ''
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
-        run: |
-          python3 scripts/sync_rh_kpi_trades.py --self-test
-          python3 scripts/sync_rh_kpi_trades.py --from-json "${{ steps.stage.outputs.feed }}"
+      - name: Refuse public fill payloads
+        run: python3 scripts/refuse_public_fill_payload.py
 
       - name: Refresh kpi_sleeve_snapshots
         env:

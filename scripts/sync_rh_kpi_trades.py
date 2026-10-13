@@ -36,9 +36,9 @@ RH_BASE64_PRIVATE_KEY are both set. If either is absent, that step exits 0
 and does not call Robinhood. --from-rh reads the account from
 RH_AGENTIC_ACCOUNT and fails if that variable is unset.
 
-Bonus, not the standing path: repository_dispatch rh-fill, or a fill JSON
-passed the moment a desk sees one. Same schema. The */15 cron only refreshes
-marks.
+Bonus, not the standing path: repository_dispatch rh-fill with an empty
+payload kicks export after a local upsert. Do not put fills in
+client_payload. The */15 cron only refreshes marks.
 
 If no fills feed is present, this script exits 0. Fail-loud (exit 1 and
 stamp data/meta.json) only when a feed was explicitly requested and the input
@@ -2279,7 +2279,11 @@ def self_test() -> int:
         raise SyncError("migration does not copy tonight's backfill uuid onto order_id")
     workflow = (ROOT / ".github" / "workflows" / "export-kpi.yml").read_text(encoding="utf-8")
     if "repository_dispatch:" not in workflow or "rh-fill" not in workflow:
-        raise SyncError("export workflow has no rh-fill ingest")
+        raise SyncError("export workflow has no rh-fill trigger")
+    if "refuse_public_fill_payload.py" not in workflow:
+        raise SyncError("export workflow does not refuse public fill payloads")
+    if "/tmp/rh-fill.json" in workflow or "steps.stage.outputs.feed" in workflow:
+        raise SyncError("export workflow still stages a public fills feed")
     if 'cron: "0 * * * *"' not in workflow:
         raise SyncError("export workflow has no hourly poll cron")
     if "Hourly Actions poll skipped" not in workflow:

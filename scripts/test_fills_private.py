@@ -18,6 +18,7 @@ ROOT = SCRIPTS.parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+import refuse_public_fill_payload
 import sync_rh_kpi_trades as sync
 import upsert_fills_direct
 
@@ -71,13 +72,59 @@ class FillsPrivateTests(unittest.TestCase):
             workflow = (ROOT / relative).read_text(encoding="utf-8")
             self.assertNotIn("sync_rh_json", workflow, relative)
             self.assertNotIn("github.event.inputs", workflow, relative)
-            self.assertIn("does not accept a fills payload", workflow, relative)
+            self.assertNotIn("/tmp/rh-fill.json", workflow, relative)
+            self.assertNotIn("steps.stage.outputs.feed", workflow, relative)
+            self.assertNotIn("rh-fill dispatch needs a client_payload", workflow, relative)
+            self.assertIn("refuse_public_fill_payload.py", workflow, relative)
             self.assertIn("test_fills_private.py", workflow, relative)
+            self.assertEqual(workflow.count("sync_rh_kpi_trades.py --from-json"), 0, relative)
         script = (ROOT / "scripts" / "upsert_fills_direct.py").read_text(encoding="utf-8")
         for line in script.splitlines():
             if "print(" in line:
                 self.assertNotIn("order_id", line)
                 self.assertIsNone(UUID_RE.search(line), line)
+        refuse = (ROOT / "scripts" / "refuse_public_fill_payload.py").read_text(encoding="utf-8")
+        self.assertIn("never prints", refuse.lower())
+        self.assertNotIn("print(event", refuse)
+        self.assertNotIn("print(client", refuse)
+
+    def test_refuse_script_rejects_dispatch_payloads_without_echoing_them(self):
+        cases = [
+            ("workflow_dispatch", {"inputs": {"sync_rh_json": json.dumps(_fill())}}, True),
+            ("workflow_dispatch", {"inputs": {"sync_rh_json": ""}}, False),
+            ("workflow_dispatch", {"inputs": {}}, False),
+            ("repository_dispatch", {"client_payload": _fill()}, True),
+            ("repository_dispatch", {"client_payload": {"results": [_fill()]}}, True),
+            ("repository_dispatch", {"client_payload": {}}, False),
+            ("repository_dispatch", {}, False),
+            ("schedule", {"client_payload": _fill(), "inputs": {"sync_rh_json": "x"}}, False),
+        ]
+        for name, event, blocked in cases:
+            with self.subTest(name=name, blocked=blocked):
+                reason = refuse_public_fill_payload.refuse(name, event)
+                if blocked:
+                    self.assertIsNotNone(reason)
+                    self.assertIn("does not accept a fills payload", reason)
+                    self.assertNotIn(ORDER_ID, reason)
+                else:
+                    self.assertIsNone(reason)
+        with TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(json.dumps({"client_payload": _fill()}), encoding="utf-8")
+            env = {
+                "GITHUB_EVENT_NAME": "repository_dispatch",
+                "GITHUB_EVENT_PATH": str(event_path),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                out = io.StringIO()
+                err = io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    code = refuse_public_fill_payload.main()
+            text = out.getvalue() + err.getvalue()
+            self.assertEqual(code, 1)
+            self.assertIn("does not accept a fills payload", text)
+            self.assertNotIn(ORDER_ID, text)
+            self.assertIsNone(UUID_RE.search(text), text)
 
     def test_direct_upsert_prints_counts_and_is_idempotent(self):
         stored: list[dict] = []
