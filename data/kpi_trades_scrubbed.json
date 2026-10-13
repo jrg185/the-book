@@ -1764,6 +1764,18 @@
     "fee_frac_of_book": 0.0022
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-13T23:50:53.583339+00:00",
+    "ticker": "RAY",
+    "side": "buy",
+    "notional_frac_of_book": 0.2337,
+    "pnl_frac_of_book": 0.0,
+    "why": "7:46pm ET check-in: artifact 5312672 (#117 name_cap off) RAY p_up 0.52597 >= live gate 0.52; add to held RAY; sized min(slot 0.12x live book $93.15, live kill room $70.20, cash $223.41)= $70.20; paid USD cash; exit = +5% take (35%) then trail at cost+5%",
+    "running_pnl_frac": 0.137644,
+    "running_balance_frac": 1.137644,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
