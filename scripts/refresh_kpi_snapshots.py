@@ -570,6 +570,10 @@ def _replay_fills(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str
         if _lots_position(lots) is None:
             book.pop(key, None)
             cost_basis.pop(key, None)
+            # Flat ends the holding. A later reopen starts a new position whose
+            # running P&L is measured from its own cost basis only; earlier
+            # closes stay in sleeve realized but never ride on the new lot.
+            realized_by_ticker.pop(key, None)
         else:
             book[key] = lots
     open_book: dict[tuple[str, str], dict] = {}
@@ -614,8 +618,10 @@ def apply_books(fills: list[dict]) -> tuple[dict[str, Decimal], dict[tuple[str, 
     """Replay buys and sells. Realized is pnl_trade_usd on closes only.
 
     Sleeve realized is the sum of those close dollars. Each open position
-    also keeps that ticker's own close dollars, including closes from before
-    a later reopen. Opening fills do not add realized. Leftover avg_cost
+    also keeps that ticker's own close dollars since it last opened from
+    flat. Closes from before a full exit are not carried onto a reopen, so a
+    fresh buy's running P&L is qty * (mark - its own basis). Opening fills do
+    not add realized. Leftover avg_cost
     follows the stored close: FIFO lot cost when that pnl is FIFO, and the
     blended cost when the row is still average-cost. Realized and unrealized
     then describe one book.
