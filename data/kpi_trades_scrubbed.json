@@ -1776,6 +1776,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-14T00:56:22.803312+00:00",
+    "ticker": "QNT",
+    "side": "buy",
+    "notional_frac_of_book": 0.241333,
+    "pnl_frac_of_book": 0.0,
+    "why": "8:46pm ET check-in: artifact code_sha 5312672 gate 0.52 name_cap off; QNT p_up 0.53533 new name 8/8; sized min(slot $93.53, kill room $73.35, cash $153.30)=$73.35; fee $0.69 (0.95%); exit=+5% take 35% then trail",
+    "running_pnl_frac": 0.137644,
+    "running_balance_frac": 1.137644,
+    "fee_frac_of_book": 0.0023
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-14T00:56:39.416801+00:00",
+    "ticker": "RAY",
+    "side": "buy",
+    "notional_frac_of_book": 0.2402,
+    "pnl_frac_of_book": 0.0,
+    "why": "8:46pm ET check-in: RAY add p_up 0.53036 >=0.52; after QNT cash $80.21 kill room $72.23; sized $72.23; fee $0; exit=+5% take 35% then trail",
+    "running_pnl_frac": 0.137644,
+    "running_balance_frac": 1.137644,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
