@@ -988,7 +988,8 @@ def _card_position_row(
 ) -> dict:
     """One open net. Value is qty times the mark. It is not a seed fraction.
 
-    Running P&L is that ticker's close pnl_trade_usd plus qty * (mark - avg),
+    Running P&L is that ticker's close pnl_trade_usd since it last opened from
+    flat plus qty * (mark - avg),
     the same two terms the sleeve snapshot adds for realized_pnl_usd and
     unrealized_pnl_usd.
     """
@@ -3972,10 +3973,10 @@ def self_test() -> int:
             "value_usd": 18.0,
             "avg_cost": "8",
             "unrealized_pnl_usd": 2.0,
-            "running_pnl_usd": 6.0,
+            "running_pnl_usd": 2.0,
         }
     ]:
-        raise RuntimeError(f"reopen dropped earlier close dollars: {reopened}")
+        raise RuntimeError(f"reopen carried closes from before the full exit: {reopened}")
     if card_positions_from_scrubbed(
         [{"sleeve": "crypto", "ticker": "ZZ", "qty": "3", "side": "long", "unrealized_pnl_frac": "0.025"}]
     ):
