@@ -988,8 +988,8 @@ def _card_position_row(
 ) -> dict:
     """One open net. Value is qty times the mark. It is not a seed fraction.
 
-    Running P&L is that ticker's close pnl_trade_usd since it last opened from
-    flat plus qty * (mark - avg),
+    Running P&L on the card is qty * (mark - avg) only (value minus open
+    basis); realized close dollars stay on the sleeve snapshot,
     the same two terms the sleeve snapshot adds for realized_pnl_usd and
     unrealized_pnl_usd.
     """
@@ -1004,8 +1004,9 @@ def _card_position_row(
         unreal = qty * (mark - avg)
         row["avg_cost"] = format(avg, "f")
         row["unrealized_pnl_usd"] = _cents_number(unreal)
-        if realized is not None:
-            row["running_pnl_usd"] = _cents_number(realized + unreal)
+        # Card running P&L is the open position only: value minus its cost
+        # basis. Realized from closes (partial or full) stays at sleeve level.
+        row["running_pnl_usd"] = row["unrealized_pnl_usd"]
     return row
 
 
@@ -1077,7 +1078,8 @@ def card_positions_from_scrubbed(payload) -> list:
             rows.append(_card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark))
         else:
             built = _card_position_row(sleeve, ticker, signed, _decimal_or_none(row.get("avg")), mark)
-            built["running_pnl_usd"] = _cents_number(realized)
+            if "running_pnl_usd" not in built:
+                built["running_pnl_usd"] = _cents_number(realized)
             rows.append(built)
     rows.sort(key=lambda item: (order.get(item["sleeve"], 9), item["ticker"]))
     return rows
@@ -3888,16 +3890,17 @@ def self_test() -> int:
             "value_usd": 37.5,
             "avg_cost": "10",
             "unrealized_pnl_usd": 7.5,
-            "running_pnl_usd": 9.5,
+            "running_pnl_usd": 7.5,
         }
     ]:
+        # Partial-sell realized (+2) stays at sleeve level, not on the card.
         raise RuntimeError(f"open net was not qty times the mark: {opened}")
     if any(row["ticker"] == "QQ" for row in opened):
         raise RuntimeError("a flat equity net was published")
     if usd_equal(opened[0]["value_usd"], opened[0]["unrealized_pnl_usd"]):
         raise RuntimeError("open value collapsed to unrealized")
-    if usd_equal(opened[0]["running_pnl_usd"], opened[0]["unrealized_pnl_usd"]):
-        raise RuntimeError("running P&L dropped the ticker's close")
+    if not usd_equal(opened[0]["running_pnl_usd"], opened[0]["value_usd"] - 30):
+        raise RuntimeError("card running P&L is not value minus open basis")
     position_src = Path(__file__).read_text(encoding="utf-8").split("def card_positions(", 1)[1].split(
         "def card_positions_from_scrubbed", 1
     )[0]
@@ -3915,8 +3918,8 @@ def self_test() -> int:
     from_scrub = card_positions_from_scrubbed(scrubbed)
     if from_scrub[0]["qty"] != opened[0]["qty"] or not usd_equal(from_scrub[0]["value_usd"], opened[0]["value_usd"]):
         raise RuntimeError(f"scrubbed mark did not match the book: {from_scrub}")
-    if "running_pnl_usd" in from_scrub[0]:
-        raise RuntimeError("a scrubbed fraction row invented running P&L")
+    if not usd_equal(from_scrub[0].get("running_pnl_usd"), from_scrub[0].get("unrealized_pnl_usd")):
+        raise RuntimeError("a scrubbed card running P&L is not value minus open basis")
     carried = card_positions_from_scrubbed(
         [
             {
@@ -3930,8 +3933,8 @@ def self_test() -> int:
             }
         ]
     )
-    if carried[0].get("running_pnl_usd") != 9.5:
-        raise RuntimeError(f"stored running P&L was dropped: {carried}")
+    if carried[0].get("running_pnl_usd") != 7.5:
+        raise RuntimeError(f"card running P&L is not value minus basis: {carried}")
     reopened = card_positions(
         [
             {
