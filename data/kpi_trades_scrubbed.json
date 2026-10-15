@@ -1848,6 +1848,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-15T19:47:42.018189+00:00",
+    "ticker": "W",
+    "side": "buy",
+    "notional_frac_of_book": 0.254867,
+    "pnl_frac_of_book": 0.0,
+    "why": "crypto-checkin model buy from artifact f7cdf6a: W p_up 0.526 cleared live gate 0.52; size $76.50 (kill-room capped, under 12% slot and cash); kill/target buys_halted false",
+    "running_pnl_frac": 0.212221,
+    "running_balance_frac": 1.212221,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
