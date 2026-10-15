@@ -1824,6 +1824,18 @@
     "fee_frac_of_book": 0.0008
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-15T16:46:30.348654+00:00",
+    "ticker": "STRK",
+    "side": "sell",
+    "notional_frac_of_book": 0.091367,
+    "pnl_frac_of_book": 0.039216,
+    "why": "fast-mover trail exit of remaining Oct 13 STRK add lot: bid 0.08626 gapped below cost+5% floor 0.0899",
+    "running_pnl_frac": 0.205696,
+    "running_balance_frac": 1.205696,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
