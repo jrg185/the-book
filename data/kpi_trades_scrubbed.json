@@ -1800,6 +1800,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-15T15:51:48.505776+00:00",
+    "ticker": "STRK",
+    "side": "sell",
+    "notional_frac_of_book": 0.052767,
+    "pnl_frac_of_book": 0.024703,
+    "why": "fast-mover 35% scale-out of Oct 13 add lot (profit-take +5%); remainder trails",
+    "running_pnl_frac": 0.162347,
+    "running_balance_frac": 1.162347,
+    "fee_frac_of_book": 0.0
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-15T16:07:01.357845+00:00",
+    "ticker": "CRV",
+    "side": "sell",
+    "notional_frac_of_book": 0.085633,
+    "pnl_frac_of_book": 0.004133,
+    "why": "fast-mover 35% scale-out (profit-take +5%); remainder trails",
+    "running_pnl_frac": 0.16648,
+    "running_balance_frac": 1.16648,
+    "fee_frac_of_book": 0.0008
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
