@@ -1860,6 +1860,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-15T20:50:28.885577+00:00",
+    "ticker": "W",
+    "side": "buy",
+    "notional_frac_of_book": 0.149133,
+    "pnl_frac_of_book": 0.0,
+    "why": "crypto-checkin 4:46pm ET model buy from artifact 86dfef8: W add, p_up 0.541 cleared live gate 0.52; sized to available cash ($45.22 entered); kill/target buys_halted false",
+    "running_pnl_frac": 0.212221,
+    "running_balance_frac": 1.212221,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
