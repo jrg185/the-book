@@ -1872,6 +1872,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-16T00:02:09.942475+00:00",
+    "ticker": "CRV",
+    "side": "sell",
+    "notional_frac_of_book": 0.1568,
+    "pnl_frac_of_book": 0.005433,
+    "why": "crypto-fast-mover-watch 8:02pm ET: CRV remainder trail exit; bid broke cost+5% floor 0.355047",
+    "running_pnl_frac": 0.217654,
+    "running_balance_frac": 1.217654,
+    "fee_frac_of_book": 0.0015
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
