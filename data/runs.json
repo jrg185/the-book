@@ -1,6 +1,6 @@
 {
   "source": "supabase",
-  "fetched_at": "2026-10-16T21:27:36Z",
+  "fetched_at": "2026-10-16T21:40:17Z",
   "runs": [
     {
       "id": "run_2f2153aad842",
@@ -31388,19 +31388,6 @@
       "traded": false
     },
     {
-      "run_id": "run_ad9f6e513bb0",
-      "symbol": "RENDER",
-      "p_up": 0.419295673711816,
-      "side": "flat",
-      "conviction": 0.2307,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_219550a39d88",
       "symbol": "SEI",
       "p_up": 0.479799744237861,
@@ -31440,63 +31427,63 @@
       "traded": false
     },
     {
-      "run_id": "run_219550a39d88",
-      "symbol": "SHIB",
-      "p_up": 0.450248010815753,
-      "side": "flat",
-      "conviction": 0.1998,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_219550a39d88",
-      "symbol": "SHIB",
-      "p_up": 0.450248010815753,
-      "side": "flat",
-      "conviction": 0.1998,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_635da747c616",
-      "symbol": "SHIB",
-      "p_up": 0.143807150938039,
-      "side": "sell",
-      "conviction": 0.8562,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_635da747c616",
-      "symbol": "SHIB",
-      "p_up": 0.143807150938039,
-      "side": "sell",
-      "conviction": 0.8562,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_ad9f6e513bb0",
-      "symbol": "SHIB",
-      "p_up": 0.400788407956885,
+      "symbol": "SEI",
+      "p_up": 0.450114596649548,
       "side": "flat",
-      "conviction": 0.2492,
+      "conviction": 0.1999,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_219550a39d88",
+      "symbol": "SHIB",
+      "p_up": 0.450248010815753,
+      "side": "flat",
+      "conviction": 0.1998,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_219550a39d88",
+      "symbol": "SHIB",
+      "p_up": 0.450248010815753,
+      "side": "flat",
+      "conviction": 0.1998,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_635da747c616",
+      "symbol": "SHIB",
+      "p_up": 0.143807150938039,
+      "side": "sell",
+      "conviction": 0.8562,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_635da747c616",
+      "symbol": "SHIB",
+      "p_up": 0.143807150938039,
+      "side": "sell",
+      "conviction": 0.8562,
       "bar_time": "2026-10-16T08:00:00+00:00",
       "expires_at": "2026-10-17T09:40:31+00:00",
       "fwd_ret_8h": null,
@@ -31536,6 +31523,19 @@
       "p_up": 0.315688354036553,
       "side": "sell",
       "conviction": 0.6843,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_ad9f6e513bb0",
+      "symbol": "SKR",
+      "p_up": 0.458788404981792,
+      "side": "flat",
+      "conviction": 0.1912,
       "bar_time": "2026-10-16T08:00:00+00:00",
       "expires_at": "2026-10-17T09:40:31+00:00",
       "fwd_ret_8h": null,
@@ -31622,19 +31622,6 @@
       "traded": false
     },
     {
-      "run_id": "run_ad9f6e513bb0",
-      "symbol": "STRK",
-      "p_up": 0.459106738791184,
-      "side": "flat",
-      "conviction": 0.1909,
-      "bar_time": "2026-10-16T08:00:00+00:00",
-      "expires_at": "2026-10-17T09:40:31+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_219550a39d88",
       "symbol": "SUI",
       "p_up": 0.473885712007925,
@@ -31666,6 +31653,19 @@
       "p_up": 0.260698884365818,
       "side": "sell",
       "conviction": 0.7393,
+      "bar_time": "2026-10-16T08:00:00+00:00",
+      "expires_at": "2026-10-17T09:40:31+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_ad9f6e513bb0",
+      "symbol": "SUI",
+      "p_up": 0.453650694293524,
+      "side": "flat",
+      "conviction": 0.1963,
       "bar_time": "2026-10-16T08:00:00+00:00",
       "expires_at": "2026-10-17T09:40:31+00:00",
       "fwd_ret_8h": null,
@@ -43478,6 +43478,19 @@
       "traded": false
     },
     {
+      "run_id": "run_803853b27ce5",
+      "symbol": "ARB",
+      "p_up": 0.310066309296718,
+      "side": "sell",
+      "conviction": 0.6899,
+      "bar_time": "2026-10-16T02:00:00+00:00",
+      "expires_at": "2026-10-17T03:39:08+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_b52ee17e4bda",
       "symbol": "ARB",
       "p_up": 0.486938695402139,
@@ -43810,19 +43823,6 @@
       "conviction": 0.8923,
       "bar_time": "2026-10-16T02:00:00+00:00",
       "expires_at": "2026-10-17T03:39:08+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_b52ee17e4bda",
-      "symbol": "BTC",
-      "p_up": 0.446134767018124,
-      "side": "flat",
-      "conviction": 0.2039,
-      "bar_time": "2026-10-16T02:00:00+00:00",
-      "expires_at": "2026-10-17T03:39:07+00:00",
       "fwd_ret_8h": null,
       "label_up_net30": null,
       "resolved_at": null,
@@ -45194,6 +45194,19 @@
       "traded": false
     },
     {
+      "run_id": "run_186a9ce496e5",
+      "symbol": "VVV",
+      "p_up": 0.480810731129128,
+      "side": "flat",
+      "conviction": 0.1692,
+      "bar_time": "2026-10-16T02:00:00+00:00",
+      "expires_at": "2026-10-17T03:39:07+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_803853b27ce5",
       "symbol": "VVV",
       "p_up": 0.313632407252543,
@@ -45246,19 +45259,6 @@
       "traded": false
     },
     {
-      "run_id": "run_186a9ce496e5",
-      "symbol": "WIF",
-      "p_up": 0.460971050726399,
-      "side": "flat",
-      "conviction": 0.189,
-      "bar_time": "2026-10-16T02:00:00+00:00",
-      "expires_at": "2026-10-17T03:39:07+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_803853b27ce5",
       "symbol": "WIF",
       "p_up": 0.257608154828203,
@@ -45285,19 +45285,6 @@
       "traded": false
     },
     {
-      "run_id": "run_186a9ce496e5",
-      "symbol": "XCN",
-      "p_up": 0.462234678588068,
-      "side": "flat",
-      "conviction": 0.1878,
-      "bar_time": "2026-10-16T02:00:00+00:00",
-      "expires_at": "2026-10-17T03:39:07+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_803853b27ce5",
       "symbol": "XCN",
       "p_up": 0.267316588127925,
@@ -45316,19 +45303,6 @@
       "p_up": 0.478454617483566,
       "side": "flat",
       "conviction": 0.1715,
-      "bar_time": "2026-10-16T02:00:00+00:00",
-      "expires_at": "2026-10-17T03:39:07+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_186a9ce496e5",
-      "symbol": "XLM",
-      "p_up": 0.420609590471339,
-      "side": "flat",
-      "conviction": 0.2294,
       "bar_time": "2026-10-16T02:00:00+00:00",
       "expires_at": "2026-10-17T03:39:07+00:00",
       "fwd_ret_8h": null,
@@ -45376,6 +45350,19 @@
       "traded": false
     },
     {
+      "run_id": "run_186a9ce496e5",
+      "symbol": "XRP",
+      "p_up": 0.424692580633027,
+      "side": "flat",
+      "conviction": 0.2253,
+      "bar_time": "2026-10-16T02:00:00+00:00",
+      "expires_at": "2026-10-17T03:39:07+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_803853b27ce5",
       "symbol": "XRP",
       "p_up": 0.176095365989448,
@@ -45394,6 +45381,19 @@
       "p_up": 0.460024098608882,
       "side": "flat",
       "conviction": 0.19,
+      "bar_time": "2026-10-16T02:00:00+00:00",
+      "expires_at": "2026-10-17T03:39:07+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_186a9ce496e5",
+      "symbol": "XTZ",
+      "p_up": 0.469523041451093,
+      "side": "flat",
+      "conviction": 0.1805,
       "bar_time": "2026-10-16T02:00:00+00:00",
       "expires_at": "2026-10-17T03:39:07+00:00",
       "fwd_ret_8h": null,
@@ -56881,37 +56881,11 @@
       "traded": false
     },
     {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "ARB",
-      "p_up": 0.443749262242549,
-      "side": "flat",
-      "conviction": 0.2063,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "ATOM",
       "p_up": 0.504351282946642,
       "side": "flat",
       "conviction": 0.1544,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_82448650d2d4",
-      "symbol": "ATOM",
-      "p_up": 0.282752860021651,
-      "side": "sell",
-      "conviction": 0.7172,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -57076,19 +57050,6 @@
       "traded": false
     },
     {
-      "run_id": "run_82448650d2d4",
-      "symbol": "BCH",
-      "p_up": 0.284158033821495,
-      "side": "sell",
-      "conviction": 0.7158,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_d079cab9c12c",
       "symbol": "BCH",
       "p_up": 0.463619992082613,
@@ -57107,19 +57068,6 @@
       "p_up": 0.505861839021146,
       "side": "flat",
       "conviction": 0.1559,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_82448650d2d4",
-      "symbol": "BIO",
-      "p_up": 0.277365751892876,
-      "side": "sell",
-      "conviction": 0.7226,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -57388,19 +57336,6 @@
       "traded": false
     },
     {
-      "run_id": "run_82448650d2d4",
-      "symbol": "ENA",
-      "p_up": 0.32884610814641,
-      "side": "sell",
-      "conviction": 0.6712,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_d079cab9c12c",
       "symbol": "ENA",
       "p_up": 0.462532986881467,
@@ -57466,19 +57401,6 @@
       "traded": false
     },
     {
-      "run_id": "run_82448650d2d4",
-      "symbol": "ETH",
-      "p_up": 0.202171619289592,
-      "side": "sell",
-      "conviction": 0.7978,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_d079cab9c12c",
       "symbol": "ETH",
       "p_up": 0.438251623836902,
@@ -57497,19 +57419,6 @@
       "p_up": 0.492643567467276,
       "side": "flat",
       "conviction": 0.1574,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_82448650d2d4",
-      "symbol": "FET",
-      "p_up": 0.315590368990924,
-      "side": "sell",
-      "conviction": 0.6844,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -57661,19 +57570,6 @@
       "traded": false
     },
     {
-      "run_id": "run_82448650d2d4",
-      "symbol": "IMX",
-      "p_up": 0.280400564571653,
-      "side": "sell",
-      "conviction": 0.7196,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_d079cab9c12c",
       "symbol": "IMX",
       "p_up": 0.456065613396069,
@@ -57791,6 +57687,19 @@
       "traded": false
     },
     {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "LINK",
+      "p_up": 0.462768161551486,
+      "side": "flat",
+      "conviction": 0.1872,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "LTC",
       "p_up": 0.482503310942555,
@@ -57809,6 +57718,19 @@
       "p_up": 0.234054175805093,
       "side": "sell",
       "conviction": 0.7659,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "LTC",
+      "p_up": 0.444743560687139,
+      "side": "flat",
+      "conviction": 0.2053,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -57869,32 +57791,6 @@
       "traded": false
     },
     {
-      "run_id": "run_82448650d2d4",
-      "symbol": "MORPHO",
-      "p_up": 0.286117434734633,
-      "side": "sell",
-      "conviction": 0.7139,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "MORPHO",
-      "p_up": 0.468846123781928,
-      "side": "flat",
-      "conviction": 0.1812,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "NEAR",
       "p_up": 0.494052635304402,
@@ -57913,19 +57809,6 @@
       "p_up": 0.367594438498932,
       "side": "sell",
       "conviction": 0.6324,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "NEAR",
-      "p_up": 0.448612915391866,
-      "side": "flat",
-      "conviction": 0.2014,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -57960,6 +57843,19 @@
       "traded": false
     },
     {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "OP",
+      "p_up": 0.463292410878772,
+      "side": "flat",
+      "conviction": 0.1867,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "ORCA",
       "p_up": 0.501433711167958,
@@ -57978,6 +57874,19 @@
       "p_up": 0.311171791040129,
       "side": "sell",
       "conviction": 0.6888,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "ORCA",
+      "p_up": 0.45589794755043,
+      "side": "flat",
+      "conviction": 0.1941,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58012,6 +57921,19 @@
       "traded": false
     },
     {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "PEPE",
+      "p_up": 0.468110545082422,
+      "side": "flat",
+      "conviction": 0.1819,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "PYTH",
       "p_up": 0.499511139411647,
@@ -58030,6 +57952,19 @@
       "p_up": 0.380051412548077,
       "side": "sell",
       "conviction": 0.6199,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "PYTH",
+      "p_up": 0.449450966540427,
+      "side": "flat",
+      "conviction": 0.2005,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58116,19 +58051,6 @@
       "traded": false
     },
     {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "RENDER",
-      "p_up": 0.46021466306457,
-      "side": "flat",
-      "conviction": 0.1898,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "SEI",
       "p_up": 0.510422869914655,
@@ -58155,19 +58077,6 @@
       "traded": false
     },
     {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "SEI",
-      "p_up": 0.488509117661495,
-      "side": "flat",
-      "conviction": 0.1615,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "SHIB",
       "p_up": 0.47324759715826,
@@ -58186,32 +58095,6 @@
       "p_up": 0.47324759715826,
       "side": "flat",
       "conviction": 0.1768,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_82448650d2d4",
-      "symbol": "SHIB",
-      "p_up": 0.190699149611582,
-      "side": "sell",
-      "conviction": 0.8093,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "SHIB",
-      "p_up": 0.437111523036793,
-      "side": "flat",
-      "conviction": 0.2129,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58251,19 +58134,6 @@
       "p_up": 0.299270417937795,
       "side": "sell",
       "conviction": 0.7007,
-      "bar_time": "2026-10-15T20:00:00+00:00",
-      "expires_at": "2026-10-16T21:41:49+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
-    },
-    {
-      "run_id": "run_d079cab9c12c",
-      "symbol": "SKR",
-      "p_up": 0.512191817596142,
-      "side": "flat",
-      "conviction": 0.1622,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58324,6 +58194,19 @@
       "traded": false
     },
     {
+      "run_id": "run_0a6dc6411faa",
+      "symbol": "STRK",
+      "p_up": 0.470356648546544,
+      "side": "flat",
+      "conviction": 0.1796,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_82448650d2d4",
       "symbol": "STRK",
       "p_up": 0.361521692218955,
@@ -58342,6 +58225,32 @@
       "p_up": 0.499256188582679,
       "side": "flat",
       "conviction": 0.1507,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_0a6dc6411faa",
+      "symbol": "SUI",
+      "p_up": 0.499256188582679,
+      "side": "flat",
+      "conviction": 0.1507,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_82448650d2d4",
+      "symbol": "SUI",
+      "p_up": 0.29108062740844,
+      "side": "sell",
+      "conviction": 0.7089,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58454,6 +58363,32 @@
       "traded": false
     },
     {
+      "run_id": "run_82448650d2d4",
+      "symbol": "VIRTUAL",
+      "p_up": 0.290022345299452,
+      "side": "sell",
+      "conviction": 0.71,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_0a6dc6411faa",
+      "symbol": "VVV",
+      "p_up": 0.491064526024468,
+      "side": "flat",
+      "conviction": 0.1589,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "VVV",
       "p_up": 0.491064526024468,
@@ -58558,6 +58493,19 @@
       "traded": false
     },
     {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "WIF",
+      "p_up": 0.461105661745694,
+      "side": "flat",
+      "conviction": 0.1889,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "XCN",
       "p_up": 0.492809479857624,
@@ -58589,6 +58537,19 @@
       "p_up": 0.263920756994073,
       "side": "sell",
       "conviction": 0.7361,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "XCN",
+      "p_up": 0.459437153244712,
+      "side": "flat",
+      "conviction": 0.1906,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58649,6 +58610,32 @@
       "traded": false
     },
     {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "XLM",
+      "p_up": 0.447521626827176,
+      "side": "flat",
+      "conviction": 0.2025,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "XLM",
+      "p_up": 0.447521626827176,
+      "side": "flat",
+      "conviction": 0.2025,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
       "run_id": "run_0a6dc6411faa",
       "symbol": "XRP",
       "p_up": 0.489928039297404,
@@ -58680,6 +58667,19 @@
       "p_up": 0.21784612573486,
       "side": "sell",
       "conviction": 0.7822,
+      "bar_time": "2026-10-15T20:00:00+00:00",
+      "expires_at": "2026-10-16T21:41:49+00:00",
+      "fwd_ret_8h": null,
+      "label_up_net30": null,
+      "resolved_at": null,
+      "traded": false
+    },
+    {
+      "run_id": "run_d079cab9c12c",
+      "symbol": "XRP",
+      "p_up": 0.445190099665902,
+      "side": "flat",
+      "conviction": 0.2048,
       "bar_time": "2026-10-15T20:00:00+00:00",
       "expires_at": "2026-10-16T21:41:49+00:00",
       "fwd_ret_8h": null,
@@ -58864,9 +58864,9 @@
       "conviction": 0.7206,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0114957210371693,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58877,9 +58877,9 @@
       "conviction": 0.1549,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0114957210371693,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58890,9 +58890,9 @@
       "conviction": 0.1856,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0114957210371693,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58903,9 +58903,9 @@
       "conviction": 0.7226,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00913143203358291,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58916,9 +58916,9 @@
       "conviction": 0.157,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00913143203358291,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58929,9 +58929,9 @@
       "conviction": 0.1926,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00913143203358291,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58942,9 +58942,9 @@
       "conviction": 0.6734,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0160829833438054,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58955,9 +58955,9 @@
       "conviction": 0.1534,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0160829833438054,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58968,9 +58968,9 @@
       "conviction": 0.1882,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0160829833438054,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58981,9 +58981,9 @@
       "conviction": 0.7058,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0130616509926855,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -58994,9 +58994,9 @@
       "conviction": 0.1567,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0130616509926855,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59007,9 +59007,9 @@
       "conviction": 0.1799,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0130616509926855,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59020,9 +59020,9 @@
       "conviction": 0.6699,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0069122046837925,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59033,9 +59033,9 @@
       "conviction": 0.1626,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0069122046837925,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59046,9 +59046,9 @@
       "conviction": 0.2016,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0069122046837925,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59059,9 +59059,9 @@
       "conviction": 0.7198,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0126495726495727,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59072,9 +59072,9 @@
       "conviction": 0.1533,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0126495726495727,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59085,9 +59085,9 @@
       "conviction": 0.181,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0126495726495727,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59098,9 +59098,9 @@
       "conviction": 0.727,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59111,9 +59111,9 @@
       "conviction": 0.1558,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59124,9 +59124,9 @@
       "conviction": 0.1861,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59137,9 +59137,9 @@
       "conviction": 0.7247,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.012247569184742,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59150,9 +59150,9 @@
       "conviction": 0.152,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.012247569184742,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59163,9 +59163,9 @@
       "conviction": 0.1801,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.012247569184742,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59176,9 +59176,9 @@
       "conviction": 0.6137,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0661647603880121,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59189,9 +59189,9 @@
       "conviction": 0.1589,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0661647603880121,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59202,9 +59202,9 @@
       "conviction": 0.2093,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0661647603880121,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59215,9 +59215,9 @@
       "conviction": 0.6938,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0106687670055851,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59228,9 +59228,9 @@
       "conviction": 0.152,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0106687670055851,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59241,9 +59241,9 @@
       "conviction": 0.1747,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0106687670055851,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59254,9 +59254,9 @@
       "conviction": 0.7007,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00233190827827445,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59267,9 +59267,9 @@
       "conviction": 0.1628,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00233190827827445,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59280,9 +59280,9 @@
       "conviction": 0.1752,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00233190827827445,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59293,9 +59293,9 @@
       "conviction": 0.7078,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00647249190938515,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59306,9 +59306,9 @@
       "conviction": 0.1541,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00647249190938515,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59319,9 +59319,9 @@
       "conviction": 0.1811,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00647249190938515,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59332,9 +59332,9 @@
       "conviction": 0.8451,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00353696983423657,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59345,9 +59345,9 @@
       "conviction": 0.1875,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00353696983423657,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59358,9 +59358,9 @@
       "conviction": 0.6126,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00353696983423657,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59371,9 +59371,9 @@
       "conviction": 0.7232,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00891265597147961,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59384,9 +59384,9 @@
       "conviction": 0.1538,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00891265597147961,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59397,9 +59397,9 @@
       "conviction": 0.1901,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00891265597147961,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59410,10 +59410,10 @@
       "conviction": 0.6734,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": -0.0252497225305216,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_62cf8d16d18d",
@@ -59423,10 +59423,10 @@
       "conviction": 0.1575,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": -0.0252497225305216,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_da2ad657818a",
@@ -59436,10 +59436,10 @@
       "conviction": 0.1924,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": -0.0252497225305216,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_5ba944451293",
@@ -59449,9 +59449,9 @@
       "conviction": 0.744,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00171969045571796,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59462,9 +59462,9 @@
       "conviction": 0.1501,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00171969045571796,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59475,9 +59475,9 @@
       "conviction": 0.1943,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00171969045571796,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59488,9 +59488,9 @@
       "conviction": 0.6895,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0208296401347277,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59501,9 +59501,9 @@
       "conviction": 0.1519,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0208296401347277,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59514,9 +59514,9 @@
       "conviction": 0.1827,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0208296401347277,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59527,9 +59527,9 @@
       "conviction": 0.6645,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00479780671692942,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59540,9 +59540,9 @@
       "conviction": 0.1589,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00479780671692942,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59553,9 +59553,9 @@
       "conviction": 0.1914,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00479780671692942,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59566,9 +59566,9 @@
       "conviction": 0.739,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00148975791433903,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59579,9 +59579,9 @@
       "conviction": 0.1532,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00148975791433903,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59592,9 +59592,9 @@
       "conviction": 0.1795,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00148975791433903,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59605,9 +59605,9 @@
       "conviction": 0.7792,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00552979970290091,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59618,9 +59618,9 @@
       "conviction": 0.1698,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00552979970290091,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59631,9 +59631,9 @@
       "conviction": 0.2128,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00552979970290091,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59644,9 +59644,9 @@
       "conviction": 0.6846,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0209948475947417,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59657,9 +59657,9 @@
       "conviction": 0.1633,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0209948475947417,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59670,9 +59670,9 @@
       "conviction": 0.2045,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0209948475947417,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59683,9 +59683,9 @@
       "conviction": 0.8523,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00835571471202623,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59696,9 +59696,9 @@
       "conviction": 0.1885,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00835571471202623,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59709,9 +59709,9 @@
       "conviction": 0.615,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00835571471202623,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59722,9 +59722,9 @@
       "conviction": 0.7065,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0054977889327118,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59735,9 +59735,9 @@
       "conviction": 0.1545,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0054977889327118,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59748,9 +59748,9 @@
       "conviction": 0.1897,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0054977889327118,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59761,9 +59761,9 @@
       "conviction": 0.7293,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00352609308885765,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59774,9 +59774,9 @@
       "conviction": 0.1612,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00352609308885765,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59787,9 +59787,9 @@
       "conviction": 0.1925,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00352609308885765,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59800,9 +59800,9 @@
       "conviction": 0.7131,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00399515738498801,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59813,9 +59813,9 @@
       "conviction": 0.1506,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00399515738498801,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59826,9 +59826,9 @@
       "conviction": 0.1884,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00399515738498801,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59839,9 +59839,9 @@
       "conviction": 0.6462,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0984074162110768,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59852,9 +59852,9 @@
       "conviction": 0.1666,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0984074162110768,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59865,9 +59865,9 @@
       "conviction": 0.2171,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0984074162110768,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59878,9 +59878,9 @@
       "conviction": 0.6836,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0190401413288841,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59891,9 +59891,9 @@
       "conviction": 0.1583,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0190401413288841,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59904,9 +59904,9 @@
       "conviction": 0.2042,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0190401413288841,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59917,9 +59917,9 @@
       "conviction": 0.7377,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0102105934907467,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59930,9 +59930,9 @@
       "conviction": 0.1602,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0102105934907467,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59943,9 +59943,9 @@
       "conviction": 0.198,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0102105934907467,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59956,9 +59956,9 @@
       "conviction": 0.7613,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00856311578390523,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59969,9 +59969,9 @@
       "conviction": 0.1596,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00856311578390523,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59982,9 +59982,9 @@
       "conviction": 0.1881,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00856311578390523,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -59995,9 +59995,9 @@
       "conviction": 0.8163,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00491958372753087,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60008,9 +60008,9 @@
       "conviction": 0.1739,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00491958372753087,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60021,9 +60021,9 @@
       "conviction": 0.2274,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00491958372753087,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60034,9 +60034,9 @@
       "conviction": 0.7119,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00136521595234151,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60047,9 +60047,9 @@
       "conviction": 0.1501,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00136521595234151,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60060,9 +60060,9 @@
       "conviction": 0.1827,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00136521595234151,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60073,9 +60073,9 @@
       "conviction": 0.6409,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0337016370422379,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60086,9 +60086,9 @@
       "conviction": 0.1657,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0337016370422379,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60099,9 +60099,9 @@
       "conviction": 0.2169,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0337016370422379,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60112,9 +60112,9 @@
       "conviction": 0.6878,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0220435126014218,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60125,9 +60125,9 @@
       "conviction": 0.1511,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0220435126014218,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60138,9 +60138,9 @@
       "conviction": 0.1956,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0220435126014218,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60151,9 +60151,9 @@
       "conviction": 0.7021,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.014506527937572,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60164,9 +60164,9 @@
       "conviction": 0.1571,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.014506527937572,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60177,9 +60177,9 @@
       "conviction": 0.205,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.014506527937572,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60190,9 +60190,9 @@
       "conviction": 0.6895,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0192307692307693,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60203,9 +60203,9 @@
       "conviction": 0.1565,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0192307692307693,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60216,9 +60216,9 @@
       "conviction": 0.1951,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0192307692307693,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60229,9 +60229,9 @@
       "conviction": 0.6258,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00157944614088656,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60242,9 +60242,9 @@
       "conviction": 0.1588,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00157944614088656,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60255,9 +60255,9 @@
       "conviction": 0.2073,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00157944614088656,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60268,9 +60268,9 @@
       "conviction": 0.6598,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0164217804667243,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60281,9 +60281,9 @@
       "conviction": 0.1538,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0164217804667243,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60294,9 +60294,9 @@
       "conviction": 0.1911,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0164217804667243,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60307,9 +60307,9 @@
       "conviction": 0.6836,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0093807613057153,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60320,9 +60320,9 @@
       "conviction": 0.1531,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0093807613057153,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60333,9 +60333,9 @@
       "conviction": 0.1795,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0093807613057153,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60346,9 +60346,9 @@
       "conviction": 0.694,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0296944556859571,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60359,9 +60359,9 @@
       "conviction": 0.1645,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0296944556859571,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60372,9 +60372,9 @@
       "conviction": 0.2045,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0296944556859571,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60385,9 +60385,9 @@
       "conviction": 0.7045,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00909961685823757,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60398,9 +60398,9 @@
       "conviction": 0.1526,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00909961685823757,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60411,9 +60411,9 @@
       "conviction": 0.1895,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00909961685823757,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60424,9 +60424,9 @@
       "conviction": 0.8012,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60437,9 +60437,9 @@
       "conviction": 0.1715,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60450,9 +60450,9 @@
       "conviction": 0.2046,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.0,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60463,9 +60463,9 @@
       "conviction": 0.6756,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00891791306790246,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60476,9 +60476,9 @@
       "conviction": 0.5229,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00891791306790246,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60489,9 +60489,9 @@
       "conviction": 0.1771,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.00891791306790246,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60502,9 +60502,9 @@
       "conviction": 0.7516,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00679758308157097,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60515,9 +60515,9 @@
       "conviction": 0.1599,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00679758308157097,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60528,9 +60528,9 @@
       "conviction": 0.1927,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00679758308157097,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60541,9 +60541,9 @@
       "conviction": 0.6031,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0228400046141425,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60554,9 +60554,9 @@
       "conviction": 0.1502,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0228400046141425,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60567,9 +60567,9 @@
       "conviction": 0.2005,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0228400046141425,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60580,9 +60580,9 @@
       "conviction": 0.703,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00502221363724176,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60593,9 +60593,9 @@
       "conviction": 0.1536,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00502221363724176,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60606,9 +60606,9 @@
       "conviction": 0.1909,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00502221363724176,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60619,9 +60619,9 @@
       "conviction": 0.6562,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0137767220902613,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60632,9 +60632,9 @@
       "conviction": 0.162,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0137767220902613,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60645,9 +60645,9 @@
       "conviction": 0.1608,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0137767220902613,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60658,9 +60658,9 @@
       "conviction": 0.6958,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00345553695804768,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60671,9 +60671,9 @@
       "conviction": 0.1604,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00345553695804768,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60684,9 +60684,9 @@
       "conviction": 0.2042,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00345553695804768,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60697,9 +60697,9 @@
       "conviction": 0.7098,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00511322132943748,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60710,9 +60710,9 @@
       "conviction": 0.1508,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00511322132943748,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60723,9 +60723,9 @@
       "conviction": 0.1869,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00511322132943748,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60736,9 +60736,9 @@
       "conviction": 0.6584,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0318163495807442,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60749,9 +60749,9 @@
       "conviction": 0.1634,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0318163495807442,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60762,9 +60762,9 @@
       "conviction": 0.209,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0318163495807442,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60775,10 +60775,10 @@
       "conviction": 0.2068,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": 0.0454017887622038,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_62cf8d16d18d",
@@ -60788,10 +60788,10 @@
       "conviction": 0.541,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": 0.0454017887622038,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_da2ad657818a",
@@ -60801,10 +60801,10 @@
       "conviction": 0.1949,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
-      "traded": false
+      "fwd_ret_8h": 0.0454017887622038,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
+      "traded": true
     },
     {
       "run_id": "run_5ba944451293",
@@ -60814,9 +60814,9 @@
       "conviction": 0.7091,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.013938315539739,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60827,9 +60827,9 @@
       "conviction": 0.1542,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.013938315539739,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60840,9 +60840,9 @@
       "conviction": 0.1909,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.013938315539739,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60853,9 +60853,9 @@
       "conviction": 0.7287,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00599089384136109,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60866,9 +60866,9 @@
       "conviction": 0.1529,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00599089384136109,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60879,9 +60879,9 @@
       "conviction": 0.1876,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00599089384136109,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60892,9 +60892,9 @@
       "conviction": 0.77,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0151140853978258,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60905,9 +60905,9 @@
       "conviction": 0.163,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0151140853978258,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60918,9 +60918,9 @@
       "conviction": 0.208,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0151140853978258,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60931,9 +60931,9 @@
       "conviction": 0.7724,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00804289544235914,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60944,9 +60944,9 @@
       "conviction": 0.1635,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00804289544235914,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60957,9 +60957,9 @@
       "conviction": 0.2016,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00804289544235914,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60970,9 +60970,9 @@
       "conviction": 0.6753,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.000317359568390962,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60983,9 +60983,9 @@
       "conviction": 0.1543,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.000317359568390962,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -60996,9 +60996,9 @@
       "conviction": 0.1836,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": 0.000317359568390962,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61009,9 +61009,9 @@
       "conviction": 0.6585,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0186147748684297,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61022,9 +61022,9 @@
       "conviction": 0.1605,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0186147748684297,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61035,9 +61035,9 @@
       "conviction": 0.2009,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.0186147748684297,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61048,9 +61048,9 @@
       "conviction": 0.7435,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00780788719982384,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61061,9 +61061,9 @@
       "conviction": 0.1514,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00780788719982384,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -61074,9 +61074,9 @@
       "conviction": 0.1843,
       "bar_time": "2026-10-15T19:00:00+00:00",
       "expires_at": "2026-10-16T20:36:36+00:00",
-      "fwd_ret_8h": null,
-      "label_up_net30": null,
-      "resolved_at": null,
+      "fwd_ret_8h": -0.00780788719982384,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T21:30:51+00:00",
       "traded": false
     },
     {
@@ -83596,19 +83596,6 @@
       "traded": false
     },
     {
-      "run_id": "run_3e78af6d4d77",
-      "symbol": "ATOM",
-      "p_up": 0.501336803145743,
-      "side": "flat",
-      "conviction": 0.1513,
-      "bar_time": "2026-10-15T08:00:00+00:00",
-      "expires_at": "2026-10-16T09:33:32+00:00",
-      "fwd_ret_8h": 0.0239813875797887,
-      "label_up_net30": true,
-      "resolved_at": "2026-10-16T09:35:28+00:00",
-      "traded": false
-    },
-    {
       "run_id": "run_4e422d5c047a",
       "symbol": "ATOM",
       "p_up": 0.430108462198572,
@@ -85130,19 +85117,6 @@
       "traded": false
     },
     {
-      "run_id": "run_4e422d5c047a",
-      "symbol": "SYRUP",
-      "p_up": 0.593063355744356,
-      "side": "flat",
-      "conviction": 0.5931,
-      "bar_time": "2026-10-15T08:00:00+00:00",
-      "expires_at": "2026-10-16T09:33:32+00:00",
-      "fwd_ret_8h": 0.0337636544190665,
-      "label_up_net30": true,
-      "resolved_at": "2026-10-16T09:35:28+00:00",
-      "traded": false
-    },
-    {
       "run_id": "run_3d148128b984",
       "symbol": "UNI",
       "p_up": 0.36602477879761,
@@ -85286,6 +85260,19 @@
       "traded": true
     },
     {
+      "run_id": "run_4e422d5c047a",
+      "symbol": "W",
+      "p_up": 0.688053796758144,
+      "side": "flat",
+      "conviction": 0.6881,
+      "bar_time": "2026-10-15T08:00:00+00:00",
+      "expires_at": "2026-10-16T09:33:32+00:00",
+      "fwd_ret_8h": -0.00813559322033885,
+      "label_up_net30": false,
+      "resolved_at": "2026-10-16T09:35:28+00:00",
+      "traded": true
+    },
+    {
       "run_id": "run_3d148128b984",
       "symbol": "WIF",
       "p_up": 0.332856264811541,
@@ -85343,6 +85330,19 @@
       "p_up": 0.513497241278615,
       "side": "flat",
       "conviction": 0.1635,
+      "bar_time": "2026-10-15T08:00:00+00:00",
+      "expires_at": "2026-10-16T09:33:32+00:00",
+      "fwd_ret_8h": 0.0179802955665025,
+      "label_up_net30": true,
+      "resolved_at": "2026-10-16T09:35:28+00:00",
+      "traded": false
+    },
+    {
+      "run_id": "run_4e422d5c047a",
+      "symbol": "XCN",
+      "p_up": 0.483472407276253,
+      "side": "flat",
+      "conviction": 0.1665,
       "bar_time": "2026-10-15T08:00:00+00:00",
       "expires_at": "2026-10-16T09:33:32+00:00",
       "fwd_ret_8h": 0.0179802955665025,
@@ -265644,11 +265644,11 @@
     }
   ],
   "calibration": {
-    "n_resolved": 27806,
-    "n_scored": 27725,
+    "n_resolved": 27977,
+    "n_scored": 27896,
     "n_unscored": 81,
-    "logloss": 0.661401,
-    "brier": 0.234653,
+    "logloss": 0.661391,
+    "brier": 0.234637,
     "bins": [
       {
         "lo": 0.0,
@@ -265660,44 +265660,44 @@
       {
         "lo": 0.1,
         "hi": 0.2,
-        "n": 549,
-        "mean_p_up": 0.164378,
-        "label_rate": 0.118397
+        "n": 545,
+        "mean_p_up": 0.164263,
+        "label_rate": 0.119266
       },
       {
         "lo": 0.2,
         "hi": 0.3,
-        "n": 2041,
-        "mean_p_up": 0.254794,
-        "label_rate": 0.284174
+        "n": 2038,
+        "mean_p_up": 0.255041,
+        "label_rate": 0.284593
       },
       {
         "lo": 0.3,
         "hi": 0.4,
-        "n": 8407,
-        "mean_p_up": 0.362562,
-        "label_rate": 0.372309
+        "n": 8433,
+        "mean_p_up": 0.362544,
+        "label_rate": 0.371517
       },
       {
         "lo": 0.4,
         "hi": 0.5,
-        "n": 13160,
-        "mean_p_up": 0.44409,
-        "label_rate": 0.376976
+        "n": 13299,
+        "mean_p_up": 0.444331,
+        "label_rate": 0.37484
       },
       {
         "lo": 0.5,
         "hi": 0.6,
-        "n": 3462,
-        "mean_p_up": 0.519149,
-        "label_rate": 0.467649
+        "n": 3474,
+        "mean_p_up": 0.519142,
+        "label_rate": 0.467473
       },
       {
         "lo": 0.6,
         "hi": 0.7,
-        "n": 50,
-        "mean_p_up": 0.624022,
-        "label_rate": 0.52
+        "n": 51,
+        "mean_p_up": 0.625278,
+        "label_rate": 0.509804
       },
       {
         "lo": 0.7,
@@ -265723,9 +265723,9 @@
     ],
     "scope": "all_predictions",
     "full_precision": {
-      "n_scored": 17823,
-      "logloss": 0.654102,
-      "brier": 0.231411
+      "n_scored": 17994,
+      "logloss": 0.654157,
+      "brier": 0.231417
     }
   },
   "sources": {
