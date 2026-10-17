@@ -330,6 +330,93 @@ class RunsExportTests(unittest.TestCase):
             commit = text.split("Commit refreshed JSON", 1)[1].split("Publish export failure", 1)[0]
             self.assertIn("data/runs.json", commit)
             self.assertIn("data/runs.csv", commit)
+            self.assertIn("data/predictions.json", commit)
+
+    def test_stale_predictions_fail_and_a_fresh_export_keeps_the_artifact_time(self):
+        artifact_at = "2026-10-17T12:36:56Z"
+        older = "2026-10-12T22:43:49Z"
+        self.assertTrue(export_runs.predictions_are_stale(older, artifact_at))
+        self.assertTrue(export_runs.predictions_are_stale(None, artifact_at))
+        self.assertFalse(export_runs.predictions_are_stale(artifact_at, artifact_at))
+        self.assertFalse(export_runs.predictions_are_stale(artifact_at, "2026-10-17T12:36:56+00:00"))
+        self.assertFalse(export_runs.predictions_are_stale(artifact_at, None))
+        chosen, source = export_runs.choose_newer_signal(
+            {"generated_at": older, "candidates": [{"symbol": "BTC", "side": "flat"}]},
+            {"generated_at": artifact_at, "candidates": [{"symbol": "AAVE", "side": "flat"}]},
+        )
+        self.assertEqual(source, export_runs.ARTIFACT_TABLE)
+        self.assertEqual(chosen["generated_at"], artifact_at)
+        row = {
+            "generated_at": artifact_at,
+            "mode": "live",
+            "payload": {
+                "generated_at": artifact_at,
+                "mode": "live",
+                "backend": "ml",
+                "model_version": "lgbm_no_dow_calibrated",
+                "last_bar_time": "2026-10-17T11:00:00Z",
+                "book_usd": 731,
+                "candidates": [
+                    {
+                        "symbol": "AAVE",
+                        "side": "flat",
+                        "size_usd": 12.5,
+                        "p_up": 0.5056231734627226,
+                        "conviction": 0.1556,
+                        "bar_time": "2026-10-17T11:00:00Z",
+                        "expires_at": "2026-10-18T12:36:56Z",
+                        "thesis": "cost $1",
+                        "order_id": "private-order",
+                    }
+                ],
+            },
+        }
+        signal = export_runs.signal_document(row)
+        with TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            stale_path = folder / "stale.json"
+            stale_path.write_text(json.dumps({"generated_at": older, "predictions": []}), encoding="utf-8")
+            failed = export_runs.main(
+                ["--require-fresh", "--predictions", str(stale_path), "--newest-artifact-at", artifact_at]
+            )
+            self.assertEqual(failed, 1)
+            with self.assertRaises(RuntimeError):
+                export_runs.publish_predictions(
+                    folder,
+                    {"generated_at": older, "candidates": []},
+                    source=export_runs.ARTIFACT_TABLE,
+                    newest_artifact_at=artifact_at,
+                )
+            out = folder / "fresh"
+            signal_path = folder / "signal.json"
+            signal_path.write_text(json.dumps(signal), encoding="utf-8")
+            wrote = export_runs.main(
+                [
+                    "--from-signal",
+                    str(signal_path),
+                    "--out",
+                    str(out),
+                    "--newest-artifact-at",
+                    artifact_at,
+                    "--source",
+                    export_runs.ARTIFACT_TABLE,
+                ]
+            )
+            self.assertEqual(wrote, 0)
+            written = json.loads((out / "predictions.json").read_text(encoding="utf-8"))
+            self.assertEqual(written["generated_at"], artifact_at)
+            self.assertEqual(written["source"], export_runs.ARTIFACT_TABLE)
+            self.assertEqual(written["predictions"][0]["symbol"], "AAVE")
+            self.assertEqual(written["predictions"][0]["bar_time"], "2026-10-17T11:00:00Z")
+            blob = json.dumps(written)
+            self.assertNotIn("$", blob)
+            self.assertNotIn("usd", blob.lower())
+            self.assertNotIn("order_id", blob)
+            self.assertEqual(export_runs.public_violations(out / "predictions.json"), [])
+            fresh = export_runs.main(
+                ["--require-fresh", "--predictions", str(out / "predictions.json"), "--newest-artifact-at", artifact_at]
+            )
+            self.assertEqual(fresh, 0)
 
 
 if __name__ == "__main__":

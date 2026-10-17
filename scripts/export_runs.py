@@ -9,6 +9,7 @@ A missing or empty relation is logged. It does not fail Export KPI.
 
   data/runs.json
   data/runs.csv
+  data/predictions.json
 """
 
 from __future__ import annotations
@@ -755,6 +756,171 @@ def collect(read_rows, fetched_at: str):
     return bundle, missing
 
 
+# Latest desk score. The public raw URL of signals/latest.json 404s when that
+# repo is private, so the warehouse row is a source, not a hardcoded day.
+ARTIFACT_TABLE = "signal_artifacts"
+PREDICTION_PUBLIC_FIELDS = ("symbol", "side", "p_up", "conviction", "bar_time", "expires_at")
+SIGNAL_DOC_FIELDS = ("generated_at", "mode", "backend", "model_version", "last_bar_time")
+
+
+def parse_stamp(value) -> dt.datetime | None:
+    """UTC timestamp truncated to a second. None when the value is not a time."""
+    if isinstance(value, dt.datetime):
+        parsed = value
+    else:
+        text = as_text(value)
+        if not text:
+            return None
+        try:
+            parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc).replace(microsecond=0)
+
+
+def predictions_are_stale(predictions_at, artifact_at) -> bool:
+    """True when the predictions stamp is older than the newest artifact.
+
+    A missing artifact stamp is not a comparison. A missing predictions stamp
+    is stale once an artifact stamp exists. There is no fixed cutoff date.
+    """
+    artifact = parse_stamp(artifact_at)
+    if artifact is None:
+        return False
+    predictions = parse_stamp(predictions_at)
+    if predictions is None:
+        return True
+    return predictions < artifact
+
+
+def require_fresh_predictions(predictions_at, artifact_at) -> None:
+    if predictions_are_stale(predictions_at, artifact_at):
+        raise RuntimeError(
+            "predictions "
+            f"{as_text(predictions_at) or 'missing'} are older than the newest signal artifact "
+            f"{as_text(artifact_at)}"
+        )
+
+
+def signal_document(row: dict | None) -> dict | None:
+    """Signal JSON from a warehouse row or from signals/latest.json itself."""
+    if not isinstance(row, dict):
+        return None
+    payload = row.get("payload")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = None
+    doc = dict(payload) if isinstance(payload, dict) else {}
+    if not doc and any(key in row for key in ("candidates", "generated_at", "model_version")):
+        doc = dict(row)
+    if not doc.get("generated_at") and row.get("generated_at") is not None:
+        doc["generated_at"] = row.get("generated_at")
+    if not doc.get("mode") and row.get("mode"):
+        doc["mode"] = row.get("mode")
+    if not doc.get("generated_at") and not isinstance(doc.get("candidates"), list):
+        return None
+    return doc
+
+
+def signal_generated_at(doc: dict | None):
+    if not isinstance(doc, dict):
+        return None
+    return doc.get("generated_at")
+
+
+def choose_newer_signal(github_doc: dict | None, artifact_doc: dict | None):
+    """Prefer the document whose generated_at is newer. None when both are empty."""
+    github = github_doc if isinstance(github_doc, dict) else None
+    artifact = artifact_doc if isinstance(artifact_doc, dict) else None
+    if github and artifact:
+        if predictions_are_stale(signal_generated_at(github), signal_generated_at(artifact)):
+            return artifact, ARTIFACT_TABLE
+        return github, "signals/latest.json"
+    if artifact:
+        return artifact, ARTIFACT_TABLE
+    if github:
+        return github, "signals/latest.json"
+    return None, None
+
+
+def predictions_document(signal: dict, *, source: str) -> dict:
+    """Public predictions for one signal. Dollar keys and private ids stay off."""
+    public = {"source": source}
+    for key in SIGNAL_DOC_FIELDS:
+        if forbidden_key(key):
+            continue
+        value = as_text(signal.get(key))
+        if value is not None:
+            public[key] = value
+    rows = []
+    for cand in signal.get("candidates") or []:
+        if not isinstance(cand, dict):
+            continue
+        row = {}
+        for key in PREDICTION_PUBLIC_FIELDS:
+            if forbidden_key(key):
+                continue
+            if key in ("p_up", "conviction"):
+                row[key] = as_float(cand.get(key))
+            else:
+                row[key] = as_text(cand.get(key))
+        if not row.get("symbol"):
+            continue
+        rows.append(row)
+    rows.sort(key=lambda item: (item.get("symbol") or "", item.get("bar_time") or ""))
+    public["predictions"] = rows
+    return public
+
+
+def fetch_latest_signal_artifact(base_url: str, key: str | None, db_url: str | None) -> dict | None:
+    """Newest signal_artifacts row as a signal document. None when it cannot be read."""
+    if not key and not db_url:
+        return None
+    columns = ("generated_at", "mode", "payload")
+    read_rows = make_reader(base_url, key, db_url)
+    rows = None
+    for order in ("generated_at.desc", "created_at.desc", None):
+        try:
+            rows = read_with_columns(read_rows, ARTIFACT_TABLE, columns, order, 1)
+            break
+        except (SourceMissing, ColumnMissing):
+            rows = None
+    if not rows:
+        return None
+    return signal_document(rows[0])
+
+
+def write_predictions(target: Path, document: dict) -> None:
+    text = json.dumps(document, indent=2, allow_nan=False) + "\n"
+    problems = text_violations(text)
+    if problems:
+        raise RuntimeError("predictions export blocked by public scrub: " + ", ".join(problems))
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "predictions.json").write_text(text, encoding="utf-8")
+
+
+def publish_predictions(target: Path, signal: dict | None, *, source: str | None = None, newest_artifact_at=None) -> dict | None:
+    """Write data/predictions.json from the newest signal. Raises when that file would be stale."""
+    if not isinstance(signal, dict):
+        require_fresh_predictions(None, newest_artifact_at)
+        print("predictions export skipped: no signal artifact")
+        return None
+    document = predictions_document(signal, source=source or ARTIFACT_TABLE)
+    require_fresh_predictions(document.get("generated_at"), newest_artifact_at)
+    write_predictions(target, document)
+    print(
+        "predictions exported "
+        f"generated_at={document.get('generated_at')} "
+        f"n={len(document.get('predictions') or [])} "
+        f"source={document.get('source')}"
+    )
+    return document
+
+
 def publish(target: Path, base_url: str, key: str | None = None, db_url: str | None = None, *, now: str | None = None, read_rows=None) -> None:
     """Write the public runs snapshot. Never raises; a miss is a log line."""
     fetched_at = now or utc_now()
@@ -791,8 +957,70 @@ def publish(target: Path, base_url: str, key: str | None = None, db_url: str | N
     )
 
 
+def _read_signal_file(path: Path) -> dict:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    document = signal_document(payload) if isinstance(payload, dict) else None
+    if document is None:
+        raise RuntimeError(f"{path} is not a signal document")
+    return document
+
+
 def main(argv: list[str] | None = None) -> int:
-    del argv
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--from-signal",
+        type=Path,
+        help="Write data/predictions.json from this signal JSON instead of reading the warehouse",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Directory for predictions.json. Defaults to data/",
+    )
+    parser.add_argument(
+        "--newest-artifact-at",
+        help="ISO timestamp of the newest signal artifact. The write fails when predictions are older.",
+    )
+    parser.add_argument(
+        "--require-fresh",
+        action="store_true",
+        help="Exit 1 when --predictions is older than --newest-artifact-at",
+    )
+    parser.add_argument(
+        "--predictions",
+        type=Path,
+        help="Existing predictions.json to compare with --newest-artifact-at",
+    )
+    parser.add_argument("--source", default=None, help="Source label stored on the predictions file")
+    args = parser.parse_args(argv)
+    if args.require_fresh:
+        if args.predictions is None:
+            print("predictions freshness check needs --predictions", file=sys.stderr)
+            return 1
+        payload = json.loads(args.predictions.read_text(encoding="utf-8"))
+        stamp = payload.get("generated_at") if isinstance(payload, dict) else None
+        try:
+            require_fresh_predictions(stamp, args.newest_artifact_at)
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"predictions fresh generated_at={stamp}")
+        return 0
+    if args.from_signal is not None:
+        signal = _read_signal_file(args.from_signal)
+        try:
+            publish_predictions(
+                args.out or DATA,
+                signal,
+                source=args.source or "signals/latest.json",
+                newest_artifact_at=args.newest_artifact_at,
+            )
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        return 0
     key = (os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or "").strip() or None
     db_url = (os.environ.get("SUPABASE_DB_URL") or "").strip() or None
     base_url = (os.environ.get("SUPABASE_URL") or "https://bsnqwgbshwszbjncglqx.supabase.co").strip()

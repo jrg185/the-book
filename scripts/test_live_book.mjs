@@ -770,7 +770,10 @@ test("export writes book_usd as the holdings sum and does not copy the signal bo
   assert.equal(exporter.includes("unrealized_pnl_usd"), true);
   assert.equal(exporter.includes("running_pnl_usd"), true);
   assert.equal(exporter.includes("running_balance_usd"), true);
-  assert.equal(exporter.includes("refresh_live_book(DATA)"), true);
+  assert.equal(
+    exporter.includes("refresh_live_book(DATA, signal=signal, fetch=False)"),
+    true
+  );
   const rest = exporter.split("def _fetch_account_snapshot_rest")[1].split("def _fetch_account_snapshot_db")[0];
   assert.match(rest, /eq\.combined/);
   assert.match(rest, /"limit": "1"/);
