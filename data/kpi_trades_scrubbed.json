@@ -1896,6 +1896,18 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-17T12:44:16.184285+00:00",
+    "ticker": "ARB",
+    "side": "sell",
+    "notional_frac_of_book": 0.187233,
+    "pnl_frac_of_book": 0.020547,
+    "why": "Joe's explicit ask in chat ('Take profit on ARB'): full discretionary take-profit on the 301.97 ARB leftover; not a model or rail exit (bid was ~8% above the 0.172 cost+5% trail floor)",
+    "running_pnl_frac": 0.238201,
+    "running_balance_frac": 1.238201,
+    "fee_frac_of_book": 0.001767
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
