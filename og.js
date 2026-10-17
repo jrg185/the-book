@@ -74,7 +74,7 @@ export function ogSnapshot({ book, summary, trades, curves, scorecard, meta }) {
   const all = windowPoints(points, "all");
   const fills = closedFillStats(trades, "crypto");
   const dd = drawdownStats(all);
-  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard));
+  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard), view?.unrealizedPnl);
   const cryptoFills = (Array.isArray(trades) ? trades : []).filter((row) => sleeveKey(row) === "crypto").length;
   const sleeveReturn = all.length ? all[all.length - 1].frac - 1 : null;
   return {

@@ -275,14 +275,19 @@ function assertCashDrop(drop, sources) {
     });
     const balance = agenticTotal(applied);
     const spent = Math.min(drop.day_realized_usd, 0);
+    const openLoss = Math.min(applied.unrealized_pnl_usd ?? 0, 0);
     assertCentsEqual(view.runningBalance, balance, label);
     assertCentsEqual(view.bookUsd, holdingsSum(applied), label);
     assertCentsEqual(view.dayPnl, drop.day_realized_usd, label);
     assertCentsEqual(view.runningPnl, roundCents(balance - combinedSeed), label);
-    assertCentsEqual(view.killHeadroom, killRemainingUsd(balance, drop.day_realized_usd), label);
     assertCentsEqual(
       view.killHeadroom,
-      Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent)),
+      killRemainingUsd(balance, drop.day_realized_usd, LIVE_RAILS.dayKillFrac, applied.unrealized_pnl_usd),
+      label
+    );
+    assertCentsEqual(
+      view.killHeadroom,
+      Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent + openLoss)),
       label
     );
   }
@@ -329,7 +334,10 @@ function assertLiveRails(view, book) {
     }
   }
   if (base != null) {
-    assertCentsEqual(view.killHeadroom, killRemainingUsd(base, book.day_pnl_usd));
+    assertCentsEqual(
+      view.killHeadroom,
+      killRemainingUsd(base, book.day_pnl_usd, LIVE_RAILS.dayKillFrac, book.unrealized_pnl_usd)
+    );
   }
   if (rail == null || rail === 0 || view.killHeadroom == null) {
     assert.equal(view.killHeadroomFrac, null);
@@ -479,7 +487,11 @@ test("the published book is the holdings sum, and the rails use the running bala
   // Export writes running_pnl_usd from the same cash + lots - seed.
   assertCentsEqual(live.running_pnl_usd, expectedRunning);
   assertCentsEqual(live.running_balance_usd, books[0].runningBalance);
-  assertCentsEqual(live.kill_remaining_usd, killRemainingUsd(books[0].runningBalance, live.day_pnl_usd));
+  assertCentsEqual(
+    live.kill_remaining_usd,
+    killRemainingUsd(books[0].runningBalance, live.day_pnl_usd, LIVE_RAILS.dayKillFrac, live.unrealized_pnl_usd)
+  );
+  assertCentsEqual(books[0].killHeadroom, live.kill_remaining_usd);
   // Reconciled realized can print the same cents as the warehouse field.
   assertCentsDifferWhen(
     books[0].realizedPnl,

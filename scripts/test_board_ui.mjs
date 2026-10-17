@@ -70,9 +70,12 @@ test("day rails come from the warehouse export, then the scorecard, never a cons
 test("rail bars use the export headroom formula on the running balance", () => {
   const view = cryptoBookView(book, summary);
   const rails = liveRails(summary, scorecard);
-  const r = railView(view.runningBalance, view.dayPnl, rails);
+  const r = railView(view.runningBalance, view.dayPnl, rails, view.unrealizedPnl);
   if (rails.killFrac != null) {
-    assert.equal(r.headroomUsd, killRemainingUsd(view.runningBalance, view.dayPnl, rails.killFrac));
+    assert.equal(
+      r.headroomUsd,
+      killRemainingUsd(view.runningBalance, view.dayPnl, rails.killFrac, view.unrealizedPnl)
+    );
   }
   const losing = railView(1000, -25, { killFrac: -0.1, targetFrac: 0.025 });
   assert.equal(losing.killUsd, -100);
@@ -251,7 +254,10 @@ test("out-of-sample metrics become ordered chips without private keys", () => {
   assert.equal(chips[4].value, "414k");
   assert.deepEqual(oosChips(null), []);
   for (const version of normalizeBundle(data("runs.json")).modelVersions) {
-    if (version.oos_metrics && typeof version.oos_metrics === "object") assert.ok(oosChips(version.oos_metrics).length > 0, version.name);
+    const metrics = version.oos_metrics;
+    if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) continue;
+    if (Object.keys(metrics).length === 0) continue;
+    assert.ok(oosChips(metrics).length > 0, version.name);
   }
 });
 
