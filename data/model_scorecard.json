@@ -32,10 +32,10 @@
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-17T07:09:17+00:00",
-    "kill_headroom_stored": 0.341646,
-    "kill_headroom_frac": 0.341646,
-    "kill_headroom_usd": 102.49,
+    "as_of": "2026-10-17T07:21:25+00:00",
+    "kill_headroom_stored": 0.242113,
+    "kill_headroom_frac": 0.242113,
+    "kill_headroom_usd": 72.63,
     "day_kill_pct": -0.1,
     "day_kill_usd": -30.0,
     "day_target_pct": 0.025,
