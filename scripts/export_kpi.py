@@ -1868,9 +1868,16 @@ def as_fraction(value):
     return number / 100.0 if abs(number) > 1 else number
 
 
-def kill_block(summary) -> dict:
+def kill_block(summary, running_balance=None) -> dict:
+    """Crypto kill rail. Dollars are the fraction times the live running balance.
+
+    That balance is the same base ``kill_remaining_usd`` uses. The sleeve seed
+    in config/book_seeds.json is the tape divisor and is not this rail.
+    A missing balance leaves the dollar fields empty. It does not invent a book.
+    """
     rows = summary if isinstance(summary, list) else []
     crypto = next((row for row in rows if isinstance(row, dict) and _sleeve_name(row) == "crypto"), None)
+    balance = _rail_balance(running_balance)
     if not crypto:
         return {
             "as_of": None,
@@ -1881,7 +1888,7 @@ def kill_block(summary) -> dict:
             "day_kill_usd": None,
             "day_target_pct": None,
             "day_target_usd": None,
-            "seed_usd": int(_crypto_seed()),
+            "running_balance_usd": balance,
             "note": "No crypto row in kpi_summary.",
         }
     stored = _finite_number(crypto.get("kill_headroom_frac"))
@@ -1892,13 +1899,16 @@ def kill_block(summary) -> dict:
         "as_of": crypto.get("as_of"),
         "kill_headroom_stored": stored,
         "kill_headroom_frac": head,
-        "kill_headroom_usd": _cents(head),
+        "kill_headroom_usd": rail_usd(head, balance),
         "day_kill_pct": day_kill,
-        "day_kill_usd": _cents(day_kill),
+        "day_kill_usd": rail_usd(day_kill, balance),
         "day_target_pct": day_target,
-        "day_target_usd": _cents(day_target),
-        "seed_usd": int(_crypto_seed()),
-        "note": "Same reading as the crypto sleeve card. A stored absolute value above 1 is percent points.",
+        "day_target_usd": rail_usd(day_target, balance),
+        "running_balance_usd": balance,
+        "note": (
+            "Day kill and day target are fractions of the live running balance, "
+            "the same base as kill_remaining_usd. A stored absolute value above 1 is percent points."
+        ),
     }
 
 
@@ -2067,6 +2077,7 @@ def build_model_scorecard(
     fee_drag=None,
     order_id_unique=None,
     signal_linkage=None,
+    running_balance=None,
 ) -> dict:
     """Crypto scorecard from already-exported JSON. Does not invent fees.
 
@@ -2117,7 +2128,7 @@ def build_model_scorecard(
             "note": fill_note,
         },
         "fee_drag": fees,
-        "kill": kill_block(summary),
+        "kill": kill_block(summary, running_balance),
         "oos": oos_block(oos_payload),
         "last_train": {
             "models_as_of": model_payload.get("as_of"),
@@ -2282,11 +2293,14 @@ def crypto_scorecard_facts(base_url: str, key: str | None, db_url: str | None) -
     return {"fee_drag": fees, "order_id_unique": unique, "fee_rows": _fee_rows_for_tape(rows)}
 
 
-def write_model_scorecard(target: Path, bundle: dict) -> None:
+def write_model_scorecard(target: Path, bundle: dict, book: dict | None = None) -> None:
     models = _read_json(target / "models.json", {})
     oos = bundle.get("models_oos")
     if not oos_has_rows(oos):
         oos = _read_json(target / "models_oos.json", {"rows": []})
+    if book is None:
+        loaded = _read_json(target / "live_book.json", None)
+        book = loaded if isinstance(loaded, dict) else None
     payload = build_model_scorecard(
         bundle.get("kpi_summary") or [],
         bundle.get("kpi_trades_scrubbed") or [],
@@ -2295,6 +2309,7 @@ def write_model_scorecard(target: Path, bundle: dict) -> None:
         fee_drag=bundle.get("crypto_fee_drag"),
         order_id_unique=bundle.get("order_id_unique"),
         signal_linkage=bundle.get("signal_linkage"),
+        running_balance=published_running_balance(book),
     )
     write_json(target / "model_scorecard.json", payload)
 
@@ -2398,6 +2413,30 @@ def live_rails() -> dict[str, Decimal]:
     return _LIVE_RAILS
 
 
+def _rail_balance(running_balance) -> float | None:
+    number = _finite_number(running_balance)
+    if number is None:
+        return None
+    return js_round_cents(number)
+
+
+def rail_usd(frac, running_balance) -> float | None:
+    """Signed dollars: rail fraction times the live running balance.
+
+    The magnitude uses the same cent round as ``kill_remaining_usd``. When the
+    day and the open mark are both non-negative, ``kill_remaining_usd`` equals
+    ``|day_kill_usd|``. A missing balance does not fall back to a seed.
+    """
+    if frac is None or running_balance is None:
+        return None
+    fraction = float(frac)
+    balance = float(running_balance)
+    magnitude = js_round_cents(abs(fraction) * balance)
+    if fraction < 0:
+        return -magnitude
+    return magnitude
+
+
 def kill_remaining_usd(running_balance, day_pnl, open_pnl=None) -> float | None:
     """max(0, |dayKillFrac| × running balance + min(day P&L, 0) + min(open P&L, 0)).
 
@@ -2476,6 +2515,21 @@ def agentic_book_usd(book) -> float | None:
     if rows == 0:
         return None
     return js_round_cents(total)
+
+
+def published_running_balance(book) -> float | None:
+    """Base for the day-kill rail and for ``kill_remaining_usd``.
+
+    When the file has published lots, that base is the agentic total
+    (cash plus marked open crypto). Otherwise it is the stored
+    ``running_balance_usd``. The sleeve seed is not a substitute.
+    """
+    if not isinstance(book, dict):
+        return None
+    marked = agentic_book_usd(book)
+    if marked is not None:
+        return marked
+    return _finite_number(book.get("running_balance_usd"))
 
 
 def account_book_usd(holdings) -> float | None:
@@ -3205,7 +3259,12 @@ def stamp_shared_kill(target: Path, book: dict) -> None:
     card = json.loads(card_path.read_text(encoding="utf-8"))
     if not isinstance(card, dict):
         return
-    block = kill_block(summary)
+    block = kill_block(summary, published_running_balance(book))
+    # Headroom dollars are the shared helper, not the fraction times the
+    # running balance. The summary stores those dollars divided by the crypto
+    # seed, and day kill stays a fraction of the live balance.
+    if dollars is not None:
+        block["kill_headroom_usd"] = dollars
     if card.get("kill") != block:
         card["kill"] = block
         write_json(card_path, card)
@@ -4654,8 +4713,52 @@ def self_test() -> int:
         raise RuntimeError("a bad holdings payload became a balance")
     if card["kill"]["kill_headroom_stored"] != 1.25 or card["kill"]["kill_headroom_frac"] != 0.0125:
         raise RuntimeError(f"kill {card['kill']}")
-    if not usd_equal(card["kill"]["kill_headroom_usd"], 3.75) or not usd_equal(card["kill"]["day_kill_usd"], -30.0):
-        raise RuntimeError(f"kill dollars {card['kill']}")
+    if "seed_usd" in card["kill"]:
+        raise RuntimeError(f"kill block still publishes the sleeve seed: {card['kill']}")
+    kill_src = Path(__file__).read_text(encoding="utf-8").split("def kill_block", 1)[1].split("\ndef ", 1)[0]
+    if "_cents(" in kill_src or "_crypto_seed" in kill_src:
+        raise RuntimeError("kill block still sizes dollars from the sleeve seed")
+    small_kill = kill_block(summary=[{"sleeve": "crypto", "day_kill_pct": -0.1, "day_target_pct": 0.025, "kill_headroom_frac": 1.25}], running_balance=400)
+    large_kill = kill_block(summary=[{"sleeve": "crypto", "day_kill_pct": -0.1, "day_target_pct": 0.025, "kill_headroom_frac": 1.25}], running_balance=1600)
+    if not usd_equal(small_kill["day_kill_usd"], -40.0) or not usd_equal(large_kill["day_kill_usd"], -160.0):
+        raise RuntimeError(f"day kill did not scale with the running balance: {small_kill} {large_kill}")
+    if not usd_equal(small_kill["day_target_usd"], 10.0) or not usd_equal(large_kill["day_target_usd"], 40.0):
+        raise RuntimeError(f"day target did not scale with the running balance: {small_kill} {large_kill}")
+    if not usd_equal(small_kill["kill_headroom_usd"], 5.0) or not usd_equal(large_kill["kill_headroom_usd"], 20.0):
+        raise RuntimeError(f"kill headroom did not scale with the running balance: {small_kill} {large_kill}")
+    if usd_equal(small_kill["day_kill_usd"], _cents(-0.1)):
+        raise RuntimeError("day kill still matches the sleeve seed")
+    bare_kill = kill_block(summary=[{"sleeve": "crypto", "day_kill_pct": -0.1}], running_balance=None)
+    if bare_kill["day_kill_usd"] is not None or bare_kill["running_balance_usd"] is not None:
+        raise RuntimeError(f"a missing balance invented kill dollars: {bare_kill}")
+    live_book = json.loads((DATA / "live_book.json").read_text(encoding="utf-8"))
+    live_summary = json.loads((DATA / "kpi_summary.json").read_text(encoding="utf-8"))
+    live_card = json.loads((DATA / "model_scorecard.json").read_text(encoding="utf-8"))
+    live_crypto = next(row for row in live_summary if isinstance(row, dict) and _sleeve_name(row) == "crypto")
+    live_balance = published_running_balance(live_book)
+    live_frac = as_fraction(live_crypto.get("day_kill_pct"))
+    if not usd_equal(live_card["kill"]["day_kill_pct"], live_frac):
+        raise RuntimeError("scorecard day_kill_pct is not the crypto summary rail")
+    if not usd_equal(live_card["kill"]["running_balance_usd"], live_balance):
+        raise RuntimeError(
+            f"scorecard balance {live_card['kill'].get('running_balance_usd')} "
+            f"is not the live book {live_balance}"
+        )
+    if not usd_equal(live_card["kill"]["day_kill_usd"], rail_usd(live_frac, live_balance)):
+        raise RuntimeError(f"published day kill {live_card['kill']} is not the live running balance")
+    live_open = live_book.get("unrealized_pnl_usd")
+    if not usd_equal(
+        live_book.get("kill_remaining_usd"),
+        kill_remaining_usd(live_balance, live_book.get("day_pnl_usd"), live_open),
+    ):
+        raise RuntimeError("live_book kill_remaining_usd is not the shared helper on the running balance")
+    day_clear = _finite_number(live_book.get("day_pnl_usd")) is None or float(live_book["day_pnl_usd"]) >= 0
+    open_clear = _finite_number(live_open) is None or float(live_open) >= 0
+    if day_clear and open_clear:
+        if not usd_equal(live_book["kill_remaining_usd"], abs(live_card["kill"]["day_kill_usd"])):
+            raise RuntimeError("kill remaining and |day_kill_usd| disagree when day and open P&L are non-negative")
+    if not usd_equal(live_card["kill"].get("kill_headroom_usd"), live_book.get("kill_remaining_usd")):
+        raise RuntimeError("scorecard kill headroom is not the live book kill remaining")
     if '"order_id"' in json.dumps(card):
         raise RuntimeError("scorecard wrote an order id")
     plain = build_model_scorecard(

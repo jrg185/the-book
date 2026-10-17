@@ -37,11 +37,11 @@
     "kill_headroom_frac": 0.0,
     "kill_headroom_usd": 0.0,
     "day_kill_pct": -0.1,
-    "day_kill_usd": -30.0,
+    "day_kill_usd": -71.4,
     "day_target_pct": 0.025,
-    "day_target_usd": 7.5,
-    "seed_usd": 300,
-    "note": "Same reading as the crypto sleeve card. A stored absolute value above 1 is percent points."
+    "day_target_usd": 17.85,
+    "running_balance_usd": 713.99,
+    "note": "Day kill and day target are fractions of the live running balance, the same base as kill_remaining_usd. A stored absolute value above 1 is percent points."
   },
   "oos": {
     "fee_bps": 30,

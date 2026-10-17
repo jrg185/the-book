@@ -170,6 +170,49 @@ class TapeLedgerTests(unittest.TestCase):
 
 
 class ScorecardTests(unittest.TestCase):
+    def test_day_kill_scales_with_running_balance(self):
+        summary = [
+            {
+                "sleeve": "crypto",
+                "as_of": "2026-10-01T00:00:00Z",
+                "day_kill_pct": -0.1,
+                "day_target_pct": 0.025,
+                "kill_headroom_frac": 0,
+            }
+        ]
+        low = export_kpi.kill_block(summary, 719)
+        high = export_kpi.kill_block(summary, 1438)
+        self.assertEqual(low["day_kill_pct"], -0.1)
+        self.assertEqual(low["day_kill_usd"], export_kpi.rail_usd(-0.1, 719))
+        self.assertEqual(high["day_kill_usd"], export_kpi.rail_usd(-0.1, 1438))
+        self.assertEqual(high["day_kill_usd"], export_kpi.js_round_cents(low["day_kill_usd"] * 2))
+        self.assertNotEqual(low["day_kill_usd"], export_kpi._cents(-0.1))
+        self.assertNotIn("seed_usd", low)
+        self.assertIsNone(export_kpi.kill_block(summary, None)["day_kill_usd"])
+        root = Path(__file__).resolve().parents[1]
+        live = json.loads((root / "data" / "live_book.json").read_text(encoding="utf-8"))
+        published_summary = json.loads((root / "data" / "kpi_summary.json").read_text(encoding="utf-8"))
+        card = json.loads((root / "data" / "model_scorecard.json").read_text(encoding="utf-8"))
+        crypto = next(row for row in published_summary if row["sleeve"] == "crypto")
+        balance = export_kpi.published_running_balance(live)
+        frac = export_kpi.as_fraction(crypto["day_kill_pct"])
+        self.assertEqual(card["kill"]["day_kill_pct"], frac)
+        self.assertTrue(export_kpi.usd_equal(card["kill"]["running_balance_usd"], balance))
+        self.assertTrue(export_kpi.usd_equal(live["running_balance_usd"], balance))
+        self.assertTrue(export_kpi.usd_equal(card["kill"]["day_kill_usd"], export_kpi.rail_usd(frac, balance)))
+        self.assertTrue(export_kpi.usd_equal(card["kill"]["day_target_usd"], export_kpi.rail_usd(crypto["day_target_pct"], balance)))
+        self.assertTrue(
+            export_kpi.usd_equal(
+                live["kill_remaining_usd"],
+                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
+            )
+        )
+        self.assertTrue(export_kpi.usd_equal(card["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
+        day_clear = live.get("day_pnl_usd", 0) >= 0
+        open_clear = (live.get("unrealized_pnl_usd") or 0) >= 0
+        if day_clear and open_clear:
+            self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
+
     def test_committed_crypto_scorecard_matches_exported_json(self):
         root = Path(__file__).resolve().parents[1]
         summary = json.loads((root / "data" / "kpi_summary.json").read_text(encoding="utf-8"))
@@ -177,12 +220,15 @@ class ScorecardTests(unittest.TestCase):
         models = json.loads((root / "data" / "models.json").read_text(encoding="utf-8"))
         oos = json.loads((root / "data" / "models_oos.json").read_text(encoding="utf-8"))
         meta = json.loads((root / "data" / "meta.json").read_text(encoding="utf-8"))
+        live = json.loads((root / "data" / "live_book.json").read_text(encoding="utf-8"))
+        balance = export_kpi.published_running_balance(live)
         built = export_kpi.build_model_scorecard(
             summary,
             trades,
             models,
             oos,
             signal_linkage=meta.get("signal_linkage"),
+            running_balance=balance,
         )
         committed = json.loads((root / "data" / "model_scorecard.json").read_text(encoding="utf-8"))
         self.assertEqual(committed, built)
@@ -238,9 +284,23 @@ class ScorecardTests(unittest.TestCase):
         self.assertEqual(built["kill"]["kill_headroom_stored"], crypto["kill_headroom_frac"])
         self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(crypto["kill_headroom_frac"]))
         self.assertEqual(built["kill"]["kill_headroom_usd"], committed["kill"]["kill_headroom_usd"])
-        self.assertEqual(built["kill"]["kill_headroom_usd"], export_kpi._cents(built["kill"]["kill_headroom_frac"]))
+        self.assertEqual(
+            built["kill"]["kill_headroom_usd"],
+            export_kpi.rail_usd(built["kill"]["kill_headroom_frac"], balance),
+        )
         self.assertEqual(built["kill"]["day_kill_pct"], crypto["day_kill_pct"])
         self.assertEqual(built["kill"]["day_target_pct"], crypto["day_target_pct"])
+        self.assertEqual(built["kill"]["day_kill_usd"], export_kpi.rail_usd(crypto["day_kill_pct"], balance))
+        self.assertEqual(built["kill"]["day_target_usd"], export_kpi.rail_usd(crypto["day_target_pct"], balance))
+        self.assertNotIn("seed_usd", built["kill"])
+        self.assertTrue(export_kpi.usd_equal(built["kill"]["running_balance_usd"], live["running_balance_usd"]))
+        self.assertTrue(
+            export_kpi.usd_equal(
+                live["kill_remaining_usd"],
+                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
+            )
+        )
+        self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
         blob = json.dumps(built)
         self.assertNotIn('"order_id"', blob)
         self.assertNotIn("should-not-survive", blob)
