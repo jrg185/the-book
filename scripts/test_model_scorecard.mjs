@@ -10,6 +10,7 @@ import {
   deriveSleeve,
   formatWinRecord,
   inferLiveBackend,
+  killRemainingUsd,
   LIVE_RAILS,
   money,
 } from "../derive.js";
@@ -113,6 +114,17 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assertFracEqual(derived.dayKillFrac, LIVE_RAILS.dayKillFrac);
   assertCentsEqual(derived.dayKill, scorecard.kill.day_kill_usd);
   assertCentsEqual(derived.dayKill, money(derived.seed, LIVE_RAILS.dayKillFrac));
+  const book = read("live_book.json");
+  const headroom = killRemainingUsd(
+    book.running_balance_usd,
+    book.day_pnl_usd,
+    LIVE_RAILS.dayKillFrac,
+    book.unrealized_pnl_usd
+  );
+  assertCentsEqual(book.kill_remaining_usd, headroom);
+  assertCentsEqual(scorecard.kill.kill_headroom_usd, headroom);
+  assertCentsEqual(money(scorecard.kill.seed_usd, crypto.kill_headroom_frac), headroom);
+  assertFracEqual(crypto.kill_headroom_frac, scorecard.kill.kill_headroom_frac);
   assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
   assertFracEqual(derived.dayTargetFrac, LIVE_RAILS.dayTargetFrac);
   const deriveSrc = readFileSync(new URL("../derive.js", import.meta.url), "utf8");

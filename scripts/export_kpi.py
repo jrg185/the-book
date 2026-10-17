@@ -2398,20 +2398,37 @@ def live_rails() -> dict[str, Decimal]:
     return _LIVE_RAILS
 
 
-def kill_remaining_usd(running_balance, day_pnl) -> float | None:
-    """max(0, |dayKillFrac| × running balance + min(day P&L, 0)).
+def kill_remaining_usd(running_balance, day_pnl, open_pnl=None) -> float | None:
+    """max(0, |dayKillFrac| × running balance + min(day P&L, 0) + min(open P&L, 0)).
 
     dayKillFrac is the signed rail from the published crypto row. The budget
-    is its magnitude. A positive day does not increase headroom. The net day
-    figure is used as-is. This does not apply a fee rate.
+    is that fraction's magnitude times the live running balance. A positive
+    day does not increase headroom and does not offset losses. Open losses
+    count: negative unrealized spends the same budget. A positive open mark
+    does not add headroom. This does not apply a fee rate.
     """
     if running_balance is None:
         return None
     frac = float(live_rails()["dayKillFrac"])
     balance = float(running_balance)
     day = 0.0 if day_pnl is None else float(day_pnl)
-    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0))
+    open_loss = 0.0 if open_pnl is None else min(float(open_pnl), 0.0)
+    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0) + open_loss)
     return 0.0 if rounded < 0 else rounded
+
+
+def kill_headroom_frac_of_seed(dollars) -> float | None:
+    """Headroom dollars ÷ the crypto seed, so the scorecard cent conversion matches.
+
+    The seed is config/book_seeds.json. The dollars are kill_remaining_usd.
+    """
+    if dollars is None:
+        return None
+    seed = _crypto_seed()
+    if seed == 0:
+        return None
+    quant = (Decimal(str(dollars)) / seed).quantize(Decimal("0.0000000001"))
+    return float(quant)
 
 
 def agentic_book_usd(book) -> float | None:
@@ -3081,7 +3098,7 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     present and gross minus fees differs from the net by more than one cent,
     a warning is printed and the net is left unchanged. A missing
     day_realized_usd leaves the day already on the file and logs that.
-    kill_remaining_usd uses the running balance and that day.
+    kill_remaining_usd uses the running balance, that day, and open losses.
     """
     out = dict(book) if isinstance(book, dict) else {}
     cash_missing = not isinstance(cash, dict)
@@ -3146,10 +3163,52 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
             out["realized_pnl_usd"] = float(identity["realized_cents"])
             out["running_pnl_usd"] = float(identity["running_cents"])
     day = _finite_number(out.get("day_pnl_usd"))
-    kill = kill_remaining_usd(marked, day)
+    open_pnl = _finite_number(out.get("unrealized_pnl_usd"))
+    kill = kill_remaining_usd(marked, day, open_pnl)
     if kill is not None:
         out["kill_remaining_usd"] = kill
     return out
+
+
+def stamp_shared_kill(target: Path, book: dict) -> None:
+    """Write the live book's kill headroom onto the summary and the scorecard.
+
+    Dollars come from kill_remaining_usd. The crypto summary stores those
+    dollars divided by the crypto seed. The scorecard kill block is the
+    same reading kill_block already applies to that fraction, so the three
+    published numbers cannot be produced by different formulas. A directory
+    without the summary is left alone.
+    """
+    summary_path = target / "kpi_summary.json"
+    if not summary_path.exists() or not isinstance(book, dict):
+        return
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if not isinstance(summary, list):
+        return
+    balance = _finite_number(book.get("running_balance_usd"))
+    day = _finite_number(book.get("day_pnl_usd"))
+    open_pnl = _finite_number(book.get("unrealized_pnl_usd"))
+    dollars = kill_remaining_usd(balance, day, open_pnl)
+    frac = kill_headroom_frac_of_seed(dollars)
+    if frac is None:
+        return
+    changed = False
+    for row in summary:
+        if isinstance(row, dict) and _sleeve_name(row) == "crypto" and row.get("kill_headroom_frac") != frac:
+            row["kill_headroom_frac"] = frac
+            changed = True
+    if changed:
+        write_json(summary_path, summary)
+    card_path = target / "model_scorecard.json"
+    if not card_path.exists():
+        return
+    card = json.loads(card_path.read_text(encoding="utf-8"))
+    if not isinstance(card, dict):
+        return
+    block = kill_block(summary)
+    if card.get("kill") != block:
+        card["kill"] = block
+        write_json(card_path, card)
 
 
 def refresh_live_book(
@@ -3173,7 +3232,7 @@ def refresh_live_book(
     previous realized and unrealized. Day P&L is day_realized_usd from the cash drop when
     that number is present; otherwise the signal copy stays and the absence
     is logged. kill_remaining_usd is the day-kill headroom on the running
-    balance. generated_at stays the signal time. A missing snapshot does not
+    balance after open losses. generated_at stays the signal time. A missing snapshot does not
     delete P&L or day P&L already on the file. When positions is the open-net
     read, those rows replace the list. None leaves open rows already on the
     file. When cash is a Robinhood USD and USDC read (REST, or
@@ -3198,6 +3257,7 @@ def refresh_live_book(
         merged = apply_card_positions(merged, positions)
     merged = apply_published_book(merged, cash)
     write_json(path, merged)
+    stamp_shared_kill(target, merged)
     return merged
 
 

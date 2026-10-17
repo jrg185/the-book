@@ -129,15 +129,18 @@ export function money(seed, frac) {
 // Headroom inside the day-kill rail. dayKillFrac is the signed published
 // fraction (LIVE_RAILS when the caller omits it). The budget is that
 // fraction's magnitude times the running balance. A negative day P&L spends
-// the budget. A positive day does not add to it. The result is never below
-// zero. Export writes the same dollars from the same published fraction.
+// the budget. Open losses spend it too: negative unrealized counts, and a
+// positive open mark does not add headroom or offset a loss. A positive day
+// does not add headroom and does not offset open losses. The result is never
+// below zero. Export writes the same dollars from the same published fraction.
 // There is no second copy of the fraction here.
-export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAILS.dayKillFrac) {
+export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAILS.dayKillFrac, openPnl = null) {
   const balance = num(runningBalance);
   const frac = num(dayKillFrac);
   if (balance == null || frac == null) return null;
   const day = num(dayPnl);
-  const spent = day == null ? 0 : Math.min(day, 0);
+  const open = num(openPnl);
+  const spent = (day == null ? 0 : Math.min(day, 0)) + (open == null ? 0 : Math.min(open, 0));
   return Math.max(0, money(1, Math.abs(frac) * balance + spent));
 }
 
@@ -226,8 +229,9 @@ function accountUnrealizedUsd(book) {
 // Day P&L is the dollar on the file. Export fills it from the cash drop
 // when that drop has day_realized_usd. The day kill and the day target are
 // fractions of the same total as RUNNING BALANCE. Kill headroom is
-// max(0, |dayKillFrac| × that total + min(day P&L, 0)), using the published
-// crypto rail (the summary row when it has one, otherwise LIVE_RAILS).
+// max(0, |dayKillFrac| × that total + min(day P&L, 0) + min(open P&L, 0)),
+// using the published crypto rail (the summary row when it has one,
+// otherwise LIVE_RAILS). Open P&L is the book's unrealized dollars.
 // When the RH total is known, running P&L is that total minus the combined
 // seed. Unrealized is the open lots' mark versus cost. Realized is running
 // minus unrealized, so the three match the cash-and-lots book.
@@ -337,10 +341,13 @@ export function cryptoBookView(book, summary) {
           : null;
   if (bookUsd == null && rail == null) return null;
   // Same headroom export writes on kill_remaining_usd: the day-kill budget
-  // on the running balance, reduced by a negative day, floored at zero.
+  // on the running balance, reduced by a negative day and by open losses,
+  // floored at zero.
   const rails = railsFor(summary);
+  const publishedOpen = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
+  const openForKill = publishedOpen != null ? publishedOpen : openCryptoUnrealized(book);
   const killHeadroom =
-    runningBalance != null ? killRemainingUsd(runningBalance, dayPnl, rails.dayKillFrac) : killStored;
+    runningBalance != null ? killRemainingUsd(runningBalance, dayPnl, rails.dayKillFrac, openForKill) : killStored;
   const reconciled = reconciledPnl(book);
   let realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
