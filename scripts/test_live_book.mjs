@@ -11,6 +11,7 @@ import {
   LIVE_RAILS,
   loadPublishedRails,
   mergeLiveBook,
+  railUsd,
   openPositionRows,
   reconciledPnl,
   SEEDS_USD,
@@ -59,7 +60,7 @@ function holdingsSum(book) {
 }
 
 function railDollars(bookUsd, frac) {
-  return Math.round((bookUsd * frac + Number.EPSILON) * 100) / 100;
+  return railUsd(bookUsd, frac);
 }
 
 function roundCents(value) {

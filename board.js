@@ -1,7 +1,7 @@
 // Scoreboard helpers. No DOM, no network. Every number comes from data/*.json
 // or config/*.json. Rails, seeds, fees, and prices are never written here.
 
-import { killRemainingUsd, num, publishedRails, SEEDS_USD, sleeveKey } from "./derive.js";
+import { killRemainingUsd, num, publishedRails, railUsd, SEEDS_USD, sleeveKey } from "./derive.js";
 
 export const SITE_URL = "https://jrg185.github.io/the-book/";
 
@@ -11,10 +11,6 @@ export const RANGES = [
   { key: "30d", label: "30D", ms: 30 * 24 * 60 * 60 * 1000 },
   { key: "all", label: "ALL", ms: null },
 ];
-
-function roundCents(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
@@ -64,14 +60,14 @@ export function railView(balance, dayPnl, rails, openPnl = null) {
   if (total == null || total === 0) return out;
   if (killFrac != null) {
     const budget = Math.abs(killFrac) * total;
-    out.killUsd = roundCents(killFrac * total);
+    out.killUsd = railUsd(total, killFrac);
     out.headroomUsd = killRemainingUsd(total, day, killFrac, openPnl);
     out.headroomFrac = out.headroomUsd == null ? null : out.headroomUsd / total;
     out.killUsedFrac =
       budget === 0 || out.headroomUsd == null ? null : clamp01((budget - out.headroomUsd) / budget);
   }
   if (targetFrac != null) {
-    out.targetUsd = roundCents(targetFrac * total);
+    out.targetUsd = railUsd(total, targetFrac);
     out.targetProgress = out.targetUsd === 0 ? null : clamp01(Math.max(0, day ?? 0) / out.targetUsd);
   }
   return out;

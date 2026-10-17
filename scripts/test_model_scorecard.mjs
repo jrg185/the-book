@@ -14,6 +14,7 @@ import {
   killRemainingUsd,
   LIVE_RAILS,
   money,
+  railUsd,
 } from "../derive.js";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../data/${name}`, import.meta.url), "utf8"));
@@ -119,9 +120,9 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assertCentsEqual(derived.dayKill, money(derived.seed, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(view.runningBalance, book.running_balance_usd);
   assertCentsEqual(scorecard.kill.running_balance_usd, view.runningBalance);
-  assertCentsEqual(scorecard.kill.day_kill_usd, money(view.runningBalance, LIVE_RAILS.dayKillFrac));
+  assertCentsEqual(scorecard.kill.day_kill_usd, railUsd(view.runningBalance, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(view.dayKill, scorecard.kill.day_kill_usd);
-  assertCentsEqual(scorecard.kill.day_target_usd, money(view.runningBalance, LIVE_RAILS.dayTargetFrac));
+  assertCentsEqual(scorecard.kill.day_target_usd, railUsd(view.runningBalance, LIVE_RAILS.dayTargetFrac));
   const headroom = killRemainingUsd(
     book.running_balance_usd,
     book.day_pnl_usd,
@@ -145,6 +146,36 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assert.equal(/dayTargetFrac\s*[:=]\s*-?\d/.test(deriveSrc), false);
   assert.equal(deriveSrc.includes('type: "json"'), false);
   assert.equal(deriveSrc.includes("type: 'json'"), false);
+});
+
+test("day kill uses the kill-remaining cent round on a half-cent balance", () => {
+  // 712.05 × 10% is a half cent. 712.1 × 10% is not, so the nearby tenth
+  // hides the tie. The signed product round and the shared helper disagree
+  // only on the edge balance.
+  const edge = 712.05;
+  const nearby = 712.1;
+  const frac = -0.1;
+  assertCentsDiffer(edge, nearby);
+  const shared = railUsd(edge, frac);
+  const signed = money(edge, frac);
+  assertCentsDiffer(shared, signed);
+  assertCentsEqual(Math.abs(shared), killRemainingUsd(edge, 0, frac, 0));
+  assertCentsEqual(railUsd(nearby, frac), money(nearby, frac));
+  const book = {
+    running_balance_usd: edge,
+    day_pnl_usd: 0,
+    unrealized_pnl_usd: 0,
+    holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: nearby }],
+  };
+  const view = cryptoBookView(book, [{ sleeve: "crypto", day_kill_pct: frac, day_target_pct: 0.025 }]);
+  // Cash on the file is the nearby tenth. With no open-lot list the rail
+  // stays the running balance, not that cash line.
+  assertCentsEqual(view.runningBalance, edge);
+  assertCentsDiffer(view.runningBalance, nearby);
+  assertCentsEqual(view.dayKill, shared);
+  assertCentsEqual(view.dayKill, railUsd(view.runningBalance, frac));
+  assertCentsDiffer(view.dayKill, signed);
+  assertCentsEqual(Math.abs(view.dayKill), view.killHeadroom);
 });
 
 test("book-fraction tolerance is half of 0.01 percent", () => {

@@ -213,6 +213,84 @@ class ScorecardTests(unittest.TestCase):
         if day_clear and open_clear:
             self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
 
+    def test_half_cent_day_kill_is_restamped_from_the_written_balance(self):
+        # 712.05 × 10% is a half cent. 712.1 × 10% is not. The two balances
+        # are a cent apart at the tenth, and only the first splits the signed
+        # product round from the shared kill round.
+        edge = 712.05
+        nearby = 712.1
+        frac = -0.1
+        self.assertTrue(export_kpi.usd_differ(edge, nearby))
+        shared = export_kpi.rail_usd(frac, edge)
+        signed = export_kpi.js_round_cents(frac * edge)
+        self.assertNotEqual(shared, signed)
+        self.assertEqual(abs(shared), export_kpi.kill_remaining_usd(edge, 0, 0))
+        self.assertEqual(export_kpi.rail_usd(frac, nearby), export_kpi.js_round_cents(frac * nearby))
+        summary = [
+            {
+                "sleeve": "crypto",
+                "as_of": "2026-10-17T00:00:00Z",
+                "day_kill_pct": frac,
+                "day_target_pct": 0.025,
+                "kill_headroom_frac": 0,
+            }
+        ]
+        with TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            export_kpi.write_json(target / "kpi_summary.json", summary)
+            stale = export_kpi.kill_block(summary, nearby)
+            stale["day_kill_usd"] = signed
+            stale["running_balance_usd"] = nearby
+            export_kpi.write_json(target / "model_scorecard.json", {"sleeve": "crypto", "kill": stale})
+            book = {
+                "running_balance_usd": edge,
+                "day_pnl_usd": 0,
+                "unrealized_pnl_usd": 0,
+                "kill_remaining_usd": 1,
+                "holdings": [{"ticker": "USD", "sleeve": "crypto", "value_usd": nearby}],
+                "positions": [],
+            }
+            export_kpi.write_json(target / "live_book.json", book)
+            written = json.loads((target / "live_book.json").read_text(encoding="utf-8"))
+            export_kpi.stamp_shared_kill(target, written)
+            card = json.loads((target / "model_scorecard.json").read_text(encoding="utf-8"))
+            self.assertEqual(card["kill"]["running_balance_usd"], written["running_balance_usd"])
+            self.assertNotEqual(card["kill"]["running_balance_usd"], nearby)
+            self.assertEqual(card["kill"]["day_kill_usd"], export_kpi.rail_usd(frac, written["running_balance_usd"]))
+            self.assertEqual(
+                abs(card["kill"]["day_kill_usd"]),
+                export_kpi.kill_remaining_usd(written["running_balance_usd"], 0, 0),
+            )
+            self.assertNotEqual(card["kill"]["day_kill_usd"], signed)
+            self.assertEqual(card["kill"]["kill_headroom_usd"], export_kpi.kill_remaining_usd(edge, 0, 0))
+            # The export write path: a stale scorecard is restamped from the
+            # running balance refresh just wrote, not from the previous tenth.
+            export_kpi.write_json(
+                target / "model_scorecard.json",
+                {"sleeve": "crypto", "kill": stale},
+            )
+            export_kpi.write_json(
+                target / "live_book.json",
+                {
+                    "running_balance_usd": nearby,
+                    "day_pnl_usd": 0,
+                    "unrealized_pnl_usd": 0,
+                    "kill_remaining_usd": 1,
+                    "holdings": [{"ticker": "USD", "sleeve": "crypto", "value_usd": edge}],
+                    "positions": [],
+                },
+            )
+            refreshed = export_kpi.refresh_live_book(target, fetch=False, cash=None)
+            self.assertEqual(refreshed["running_balance_usd"], edge)
+            restamped = json.loads((target / "model_scorecard.json").read_text(encoding="utf-8"))
+            self.assertEqual(restamped["kill"]["running_balance_usd"], refreshed["running_balance_usd"])
+            self.assertEqual(restamped["kill"]["day_kill_usd"], export_kpi.rail_usd(frac, refreshed["running_balance_usd"]))
+            self.assertNotEqual(restamped["kill"]["day_kill_usd"], signed)
+            self.assertEqual(
+                restamped["kill"]["kill_headroom_usd"],
+                refreshed["kill_remaining_usd"],
+            )
+
     def test_committed_crypto_scorecard_matches_exported_json(self):
         root = Path(__file__).resolve().parents[1]
         summary = json.loads((root / "data" / "kpi_summary.json").read_text(encoding="utf-8"))

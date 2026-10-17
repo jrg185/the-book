@@ -20,7 +20,7 @@ import {
   windowChange,
   windowPoints,
 } from "../board.js";
-import { cryptoBookView, killRemainingUsd, SEEDS_USD } from "../derive.js";
+import { cryptoBookView, killRemainingUsd, railUsd, SEEDS_USD } from "../derive.js";
 import { buildOgSvg, ogSnapshot, xmlEscape } from "../og.js";
 import { preferredWhy } from "../tape.js";
 import {
@@ -76,6 +76,8 @@ test("rail bars use the export headroom formula on the running balance", () => {
       r.headroomUsd,
       killRemainingUsd(view.runningBalance, view.dayPnl, rails.killFrac, view.unrealizedPnl)
     );
+    assert.equal(r.killUsd, railUsd(view.runningBalance, rails.killFrac));
+    assert.equal(r.killUsd, scorecard.kill.day_kill_usd);
   }
   const losing = railView(1000, -25, { killFrac: -0.1, targetFrac: 0.025 });
   assert.equal(losing.killUsd, -100);
