@@ -1908,6 +1908,18 @@
     "fee_frac_of_book": 0.001767
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-17T13:51:37.235596+00:00",
+    "ticker": "STRK",
+    "side": "buy",
+    "notional_frac_of_book": 0.184967,
+    "pnl_frac_of_book": 0.0,
+    "why": "Joe's explicit one-time OK in chat to place the STRK buy (p=0.554) from pre-lgbm_v1 artifact ac09399, the last trade from that artifact; sized to available cash ($55.49 of $56.15)",
+    "running_pnl_frac": 0.238201,
+    "running_balance_frac": 1.238201,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
