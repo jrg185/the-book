@@ -2,14 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { approxFrac, assertCentsEqual, assertFracEqual, FRAC_TOL } from "./cents.mjs";
+import { approxFrac, assertCentsDiffer, assertCentsEqual, assertFracEqual, FRAC_TOL } from "./cents.mjs";
 import {
   closedFillStats,
+  cryptoBookView,
   cryptoOosModels,
   feeDragFromTrades,
   deriveSleeve,
   formatWinRecord,
   inferLiveBackend,
+  killRemainingUsd,
   LIVE_RAILS,
   money,
 } from "../derive.js";
@@ -102,17 +104,29 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assert.equal(rows.find((row) => row.model === "logistic").promoted, false);
   const crypto = summary.find((row) => row.sleeve === "crypto");
   const derived = deriveSleeve(crypto);
+  const book = read("live_book.json");
+  const view = cryptoBookView(book, summary);
   const scorecard = read("model_scorecard.json");
   assertFracEqual(derived.killHeadroomFrac, scorecard.kill.kill_headroom_frac);
-  assertCentsEqual(derived.killHeadroom, scorecard.kill.kill_headroom_usd);
   assert.equal(Number.isFinite(scorecard.kill.kill_headroom_usd), true);
   assert.equal(LIVE_RAILS.source, "data/kpi_summary.json");
   assertFracEqual(LIVE_RAILS.dayKillFrac, Number(crypto.day_kill_pct));
   assertFracEqual(LIVE_RAILS.dayTargetFrac, Number(crypto.day_target_pct));
   assertFracEqual(derived.dayKillFrac, scorecard.kill.day_kill_pct);
   assertFracEqual(derived.dayKillFrac, LIVE_RAILS.dayKillFrac);
-  assertCentsEqual(derived.dayKill, scorecard.kill.day_kill_usd);
+  // The sleeve curve still recovers dollars from the config seed. The published
+  // kill rail is the live running balance, the same base as kill_remaining_usd.
   assertCentsEqual(derived.dayKill, money(derived.seed, LIVE_RAILS.dayKillFrac));
+  assertCentsEqual(view.runningBalance, book.running_balance_usd);
+  assertCentsEqual(scorecard.kill.running_balance_usd, view.runningBalance);
+  assertCentsEqual(scorecard.kill.day_kill_usd, money(view.runningBalance, LIVE_RAILS.dayKillFrac));
+  assertCentsEqual(view.dayKill, scorecard.kill.day_kill_usd);
+  assertCentsEqual(scorecard.kill.day_target_usd, money(view.runningBalance, LIVE_RAILS.dayTargetFrac));
+  assertCentsEqual(book.kill_remaining_usd, killRemainingUsd(view.runningBalance, book.day_pnl_usd));
+  if ((book.day_pnl_usd ?? 0) >= 0) {
+    assertCentsEqual(book.kill_remaining_usd, Math.abs(scorecard.kill.day_kill_usd));
+  }
+  assertCentsDiffer(scorecard.kill.day_kill_usd, money(derived.seed, LIVE_RAILS.dayKillFrac));
   assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
   assertFracEqual(derived.dayTargetFrac, LIVE_RAILS.dayTargetFrac);
   const deriveSrc = readFileSync(new URL("../derive.js", import.meta.url), "utf8");

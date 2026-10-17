@@ -292,7 +292,7 @@ Apply order on agentic-signals:
 2. Seed sync: Export KPI runs `scripts/sync_book_seeds.py`, which upserts the config into `public.book_seeds` so the file stays the source.
 3. View use: the export reads `kpi_trades_scrubbed` after that sync.
 
-`--book 300` in `jrg185/agentic-crypto-signals` is a follow-up. This repo does not change that refresh command.
+The scorecard kill dollars are `|day_kill_pct|` and `day_target_pct` times `data/live_book.json` `running_balance_usd`, the same base as `kill_remaining_usd`. They are not the crypto seed. `jrg185/agentic-crypto-signals` `model/run.py` `--book` already defaults to that live balance (`model/book.py` reads `running_balance_usd`). A historical `book_usd: 300.0` remains on the trained model meta (`models/lgbm_v1.meta.json` and `data/models_oos.json`) and is not this rail.
 
 ## Notes backfill
 
