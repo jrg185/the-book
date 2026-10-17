@@ -42,8 +42,9 @@ export function liveRails(summary, scorecard) {
 }
 
 // Dollars for the rail bars. Both rails are fractions of the running balance
-// (RH cash plus open lots). Headroom uses the same formula export writes.
-export function railView(balance, dayPnl, rails) {
+// (RH cash plus open lots). Headroom uses the same formula export writes,
+// including open losses.
+export function railView(balance, dayPnl, rails, openPnl = null) {
   const total = num(balance);
   const day = num(dayPnl);
   const killFrac = rails?.killFrac ?? null;
@@ -64,9 +65,10 @@ export function railView(balance, dayPnl, rails) {
   if (killFrac != null) {
     const budget = Math.abs(killFrac) * total;
     out.killUsd = roundCents(killFrac * total);
-    out.headroomUsd = killRemainingUsd(total, day, killFrac);
+    out.headroomUsd = killRemainingUsd(total, day, killFrac, openPnl);
     out.headroomFrac = out.headroomUsd == null ? null : out.headroomUsd / total;
-    out.killUsedFrac = budget === 0 ? null : clamp01(Math.max(0, -(day ?? 0)) / budget);
+    out.killUsedFrac =
+      budget === 0 || out.headroomUsd == null ? null : clamp01((budget - out.headroomUsd) / budget);
   }
   if (targetFrac != null) {
     out.targetUsd = roundCents(targetFrac * total);

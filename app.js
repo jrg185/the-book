@@ -542,7 +542,7 @@ function railBar({ title, value, detail, fill, toneClass, hint }) {
 function renderRisk(view, summary, scorecard) {
   railsEl.replaceChildren();
   const rails = liveRails(summary, scorecard);
-  const r = railView(view?.runningBalance, view?.dayPnl, rails);
+  const r = railView(view?.runningBalance, view?.dayPnl, rails, view?.unrealizedPnl);
   railsSourceEl.textContent = rails.source
     ? `Day rails from ${rails.source}${rails.asOf ? `, as of ${formatEt(rails.asOf)}` : ""}.`
     : "No day rail is published in this snapshot.";
@@ -555,10 +555,10 @@ function renderRisk(view, summary, scorecard) {
       railBar({
         title: "Day kill headroom",
         value: formatUsd(r.headroomUsd),
-        detail: `${formatPct(r.killFrac)} rail = ${formatUsd(r.killUsd)} on ${formatUsd(r.balance)}. Today ${formatUsd(r.dayPnl, { signed: true })}.`,
+        detail: `${formatPct(r.killFrac)} rail = ${formatUsd(r.killUsd)} on ${formatUsd(r.balance)}. Today ${formatUsd(r.dayPnl, { signed: true })}. Open ${formatUsd(view?.unrealizedPnl, { signed: true })}.`,
         fill: left,
         toneClass: left == null ? "flat" : left < 0.25 ? "down" : left < 0.6 ? "warn" : "up",
-        hint: "Budget left before the day kill. A losing day spends it. A winning day does not add to it.",
+        hint: "Budget left before the day kill. A losing day spends it, and open losses spend it. A winning day does not add to it.",
       })
     );
   }
@@ -1240,7 +1240,7 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summ
   grid.append(feeMetric);
 
   const view = shownBooks(book, summary)[0] || null;
-  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard));
+  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard), view?.unrealizedPnl);
   const headroom = metric("Kill headroom");
   const headroomValue = headroom.querySelector(".v");
   if (rails.headroomUsd == null) {

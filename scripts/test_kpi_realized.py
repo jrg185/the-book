@@ -1322,3 +1322,93 @@ def test_refresh_cash_is_reused_when_export_rest_fails(monkeypatch, tmp_path, ca
     assert main_src.find("load_shared_cash(") < main_src.find("account_book.read_cash(")
     assert "Refusing a second cash read" in main_src
     assert "RH_API_KEY" not in Path(account_book.__file__).read_text(encoding="utf-8").split("def save_shared_cash", 1)[1].split("def _shared_cash_usable", 1)[0]
+
+
+def _kill_book(balance: Decimal, cash: Decimal, open_pnl: Decimal, day: Decimal) -> dict:
+    return {
+        "book_usd": float(cash),
+        "day_pnl_usd": float(day),
+        "kill_remaining_usd": 1,
+        "running_balance_usd": float(balance),
+        "unrealized_pnl_usd": float(open_pnl),
+        "realized_pnl_usd": 0,
+        "running_pnl_usd": float(open_pnl),
+        "holdings": [{"ticker": "USD", "sleeve": "crypto", "value_usd": float(cash)}],
+        "positions": [
+            {
+                "sleeve": "crypto",
+                "ticker": "ZZ",
+                "qty": "1",
+                "value_usd": float(balance - cash),
+                "unrealized_pnl_usd": float(open_pnl),
+            }
+        ],
+    }
+
+
+def _publish_kill_case(tmp_path: Path, book: dict, frac: float) -> dict:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    rail = export_kpi.live_rails()
+    summary = [
+        {
+            "sleeve": "crypto",
+            "as_of": "2026-01-01T00:00:00Z",
+            "day_kill_pct": float(rail["dayKillFrac"]),
+            "day_target_pct": float(rail["dayTargetFrac"]),
+            "kill_headroom_frac": frac,
+        }
+    ]
+    (tmp_path / "kpi_summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    (tmp_path / "model_scorecard.json").write_text(
+        json.dumps({"sleeve": "crypto", "kill": {"kill_headroom_usd": 1, "kill_headroom_frac": frac}}),
+        encoding="utf-8",
+    )
+    (tmp_path / "live_book.json").write_text(json.dumps(book), encoding="utf-8")
+    published = export_kpi.refresh_live_book(tmp_path, fetch=False, cash=None)
+    summary_out = json.loads((tmp_path / "kpi_summary.json").read_text(encoding="utf-8"))
+    card = json.loads((tmp_path / "model_scorecard.json").read_text(encoding="utf-8"))
+    crypto = next(row for row in summary_out if row["sleeve"] == "crypto")
+    return {
+        "book": published,
+        "summary_frac": crypto["kill_headroom_frac"],
+        "scorecard": card["kill"]["kill_headroom_usd"],
+        "scorecard_frac": card["kill"]["kill_headroom_frac"],
+    }
+
+
+def test_kill_headroom_files_share_one_computation(tmp_path):
+    """Open losses spend the live-book rail, and the three published files match.
+
+    The rail is the published crypto fraction, not a literal. A flat realized
+    day with an open loss inside the budget must not publish the full budget.
+    An open loss past the budget must publish zero. Ignoring open losses, or
+    letting the summary, the scorecard, and the live book each keep their own
+    figure, fails this test.
+    """
+    rail = export_kpi.live_rails()["dayKillFrac"]
+    balance = Decimal("400")
+    cash = Decimal("20")
+    budget = abs(rail) * balance
+    open_loss = -(budget / Decimal("2"))
+    expected = export_kpi.kill_remaining_usd(balance, 0, open_loss)
+    day_only = export_kpi.kill_remaining_usd(balance, 0, None)
+    assert export_kpi.usd_differ(expected, day_only)
+    assert export_kpi.usd_equal(expected, export_kpi.js_round_cents(budget + open_loss))
+
+    partial = _publish_kill_case(tmp_path / "partial", _kill_book(balance, cash, open_loss, Decimal("0")), 0.5)
+    assert export_kpi.usd_equal(partial["book"]["kill_remaining_usd"], expected)
+    assert export_kpi.usd_equal(partial["scorecard"], expected)
+    assert export_kpi.usd_equal(export_kpi._cents(partial["summary_frac"]), expected)
+    assert export_kpi.usd_equal(export_kpi._cents(partial["scorecard_frac"]), expected)
+    assert export_kpi.usd_differ(partial["book"]["kill_remaining_usd"], day_only)
+
+    breach = -(budget + Decimal("1"))
+    stopped = export_kpi.kill_remaining_usd(balance, 0, breach)
+    assert export_kpi.usd_equal(stopped, 0)
+    assert export_kpi.usd_differ(stopped, export_kpi.kill_remaining_usd(balance, 0, None))
+    flat = _publish_kill_case(tmp_path / "breach", _kill_book(balance, cash, breach, Decimal("0")), 0.5)
+    assert export_kpi.usd_equal(flat["book"]["kill_remaining_usd"], 0)
+    assert export_kpi.usd_equal(flat["scorecard"], 0)
+    assert export_kpi.usd_equal(export_kpi._cents(flat["summary_frac"]), 0)
+    assert export_kpi.usd_equal(export_kpi._cents(flat["scorecard_frac"]), 0)
+    assert flat["book"]["kill_remaining_usd"] == flat["scorecard"]

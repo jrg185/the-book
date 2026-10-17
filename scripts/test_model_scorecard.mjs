@@ -122,11 +122,22 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   assertCentsEqual(scorecard.kill.day_kill_usd, money(view.runningBalance, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(view.dayKill, scorecard.kill.day_kill_usd);
   assertCentsEqual(scorecard.kill.day_target_usd, money(view.runningBalance, LIVE_RAILS.dayTargetFrac));
-  assertCentsEqual(book.kill_remaining_usd, killRemainingUsd(view.runningBalance, book.day_pnl_usd));
-  if ((book.day_pnl_usd ?? 0) >= 0) {
+  const headroom = killRemainingUsd(
+    book.running_balance_usd,
+    book.day_pnl_usd,
+    LIVE_RAILS.dayKillFrac,
+    book.unrealized_pnl_usd
+  );
+  assertCentsEqual(book.kill_remaining_usd, headroom);
+  assertCentsEqual(scorecard.kill.kill_headroom_usd, headroom);
+  assertCentsEqual(money(derived.seed, crypto.kill_headroom_frac), headroom);
+  assertFracEqual(crypto.kill_headroom_frac, scorecard.kill.kill_headroom_frac);
+  assertCentsDiffer(scorecard.kill.day_kill_usd, money(derived.seed, LIVE_RAILS.dayKillFrac));
+  const dayClear = (book.day_pnl_usd ?? 0) >= 0;
+  const openClear = (book.unrealized_pnl_usd ?? 0) >= 0;
+  if (dayClear && openClear) {
     assertCentsEqual(book.kill_remaining_usd, Math.abs(scorecard.kill.day_kill_usd));
   }
-  assertCentsDiffer(scorecard.kill.day_kill_usd, money(derived.seed, LIVE_RAILS.dayKillFrac));
   assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
   assertFracEqual(derived.dayTargetFrac, LIVE_RAILS.dayTargetFrac);
   const deriveSrc = readFileSync(new URL("../derive.js", import.meta.url), "utf8");

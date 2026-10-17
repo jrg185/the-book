@@ -2423,8 +2423,8 @@ def _rail_balance(running_balance) -> float | None:
 def rail_usd(frac, running_balance) -> float | None:
     """Signed dollars: rail fraction times the live running balance.
 
-    The magnitude uses the same cent round as ``kill_remaining_usd``. A
-    non-negative day therefore leaves ``kill_remaining_usd`` equal to
+    The magnitude uses the same cent round as ``kill_remaining_usd``. When the
+    day and the open mark are both non-negative, ``kill_remaining_usd`` equals
     ``|day_kill_usd|``. A missing balance does not fall back to a seed.
     """
     if frac is None or running_balance is None:
@@ -2437,20 +2437,37 @@ def rail_usd(frac, running_balance) -> float | None:
     return magnitude
 
 
-def kill_remaining_usd(running_balance, day_pnl) -> float | None:
-    """max(0, |dayKillFrac| × running balance + min(day P&L, 0)).
+def kill_remaining_usd(running_balance, day_pnl, open_pnl=None) -> float | None:
+    """max(0, |dayKillFrac| × running balance + min(day P&L, 0) + min(open P&L, 0)).
 
     dayKillFrac is the signed rail from the published crypto row. The budget
-    is its magnitude. A positive day does not increase headroom. The net day
-    figure is used as-is. This does not apply a fee rate.
+    is that fraction's magnitude times the live running balance. A positive
+    day does not increase headroom and does not offset losses. Open losses
+    count: negative unrealized spends the same budget. A positive open mark
+    does not add headroom. This does not apply a fee rate.
     """
     if running_balance is None:
         return None
     frac = float(live_rails()["dayKillFrac"])
     balance = float(running_balance)
     day = 0.0 if day_pnl is None else float(day_pnl)
-    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0))
+    open_loss = 0.0 if open_pnl is None else min(float(open_pnl), 0.0)
+    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0) + open_loss)
     return 0.0 if rounded < 0 else rounded
+
+
+def kill_headroom_frac_of_seed(dollars) -> float | None:
+    """Headroom dollars ÷ the crypto seed, so the scorecard cent conversion matches.
+
+    The seed is config/book_seeds.json. The dollars are kill_remaining_usd.
+    """
+    if dollars is None:
+        return None
+    seed = _crypto_seed()
+    if seed == 0:
+        return None
+    quant = (Decimal(str(dollars)) / seed).quantize(Decimal("0.0000000001"))
+    return float(quant)
 
 
 def agentic_book_usd(book) -> float | None:
@@ -2785,20 +2802,67 @@ def merge_live_book(committed, signal) -> dict:
 
 
 def fetch_live_signal() -> dict | None:
-    """Read the public signal file. A 404 or a private repo leaves the account file."""
-    request = urllib.request.Request(
-        LIVE_SIGNAL_URL,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "the-book-live-book",
-        },
-    )
+    """Read signals/latest.json. A 404 or a private repo returns None.
+
+    The unauthenticated raw URL is the older path. Callers also read
+    signal_artifacts and keep whichever generated_at is newer.
+    """
+    token = ""
+    for name in ("SIGNALS_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        token = (os.environ.get(name) or "").strip()
+        if token:
+            break
+    headers = {
+        "Accept": "application/vnd.github.raw",
+        "User-Agent": "the-book-live-book",
+    }
+    url = LIVE_SIGNAL_URL
+    if token:
+        # raw.githubusercontent.com ignores a token on a private repo.
+        # The contents API is the same path with the caller's credential.
+        parts = urllib.parse.urlparse(LIVE_SIGNAL_URL)
+        bits = [part for part in parts.path.split("/") if part]
+        if parts.netloc == "raw.githubusercontent.com" and len(bits) >= 4:
+            owner, repo, ref = bits[0], bits[1], bits[2]
+            path = "/".join(bits[3:])
+            url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={ref}"
+            headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
+    except Exception as exc:
+        print(f"live signal unread ({type(exc).__name__}): signals/latest.json")
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def resolve_public_signal(base_url: str, key: str | None, db_url: str | None):
+    """Newest signal document and the source name that produced it.
+
+    signals/latest.json and signal_artifacts are both tried. The older
+    generated_at is not published. Neither path uses a fixed date.
+    """
+    import export_runs
+
+    github = fetch_live_signal()
+    artifact = None
+    try:
+        artifact = export_runs.fetch_latest_signal_artifact(base_url, key, db_url)
+    except Exception as exc:
+        print(f"signal_artifacts unread ({type(exc).__name__})")
+    chosen, source = export_runs.choose_newer_signal(
+        export_runs.signal_document(github) if isinstance(github, dict) else None,
+        artifact,
+    )
+    if chosen is None:
+        print("live signal: no signals/latest.json and no signal_artifacts row")
+    else:
+        print(
+            "live signal "
+            f"source={source} generated_at={export_runs.as_text(chosen.get('generated_at'))}"
+        )
+    return chosen, source
 
 
 def usd_cash_from_accounts(payload, account_number: str):
@@ -3088,7 +3152,7 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     present and gross minus fees differs from the net by more than one cent,
     a warning is printed and the net is left unchanged. A missing
     day_realized_usd leaves the day already on the file and logs that.
-    kill_remaining_usd uses the running balance and that day.
+    kill_remaining_usd uses the running balance, that day, and open losses.
     """
     out = dict(book) if isinstance(book, dict) else {}
     cash_missing = not isinstance(cash, dict)
@@ -3153,10 +3217,57 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
             out["realized_pnl_usd"] = float(identity["realized_cents"])
             out["running_pnl_usd"] = float(identity["running_cents"])
     day = _finite_number(out.get("day_pnl_usd"))
-    kill = kill_remaining_usd(marked, day)
+    open_pnl = _finite_number(out.get("unrealized_pnl_usd"))
+    kill = kill_remaining_usd(marked, day, open_pnl)
     if kill is not None:
         out["kill_remaining_usd"] = kill
     return out
+
+
+def stamp_shared_kill(target: Path, book: dict) -> None:
+    """Write the live book's kill headroom onto the summary and the scorecard.
+
+    Dollars come from kill_remaining_usd. The crypto summary stores those
+    dollars divided by the crypto seed. The scorecard kill block is the
+    same reading kill_block already applies to that fraction, so the three
+    published numbers cannot be produced by different formulas. A directory
+    without the summary is left alone.
+    """
+    summary_path = target / "kpi_summary.json"
+    if not summary_path.exists() or not isinstance(book, dict):
+        return
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if not isinstance(summary, list):
+        return
+    balance = _finite_number(book.get("running_balance_usd"))
+    day = _finite_number(book.get("day_pnl_usd"))
+    open_pnl = _finite_number(book.get("unrealized_pnl_usd"))
+    dollars = kill_remaining_usd(balance, day, open_pnl)
+    frac = kill_headroom_frac_of_seed(dollars)
+    if frac is None:
+        return
+    changed = False
+    for row in summary:
+        if isinstance(row, dict) and _sleeve_name(row) == "crypto" and row.get("kill_headroom_frac") != frac:
+            row["kill_headroom_frac"] = frac
+            changed = True
+    if changed:
+        write_json(summary_path, summary)
+    card_path = target / "model_scorecard.json"
+    if not card_path.exists():
+        return
+    card = json.loads(card_path.read_text(encoding="utf-8"))
+    if not isinstance(card, dict):
+        return
+    block = kill_block(summary, published_running_balance(book))
+    # Headroom dollars are the shared helper, not the fraction times the
+    # running balance. The summary stores those dollars divided by the crypto
+    # seed, and day kill stays a fraction of the live balance.
+    if dollars is not None:
+        block["kill_headroom_usd"] = dollars
+    if card.get("kill") != block:
+        card["kill"] = block
+        write_json(card_path, card)
 
 
 def refresh_live_book(
@@ -3180,7 +3291,7 @@ def refresh_live_book(
     previous realized and unrealized. Day P&L is day_realized_usd from the cash drop when
     that number is present; otherwise the signal copy stays and the absence
     is logged. kill_remaining_usd is the day-kill headroom on the running
-    balance. generated_at stays the signal time. A missing snapshot does not
+    balance after open losses. generated_at stays the signal time. A missing snapshot does not
     delete P&L or day P&L already on the file. When positions is the open-net
     read, those rows replace the list. None leaves open rows already on the
     file. When cash is a Robinhood USD and USDC read (REST, or
@@ -3205,29 +3316,8 @@ def refresh_live_book(
         merged = apply_card_positions(merged, positions)
     merged = apply_published_book(merged, cash)
     write_json(path, merged)
-    restamp_scorecard_rails(target, merged)
+    stamp_shared_kill(target, merged)
     return merged
-
-
-def restamp_scorecard_rails(target: Path, book: dict | None) -> None:
-    """Rewrite the scorecard kill dollars from the book just published.
-
-    Export writes the scorecard before the live book is refreshed. This
-    second write uses the running balance ``kill_remaining_usd`` just used,
-    so the scorecard, the summary fraction, and the live book agree.
-    """
-    path = target / "model_scorecard.json"
-    if not path.exists() or not isinstance(book, dict):
-        return
-    card = _read_json(path, None)
-    if not isinstance(card, dict):
-        return
-    summary = _read_json(target / "kpi_summary.json", [])
-    card["kill"] = kill_block(
-        summary if isinstance(summary, list) else [],
-        published_running_balance(book),
-    )
-    write_json(path, card)
 
 
 def write_bundle(target: Path, bundle: dict) -> None:
@@ -4656,11 +4746,19 @@ def self_test() -> int:
         )
     if not usd_equal(live_card["kill"]["day_kill_usd"], rail_usd(live_frac, live_balance)):
         raise RuntimeError(f"published day kill {live_card['kill']} is not the live running balance")
-    if not usd_equal(live_book.get("kill_remaining_usd"), kill_remaining_usd(live_balance, live_book.get("day_pnl_usd"))):
+    live_open = live_book.get("unrealized_pnl_usd")
+    if not usd_equal(
+        live_book.get("kill_remaining_usd"),
+        kill_remaining_usd(live_balance, live_book.get("day_pnl_usd"), live_open),
+    ):
         raise RuntimeError("live_book kill_remaining_usd is not the shared helper on the running balance")
-    if _finite_number(live_book.get("day_pnl_usd")) is not None and float(live_book["day_pnl_usd"]) >= 0:
+    day_clear = _finite_number(live_book.get("day_pnl_usd")) is None or float(live_book["day_pnl_usd"]) >= 0
+    open_clear = _finite_number(live_open) is None or float(live_open) >= 0
+    if day_clear and open_clear:
         if not usd_equal(live_book["kill_remaining_usd"], abs(live_card["kill"]["day_kill_usd"])):
-            raise RuntimeError("kill remaining and |day_kill_usd| disagree on a non-negative day")
+            raise RuntimeError("kill remaining and |day_kill_usd| disagree when day and open P&L are non-negative")
+    if not usd_equal(live_card["kill"].get("kill_headroom_usd"), live_book.get("kill_remaining_usd")):
+        raise RuntimeError("scorecard kill headroom is not the live book kill remaining")
     if '"order_id"' in json.dumps(card):
         raise RuntimeError("scorecard wrote an order id")
     plain = build_model_scorecard(
@@ -4770,7 +4868,16 @@ def main(argv: list[str] | None = None) -> int:
             print("Sample JSON missing; installing fixtures.", file=sys.stderr)
             install_sample(DATA)
         try:
-            refresh_live_book(DATA)
+            signal, signal_source = resolve_public_signal(base_url, key, db_url)
+            refresh_live_book(DATA, signal=signal, fetch=False)
+            import export_runs
+
+            export_runs.publish_predictions(
+                DATA,
+                signal,
+                source=signal_source,
+                newest_artifact_at=None if not isinstance(signal, dict) else signal.get("generated_at"),
+            )
         except OSError as exc:
             print(f"Could not refresh data/live_book.json: {exc}", file=sys.stderr)
             return 1
@@ -4811,11 +4918,24 @@ def main(argv: list[str] | None = None) -> int:
                 + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )
+        signal, signal_source = resolve_public_signal(base_url, key, db_url)
         refresh_live_book(
             DATA,
+            signal=signal,
+            fetch=False,
             account_pnl=account_pnl,
             positions=bundle.get("card_positions"),
             cash=cash,
+        )
+        linkage = bundle.get("meta", {}).get("signal_linkage") if isinstance(bundle.get("meta"), dict) else None
+        newest_artifact_at = linkage.get("last_generated_at") if isinstance(linkage, dict) else None
+        import export_runs
+
+        export_runs.publish_predictions(
+            DATA,
+            signal,
+            source=signal_source,
+            newest_artifact_at=newest_artifact_at,
         )
     except Exception as exc:
         frozen = committed_as_of(DATA)

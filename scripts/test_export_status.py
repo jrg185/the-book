@@ -204,10 +204,13 @@ class ScorecardTests(unittest.TestCase):
         self.assertTrue(
             export_kpi.usd_equal(
                 live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd")),
+                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
             )
         )
-        if live.get("day_pnl_usd", 0) >= 0:
+        self.assertTrue(export_kpi.usd_equal(card["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
+        day_clear = live.get("day_pnl_usd", 0) >= 0
+        open_clear = (live.get("unrealized_pnl_usd") or 0) >= 0
+        if day_clear and open_clear:
             self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
 
     def test_committed_crypto_scorecard_matches_exported_json(self):
@@ -294,9 +297,10 @@ class ScorecardTests(unittest.TestCase):
         self.assertTrue(
             export_kpi.usd_equal(
                 live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd")),
+                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
             )
         )
+        self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
         blob = json.dumps(built)
         self.assertNotIn('"order_id"', blob)
         self.assertNotIn("should-not-survive", blob)
