@@ -2320,9 +2320,19 @@ LIVE_SIGNAL_URL = (
 
 
 def js_round_cents(value) -> float:
-    """Cents, matching derive.js money() / Math.round (ties toward +infinity)."""
+    """Cents, matching derive.js roundCents / Math.round (ties toward +infinity)."""
     shifted = (float(value) + sys.float_info.epsilon) * 100
     return math.floor(shifted + 0.5) / 100.0
+
+
+def round_kill_cents(value) -> float:
+    """The one cent round shared by ``day_kill_usd`` and ``kill_remaining_usd``.
+
+    A signed rail rounds the positive magnitude with this helper and then
+    applies the sign. Rounding the signed product would pull a negative
+    half-cent tie toward zero and away from the headroom.
+    """
+    return js_round_cents(value)
 
 
 def approx_cents(left, right, tol: float = 0.005) -> bool:
@@ -2423,15 +2433,16 @@ def _rail_balance(running_balance) -> float | None:
 def rail_usd(frac, running_balance) -> float | None:
     """Signed dollars: rail fraction times the live running balance.
 
-    The magnitude uses the same cent round as ``kill_remaining_usd``. When the
-    day and the open mark are both non-negative, ``kill_remaining_usd`` equals
-    ``|day_kill_usd|``. A missing balance does not fall back to a seed.
+    The magnitude uses ``round_kill_cents``, the same helper as
+    ``kill_remaining_usd``. When the day and the open mark are both
+    non-negative, ``kill_remaining_usd`` equals ``|day_kill_usd|``. A missing
+    balance does not fall back to a seed.
     """
     if frac is None or running_balance is None:
         return None
     fraction = float(frac)
     balance = float(running_balance)
-    magnitude = js_round_cents(abs(fraction) * balance)
+    magnitude = round_kill_cents(abs(fraction) * balance)
     if fraction < 0:
         return -magnitude
     return magnitude
@@ -2452,7 +2463,7 @@ def kill_remaining_usd(running_balance, day_pnl, open_pnl=None) -> float | None:
     balance = float(running_balance)
     day = 0.0 if day_pnl is None else float(day_pnl)
     open_loss = 0.0 if open_pnl is None else min(float(open_pnl), 0.0)
-    rounded = js_round_cents(abs(frac) * balance + min(day, 0.0) + open_loss)
+    rounded = round_kill_cents(abs(frac) * balance + min(day, 0.0) + open_loss)
     return 0.0 if rounded < 0 else rounded
 
 
@@ -3227,11 +3238,12 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
 def stamp_shared_kill(target: Path, book: dict) -> None:
     """Write the live book's kill headroom onto the summary and the scorecard.
 
-    Dollars come from kill_remaining_usd. The crypto summary stores those
-    dollars divided by the crypto seed. The scorecard kill block is the
-    same reading kill_block already applies to that fraction, so the three
-    published numbers cannot be produced by different formulas. A directory
-    without the summary is left alone.
+    Dollars come from kill_remaining_usd. Day kill uses that same
+    running_balance_usd and ``round_kill_cents``. The crypto summary stores
+    the headroom dollars divided by the crypto seed. The scorecard kill block
+    is restamped from the balance on the book that was just written, not from
+    a second pass over holdings. A directory without the summary is left alone.
+    A missing headroom fraction still restamps day kill.
     """
     summary_path = target / "kpi_summary.json"
     if not summary_path.exists() or not isinstance(book, dict):
@@ -3242,24 +3254,25 @@ def stamp_shared_kill(target: Path, book: dict) -> None:
     balance = _finite_number(book.get("running_balance_usd"))
     day = _finite_number(book.get("day_pnl_usd"))
     open_pnl = _finite_number(book.get("unrealized_pnl_usd"))
-    dollars = kill_remaining_usd(balance, day, open_pnl)
+    dollars = None if balance is None else kill_remaining_usd(balance, day, open_pnl)
     frac = kill_headroom_frac_of_seed(dollars)
-    if frac is None:
-        return
-    changed = False
-    for row in summary:
-        if isinstance(row, dict) and _sleeve_name(row) == "crypto" and row.get("kill_headroom_frac") != frac:
-            row["kill_headroom_frac"] = frac
-            changed = True
-    if changed:
-        write_json(summary_path, summary)
+    if frac is not None:
+        changed = False
+        for row in summary:
+            if isinstance(row, dict) and _sleeve_name(row) == "crypto" and row.get("kill_headroom_frac") != frac:
+                row["kill_headroom_frac"] = frac
+                changed = True
+        if changed:
+            write_json(summary_path, summary)
     card_path = target / "model_scorecard.json"
     if not card_path.exists():
         return
     card = json.loads(card_path.read_text(encoding="utf-8"))
     if not isinstance(card, dict):
         return
-    block = kill_block(summary, published_running_balance(book))
+    # The balance just written on live_book. Recomputing from holdings can
+    # land on the other side of a cent from that field.
+    block = kill_block(summary, balance)
     # Headroom dollars are the shared helper, not the fraction times the
     # running balance. The summary stores those dollars divided by the crypto
     # seed, and day kill stays a fraction of the live balance.
@@ -4731,6 +4744,22 @@ def self_test() -> int:
     bare_kill = kill_block(summary=[{"sleeve": "crypto", "day_kill_pct": -0.1}], running_balance=None)
     if bare_kill["day_kill_usd"] is not None or bare_kill["running_balance_usd"] is not None:
         raise RuntimeError(f"a missing balance invented kill dollars: {bare_kill}")
+    # 712.05 × 0.10 lands on a half cent. 712.1 does not. The signed product
+    # round and the shared kill round disagree only on the first balance.
+    edge_balance = 712.05
+    nearby_balance = 712.1
+    edge_kill = rail_usd(-0.1, edge_balance)
+    if usd_equal(edge_balance, nearby_balance):
+        raise RuntimeError("half-cent balance collapsed into the nearby tenth")
+    if usd_equal(edge_kill, js_round_cents(-0.1 * edge_balance)):
+        raise RuntimeError("half-cent day kill followed the signed product round")
+    if not usd_equal(abs(edge_kill), kill_remaining_usd(edge_balance, 0, 0)):
+        raise RuntimeError("day kill magnitude is not kill_remaining_usd on a clear book")
+    if not usd_equal(rail_usd(-0.1, nearby_balance), js_round_cents(-0.1 * nearby_balance)):
+        raise RuntimeError("a balance off the half-cent tie disagreed with itself")
+    refresh_src = Path(__file__).read_text(encoding="utf-8").split("def refresh_live_book", 1)[1].split("\ndef ", 1)[0]
+    if refresh_src.find("write_json(path, merged)") > refresh_src.find("stamp_shared_kill"):
+        raise RuntimeError("scorecard is restamped before live_book is written")
     live_book = json.loads((DATA / "live_book.json").read_text(encoding="utf-8"))
     live_summary = json.loads((DATA / "kpi_summary.json").read_text(encoding="utf-8"))
     live_card = json.loads((DATA / "model_scorecard.json").read_text(encoding="utf-8"))

@@ -26,6 +26,14 @@ export function num(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// One cent round for tape dollars and for the kill rail. Half cents tie
+// toward +infinity, matching Math.round. day_kill_usd and killRemainingUsd
+// both go through this helper. A signed rail rounds the positive magnitude
+// and then applies the sign, so a negative half cent stays with the headroom.
+function roundCents(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 // Rails may arrive as fractions (-0.10) or percent points (-10).
 export function asFraction(value) {
   const n = num(value);
@@ -123,7 +131,19 @@ export function seedFor(row, seeds) {
 
 export function money(seed, frac) {
   if (seed == null || frac == null) return null;
-  return Math.round((seed * frac + Number.EPSILON) * 100) / 100;
+  return roundCents(seed * frac);
+}
+
+// Signed rail dollars from one running balance. The magnitude uses the same
+// cent round as killRemainingUsd. Negating after that round keeps a half-cent
+// tie on the same side of the cent as the headroom. Rounding the signed
+// product instead pulls a negative tie toward zero.
+export function railUsd(balance, frac) {
+  const base = num(balance);
+  const fraction = num(frac);
+  if (base == null || fraction == null) return null;
+  const magnitude = roundCents(Math.abs(fraction) * base);
+  return fraction < 0 ? -magnitude : magnitude;
 }
 
 // Headroom inside the day-kill rail. dayKillFrac is the signed published
@@ -141,7 +161,7 @@ export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAIL
   const day = num(dayPnl);
   const open = num(openPnl);
   const spent = (day == null ? 0 : Math.min(day, 0)) + (open == null ? 0 : Math.min(open, 0));
-  return Math.max(0, money(1, Math.abs(frac) * balance + spent));
+  return Math.max(0, roundCents(Math.abs(frac) * balance + spent));
 }
 
 // Keep the committed account holdings, including each value and cost basis.
@@ -185,10 +205,6 @@ export function mergeLiveBook(committed, signal) {
 function bookFrac(dollars, bookUsd) {
   if (dollars == null || bookUsd == null || bookUsd === 0) return null;
   return dollars / bookUsd;
-}
-
-function roundCents(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 // Account value is the sum of holdings that each carry their own value.
@@ -372,9 +388,9 @@ export function cryptoBookView(book, summary) {
     signalGeneratedAt: book?.generated_at || null,
     dayPnl,
     dayKillFrac: rails.dayKillFrac,
-    dayKill: money(rail, rails.dayKillFrac),
+    dayKill: railUsd(rail, rails.dayKillFrac),
     dayTargetFrac: rails.dayTargetFrac,
-    dayTarget: money(rail, rails.dayTargetFrac),
+    dayTarget: railUsd(rail, rails.dayTargetFrac),
     killHeadroom,
     killHeadroomFrac: rail == null || rail === 0 || killHeadroom == null ? null : killHeadroom / rail,
     realizedPnl,
