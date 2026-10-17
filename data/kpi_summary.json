@@ -1,30 +1,30 @@
 [
   {
-    "as_of": "2026-10-17T08:11:40+00:00",
+    "as_of": "2026-10-17T08:25:30+00:00",
     "sleeve": "combined",
     "day_kill_pct": null,
     "day_target_pct": null,
     "realized_pnl_frac": 0.035113,
-    "unrealized_pnl_frac": -0.109,
+    "unrealized_pnl_frac": -0.108475,
     "kill_headroom_frac": null,
-    "running_balance_frac": 0.926113,
-    "running_pnl_frac": -0.073888,
+    "running_balance_frac": 0.926638,
+    "running_pnl_frac": -0.073363,
     "note": "account cash+open lots; not a sleeve seed curve. trade-list realized $49.19; buy fees $20.41; rounding $0.79; residual $0.09"
   },
   {
-    "as_of": "2026-10-17T08:11:40+00:00",
+    "as_of": "2026-10-17T08:25:30+00:00",
     "sleeve": "crypto",
     "day_kill_pct": -0.1,
     "day_target_pct": 0.025,
     "realized_pnl_frac": 0.217658,
-    "unrealized_pnl_frac": -0.290699,
-    "kill_headroom_frac": 0.269591,
-    "running_balance_frac": 0.926959,
-    "running_pnl_frac": -0.073041,
-    "note": "sleeve curve only; not the account. realized $65.30 closed exits; unrealized -$87.21 open MTM; book=start+realized+unrealized"
+    "unrealized_pnl_frac": -0.289234,
+    "kill_headroom_frac": 0.284235,
+    "running_balance_frac": 0.928424,
+    "running_pnl_frac": -0.071576,
+    "note": "sleeve curve only; not the account. realized $65.30 closed exits; unrealized -$86.77 open MTM; book=start+realized+unrealized"
   },
   {
-    "as_of": "2026-10-17T08:11:40+00:00",
+    "as_of": "2026-10-17T08:25:30+00:00",
     "sleeve": "equities",
     "day_kill_pct": -0.25,
     "day_target_pct": null,
