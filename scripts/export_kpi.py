@@ -2731,20 +2731,67 @@ def merge_live_book(committed, signal) -> dict:
 
 
 def fetch_live_signal() -> dict | None:
-    """Read the public signal file. A 404 or a private repo leaves the account file."""
-    request = urllib.request.Request(
-        LIVE_SIGNAL_URL,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "the-book-live-book",
-        },
-    )
+    """Read signals/latest.json. A 404 or a private repo returns None.
+
+    The unauthenticated raw URL is the older path. Callers also read
+    signal_artifacts and keep whichever generated_at is newer.
+    """
+    token = ""
+    for name in ("SIGNALS_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        token = (os.environ.get(name) or "").strip()
+        if token:
+            break
+    headers = {
+        "Accept": "application/vnd.github.raw",
+        "User-Agent": "the-book-live-book",
+    }
+    url = LIVE_SIGNAL_URL
+    if token:
+        # raw.githubusercontent.com ignores a token on a private repo.
+        # The contents API is the same path with the caller's credential.
+        parts = urllib.parse.urlparse(LIVE_SIGNAL_URL)
+        bits = [part for part in parts.path.split("/") if part]
+        if parts.netloc == "raw.githubusercontent.com" and len(bits) >= 4:
+            owner, repo, ref = bits[0], bits[1], bits[2]
+            path = "/".join(bits[3:])
+            url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={ref}"
+            headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
+    except Exception as exc:
+        print(f"live signal unread ({type(exc).__name__}): signals/latest.json")
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def resolve_public_signal(base_url: str, key: str | None, db_url: str | None):
+    """Newest signal document and the source name that produced it.
+
+    signals/latest.json and signal_artifacts are both tried. The older
+    generated_at is not published. Neither path uses a fixed date.
+    """
+    import export_runs
+
+    github = fetch_live_signal()
+    artifact = None
+    try:
+        artifact = export_runs.fetch_latest_signal_artifact(base_url, key, db_url)
+    except Exception as exc:
+        print(f"signal_artifacts unread ({type(exc).__name__})")
+    chosen, source = export_runs.choose_newer_signal(
+        export_runs.signal_document(github) if isinstance(github, dict) else None,
+        artifact,
+    )
+    if chosen is None:
+        print("live signal: no signals/latest.json and no signal_artifacts row")
+    else:
+        print(
+            "live signal "
+            f"source={source} generated_at={export_runs.as_text(chosen.get('generated_at'))}"
+        )
+    return chosen, source
 
 
 def usd_cash_from_accounts(payload, account_number: str):
@@ -4658,7 +4705,16 @@ def main(argv: list[str] | None = None) -> int:
             print("Sample JSON missing; installing fixtures.", file=sys.stderr)
             install_sample(DATA)
         try:
-            refresh_live_book(DATA)
+            signal, signal_source = resolve_public_signal(base_url, key, db_url)
+            refresh_live_book(DATA, signal=signal, fetch=False)
+            import export_runs
+
+            export_runs.publish_predictions(
+                DATA,
+                signal,
+                source=signal_source,
+                newest_artifact_at=None if not isinstance(signal, dict) else signal.get("generated_at"),
+            )
         except OSError as exc:
             print(f"Could not refresh data/live_book.json: {exc}", file=sys.stderr)
             return 1
@@ -4699,11 +4755,24 @@ def main(argv: list[str] | None = None) -> int:
                 + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )
+        signal, signal_source = resolve_public_signal(base_url, key, db_url)
         refresh_live_book(
             DATA,
+            signal=signal,
+            fetch=False,
             account_pnl=account_pnl,
             positions=bundle.get("card_positions"),
             cash=cash,
+        )
+        linkage = bundle.get("meta", {}).get("signal_linkage") if isinstance(bundle.get("meta"), dict) else None
+        newest_artifact_at = linkage.get("last_generated_at") if isinstance(linkage, dict) else None
+        import export_runs
+
+        export_runs.publish_predictions(
+            DATA,
+            signal,
+            source=signal_source,
+            newest_artifact_at=newest_artifact_at,
         )
     except Exception as exc:
         frozen = committed_as_of(DATA)

@@ -140,6 +140,7 @@ jobs:
           RH_API_KEY: ${{ secrets.RH_API_KEY }}
           RH_BASE64_PRIVATE_KEY: ${{ secrets.RH_BASE64_PRIVATE_KEY }}
           RH_AGENTIC_ACCOUNT: ${{ secrets.RH_AGENTIC_ACCOUNT }}
+          GITHUB_TOKEN: ${{ github.token }}
           KPI_REFRESH_EXPECTED: "1"
           KPI_MARKS_RUN_ID: ${{ github.run_id }}
         # Cash is the stamp refresh wrote into /tmp/the-book-kpi-marks.json.
@@ -171,6 +172,10 @@ jobs:
           fi
           if [ -f data/runs.csv ]; then
             git add -- data/runs.csv
+          fi
+          # predictions.json is rewritten from the newest signal artifact on every export.
+          if [ -f data/predictions.json ]; then
+            git add -- data/predictions.json
           fi
           if git diff --cached --quiet; then
             echo "KPI JSON unchanged."
