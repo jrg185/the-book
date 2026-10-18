@@ -759,19 +759,72 @@ export function feeDragFromTrades(trades, sleeve = "crypto", seed) {
   };
 }
 
+const BACKEND_FLAG = /--backend\s+([A-Za-z0-9_-]+)/;
+const BACKEND_TOKEN = /^[A-Za-z0-9_-]+$/;
+const MODEL_VERSION_TOKEN = /^[A-Za-z0-9_.-]+$/;
+
+function namedToken(value, pattern) {
+  const text = String(value ?? "").trim();
+  if (!text || !pattern.test(text)) return null;
+  return text;
+}
+
+export function signalLiveBackend(signal) {
+  if (!signal || typeof signal !== "object") return null;
+  const id = namedToken(signal.backend, BACKEND_TOKEN);
+  if (!id) return null;
+  const modelVersion = namedToken(signal.model_version, MODEL_VERSION_TOKEN);
+  const cli = `--backend ${id}`;
+  const source = String(signal.source || "").trim() || "signals/latest.json";
+  const versionBit = modelVersion ? `, model_version ${modelVersion}` : "";
+  return {
+    id,
+    cli,
+    model_version: modelVersion,
+    source,
+    note: `The CLI is ${cli}${versionBit}.`,
+  };
+}
+
+export function chooseDeskSignal(liveSignal, exportedSignal) {
+  if (signalLiveBackend(liveSignal)) return liveSignal;
+  if (signalLiveBackend(exportedSignal)) return exportedSignal;
+  return null;
+}
+
 export function inferLiveBackend(models) {
   const list = Array.isArray(models?.models) ? models.models : [];
   const crypto = list.find((model) => String(model?.sleeve || "").trim().toLowerCase() === "crypto") || {};
   const oosNote = crypto.oos && typeof crypto.oos === "object" ? crypto.oos.note : "";
   const text = [models?.note, crypto.used, crypto.training, oosNote].filter(Boolean).join("\n");
-  const rules = text.includes("--backend rules");
+  const match = text.match(BACKEND_FLAG);
+  const id = match ? match[1] : null;
+  if (!id) {
+    return {
+      id: null,
+      cli: null,
+      model_version: null,
+      note: "Live backend is not stated in data/models.json. Not inferred.",
+    };
+  }
+  const cli = `--backend ${id}`;
   return {
-    id: rules ? "rules" : null,
-    cli: rules ? "--backend rules" : null,
-    note: rules
-      ? "The CLI is still --backend rules."
-      : "Live backend is not stated in data/models.json. Not inferred.",
+    id,
+    cli,
+    model_version: null,
+    note: id === "rules" ? "The CLI is still --backend rules." : `The CLI is ${cli}.`,
   };
+}
+
+export function resolveLiveBackend(scorecard, models, signal) {
+  const published = scorecard?.live_backend;
+  const block = published && typeof published === "object" ? published : null;
+  const source = String(block?.source || "");
+  if (block?.id && source && source !== "data/models.json") return block;
+  const fromSignal = signalLiveBackend(signal);
+  if (fromSignal) return fromSignal;
+  if (block && (block.id || block.note)) return block;
+  return inferLiveBackend(models);
 }
 
 export function cryptoOosModels(payload) {

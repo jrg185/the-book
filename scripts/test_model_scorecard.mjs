@@ -11,6 +11,7 @@ import {
   deriveSleeve,
   formatWinRecord,
   inferLiveBackend,
+  resolveLiveBackend,
   killRemainingUsd,
   LIVE_RAILS,
   money,
@@ -92,10 +93,41 @@ test("order id collapses duplicate sells and fee dollars stay explicit", () => {
   assertCentsEqual(fees.sell_fee_usd, 0.1);
 });
 
-test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", () => {
-  const backend = inferLiveBackend(models);
+test("live backend comes from the signal and falls back to notes", () => {
+  const predictions = read("predictions.json");
+  const scorecard = read("model_scorecard.json");
+  assert.equal(Boolean(predictions.backend), true);
+  assert.equal(Boolean(predictions.model_version), true);
+  assert.equal(scorecard.live_backend.id, predictions.backend);
+  assert.equal(scorecard.live_backend.model_version, predictions.model_version);
+  assert.equal(scorecard.live_backend.cli, `--backend ${predictions.backend}`);
+  assert.equal(scorecard.live_backend.source, predictions.source || "signals/latest.json");
+  assert.equal(JSON.stringify(models).includes("--backend rules"), false);
+  const fromExport = resolveLiveBackend(scorecard, models, null);
+  assert.equal(fromExport.id, predictions.backend);
+  assert.equal(fromExport.model_version, predictions.model_version);
+  const staleModels = {
+    note: "The CLI stays --backend rules.",
+    models: [{ sleeve: "crypto", used: "stays --backend rules" }],
+  };
+  const staleCard = {
+    live_backend: {
+      id: "rules",
+      cli: "--backend rules",
+      source: "data/models.json",
+      note: "The CLI is still --backend rules.",
+    },
+  };
+  const fromSignal = resolveLiveBackend(staleCard, staleModels, predictions);
+  assert.equal(fromSignal.id, predictions.backend);
+  assert.equal(fromSignal.model_version, predictions.model_version);
+  assert.notEqual(fromSignal.id, "rules");
+  const backend = inferLiveBackend(staleModels);
   assert.equal(backend.id, "rules");
   assert.equal(backend.cli, "--backend rules");
+  assert.equal(backend.model_version, null);
+  const unnamed = resolveLiveBackend(null, { note: "no cli flag" }, { generated_at: "2026-10-17T00:00:00Z" });
+  assert.equal(unnamed.id, null);
   const rows = cryptoOosModels(oos);
   assert.deepEqual(
     rows.map((row) => row.model),
@@ -107,7 +139,6 @@ test("live backend stays rules and crypto OOS keeps rules, logistic, and lgbm", 
   const derived = deriveSleeve(crypto);
   const book = read("live_book.json");
   const view = cryptoBookView(book, summary);
-  const scorecard = read("model_scorecard.json");
   assertFracEqual(derived.killHeadroomFrac, scorecard.kill.kill_headroom_frac);
   assert.equal(Number.isFinite(scorecard.kill.kill_headroom_usd), true);
   assert.equal(LIVE_RAILS.source, "data/kpi_summary.json");

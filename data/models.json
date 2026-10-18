@@ -1,12 +1,12 @@
 {
   "as_of": "2026-09-28T00:16:00Z",
   "status": "published",
-  "note": "Crypto T04 OOS is published. LightGBM is promoted on after-cost mean only. Logistic sleeve IR vs BTC is +0.235 and beats LightGBM at +0.111. That is not an IR promotion. The CLI stays --backend rules.",
+  "note": "Crypto T04 OOS is published. LightGBM is promoted on after-cost mean only. Logistic sleeve IR vs BTC is +0.235 and beats LightGBM at +0.111. That is not an IR promotion. Live scoring is --backend ml, model_version lgbm_v1. Shadows are lgbm_no_dow_calibrated and lgbm_fee_h8_v1feats.",
   "models": [
     {
       "sleeve": "crypto",
       "name": "Crypto lgbm_v1",
-      "used": "Shadow scores only. python -m model.run stays --backend rules. --backend ml scores the joblib. This page does not place orders.",
+      "used": "Live scoring is python -m model.run --backend ml, model_version lgbm_v1. Shadows are lgbm_no_dow_calibrated and lgbm_fee_h8_v1feats. This page does not place orders.",
       "training": "Purged walk-forward, 8-hour horizon, 30 bp, from 2021-01-01. Warehouse model_runs status is promoted because pooled after-cost mean beat v0 rules and logistic. Logistic IR vs BTC (+0.235) beats LightGBM (+0.111), so this is not an IR promotion.",
       "data_source": "Coinbase Exchange public hourly candles. 57 names, 2,240,863 bars. The fit uses 1,976,971 labeled rows.",
       "oos": {
@@ -15,7 +15,7 @@
         "hit_rate": 0.5288,
         "avg_return": 0.0028,
         "n": 6831,
-        "note": "Full table is in data/models_oos.json. Logistic leads IR. LightGBM leads after-cost mean. CLI stays rules."
+        "note": "Full table is in data/models_oos.json. Logistic leads IR. LightGBM leads after-cost mean. Live scoring is --backend ml, model_version lgbm_v1."
       }
     },
     {
