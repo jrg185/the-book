@@ -1,466 +1,466 @@
 {
   "source": "signal_artifacts",
-  "generated_at": "2026-10-17T22:34:26Z",
+  "generated_at": "2026-10-17T23:40:49Z",
   "mode": "live",
   "backend": "ml",
   "model_version": "lgbm_v1",
-  "last_bar_time": "2026-10-17T21:00:00Z",
+  "last_bar_time": "2026-10-17T22:00:00Z",
   "predictions": [
     {
       "symbol": "AAVE",
       "side": "flat",
-      "p_up": 0.47421771648870664,
-      "conviction": 0.1758,
+      "p_up": 0.434184727888137,
+      "conviction": 0.2158,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ADA",
       "side": "flat",
-      "p_up": 0.512134982208465,
-      "conviction": 0.1621,
+      "p_up": 0.4764137111021136,
+      "conviction": 0.1736,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "AERO",
       "side": "flat",
-      "p_up": 0.5122718848711577,
-      "conviction": 0.1623,
+      "p_up": 0.4898914589661529,
+      "conviction": 0.1601,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ALGO",
       "side": "flat",
-      "p_up": 0.4667891025131195,
-      "conviction": 0.1832,
+      "p_up": 0.4833148515695935,
+      "conviction": 0.1667,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ARB",
       "side": "flat",
-      "p_up": 0.5092005473495839,
-      "conviction": 0.1592,
+      "p_up": 0.47529655888769246,
+      "conviction": 0.1747,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ATOM",
       "side": "flat",
-      "p_up": 0.4877084075607283,
-      "conviction": 0.1623,
+      "p_up": 0.45105813031165787,
+      "conviction": 0.1989,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "AVAX",
       "side": "flat",
-      "p_up": 0.4970503756575648,
-      "conviction": 0.1529,
+      "p_up": 0.4591256734175064,
+      "conviction": 0.1909,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "AXS",
       "side": "flat",
-      "p_up": 0.5025896318434594,
-      "conviction": 0.1526,
+      "p_up": 0.4747042679366533,
+      "conviction": 0.1753,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "BAT",
       "side": "flat",
-      "p_up": 0.5191230256709315,
-      "conviction": 0.1691,
+      "p_up": 0.4860879043668831,
+      "conviction": 0.1639,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "BCH",
-      "side": "flat",
-      "p_up": 0.4157089645396672,
-      "conviction": 0.2343,
+      "side": "sell",
+      "p_up": 0.38123236423187074,
+      "conviction": 0.6188,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "BIO",
       "side": "flat",
-      "p_up": 0.5121280302716995,
-      "conviction": 0.1621,
+      "p_up": 0.49070449247994025,
+      "conviction": 0.1593,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "BONK",
       "side": "flat",
-      "p_up": 0.5165677862428447,
-      "conviction": 0.1666,
+      "p_up": 0.48657958481061453,
+      "conviction": 0.1634,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "BTC",
       "side": "sell",
-      "p_up": 0.29698198919653307,
-      "conviction": 0.703,
+      "p_up": 0.25013260607317267,
+      "conviction": 0.7499,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "COMP",
       "side": "flat",
-      "p_up": 0.5285738797659784,
-      "conviction": 0.1786,
+      "p_up": 0.43364143324122756,
+      "conviction": 0.2164,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "CRV",
       "side": "flat",
-      "p_up": 0.42848615263992446,
-      "conviction": 0.2215,
+      "p_up": 0.40846716795008087,
+      "conviction": 0.2415,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "DOGE",
       "side": "flat",
-      "p_up": 0.4806295432430569,
-      "conviction": 0.1694,
+      "p_up": 0.45168277119655853,
+      "conviction": 0.1983,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "DOT",
       "side": "flat",
-      "p_up": 0.46883125228720046,
-      "conviction": 0.1812,
+      "p_up": 0.46624748410409217,
+      "conviction": 0.1838,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ENA",
       "side": "flat",
-      "p_up": 0.5045501083461649,
-      "conviction": 0.1546,
+      "p_up": 0.4669098998746837,
+      "conviction": 0.1831,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ETC",
       "side": "flat",
-      "p_up": 0.4903487789947729,
-      "conviction": 0.1597,
+      "p_up": 0.44416472271329166,
+      "conviction": 0.2058,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ETH",
       "side": "flat",
-      "p_up": 0.4437800782712624,
-      "conviction": 0.2062,
+      "p_up": 0.4060058357071381,
+      "conviction": 0.244,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "FET",
       "side": "flat",
-      "p_up": 0.4635884966899837,
-      "conviction": 0.1864,
+      "p_up": 0.4723998519548807,
+      "conviction": 0.1776,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "FLR",
       "side": "flat",
-      "p_up": 0.45486244324775565,
-      "conviction": 0.1951,
+      "p_up": 0.42249668214036706,
+      "conviction": 0.2275,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "GRT",
       "side": "flat",
-      "p_up": 0.48835720279497324,
-      "conviction": 0.1616,
+      "p_up": 0.4672168825648684,
+      "conviction": 0.1828,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "HBAR",
       "side": "sell",
-      "p_up": 0.39540531166476106,
-      "conviction": 0.6046,
+      "p_up": 0.34676781445907473,
+      "conviction": 0.6532,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "IMX",
       "side": "flat",
-      "p_up": 0.5253080112963885,
-      "conviction": 0.1753,
+      "p_up": 0.4988131619937897,
+      "conviction": 0.1512,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "INJ",
       "side": "flat",
-      "p_up": 0.4235321374910849,
-      "conviction": 0.2265,
+      "p_up": 0.44672131603863074,
+      "conviction": 0.2033,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "LDO",
       "side": "flat",
-      "p_up": 0.5267800495479829,
-      "conviction": 0.1768,
+      "p_up": 0.478427134704499,
+      "conviction": 0.1716,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "LINK",
       "side": "flat",
-      "p_up": 0.472812396965787,
-      "conviction": 0.1772,
+      "p_up": 0.4403282936331367,
+      "conviction": 0.2097,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "LTC",
       "side": "flat",
-      "p_up": 0.4698022592839111,
-      "conviction": 0.1802,
+      "p_up": 0.4309404297045047,
+      "conviction": 0.2191,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "MNT",
       "side": "flat",
-      "p_up": 0.4680810718306474,
-      "conviction": 0.1819,
+      "p_up": 0.43085546520334556,
+      "conviction": 0.2191,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "MORPHO",
-      "side": "flat",
-      "p_up": 0.43821487792557434,
-      "conviction": 0.2118,
+      "side": "sell",
+      "p_up": 0.36802564937379584,
+      "conviction": 0.632,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "NEAR",
       "side": "flat",
-      "p_up": 0.49203336835886763,
-      "conviction": 0.158,
+      "p_up": 0.48963755078420995,
+      "conviction": 0.1604,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "OP",
       "side": "flat",
-      "p_up": 0.5162414449242374,
-      "conviction": 0.1662,
+      "p_up": 0.48449442046230207,
+      "conviction": 0.1655,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ORCA",
       "side": "flat",
-      "p_up": 0.5333083098505952,
-      "conviction": 0.1833,
+      "p_up": 0.5176730461552117,
+      "conviction": 0.1677,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "PEPE",
       "side": "flat",
-      "p_up": 0.5212127421098302,
-      "conviction": 0.1712,
+      "p_up": 0.49953330092279247,
+      "conviction": 0.1505,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "PYTH",
       "side": "flat",
-      "p_up": 0.4392168826552731,
-      "conviction": 0.2108,
+      "p_up": 0.5056446962256066,
+      "conviction": 0.1556,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "QNT",
       "side": "flat",
-      "p_up": 0.5165519617613894,
-      "conviction": 0.1666,
+      "p_up": 0.47860512838009667,
+      "conviction": 0.1714,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "RAY",
       "side": "flat",
-      "p_up": 0.4842258719456023,
-      "conviction": 0.1658,
+      "p_up": 0.4390206413999999,
+      "conviction": 0.211,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "RENDER",
       "side": "flat",
-      "p_up": 0.5048881804570143,
-      "conviction": 0.1549,
+      "p_up": 0.48213474040735443,
+      "conviction": 0.1679,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SEI",
       "side": "flat",
-      "p_up": 0.462578018981324,
-      "conviction": 0.1874,
+      "p_up": 0.47772929348723076,
+      "conviction": 0.1723,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SHIB",
       "side": "flat",
-      "p_up": 0.4645592747720919,
-      "conviction": 0.1854,
+      "p_up": 0.4394071800855485,
+      "conviction": 0.2106,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SKR",
       "side": "flat",
-      "p_up": 0.5085075455010264,
-      "conviction": 0.1585,
+      "p_up": 0.4854264523532717,
+      "conviction": 0.1646,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SOL",
       "side": "flat",
-      "p_up": 0.46454038762506666,
-      "conviction": 0.1855,
+      "p_up": 0.42706482633677706,
+      "conviction": 0.2229,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "STRK",
       "side": "flat",
-      "p_up": 0.5559756397990764,
-      "conviction": 0.206,
+      "p_up": 0.5482262679426911,
+      "conviction": 0.1982,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SUI",
       "side": "flat",
-      "p_up": 0.5172108841307054,
-      "conviction": 0.1672,
+      "p_up": 0.4841317192870454,
+      "conviction": 0.1659,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "SYRUP",
       "side": "flat",
-      "p_up": 0.4695420437456035,
-      "conviction": 0.1805,
+      "p_up": 0.4119617722347296,
+      "conviction": 0.238,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "UNI",
       "side": "flat",
-      "p_up": 0.4317533092379425,
-      "conviction": 0.2182,
+      "p_up": 0.4124791744913554,
+      "conviction": 0.2375,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "VIRTUAL",
       "side": "flat",
-      "p_up": 0.5136799338416914,
-      "conviction": 0.1637,
+      "p_up": 0.45987989327183926,
+      "conviction": 0.1901,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "VVV",
       "side": "flat",
-      "p_up": 0.49454259360169867,
-      "conviction": 0.1555,
+      "p_up": 0.49084244734761673,
+      "conviction": 0.1592,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "W",
       "side": "flat",
-      "p_up": 0.4914202686932265,
-      "conviction": 0.1586,
+      "p_up": 0.4999459831835815,
+      "conviction": 0.1501,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "WIF",
       "side": "flat",
-      "p_up": 0.5179249290297533,
-      "conviction": 0.1679,
+      "p_up": 0.45920648263151337,
+      "conviction": 0.1908,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "XCN",
       "side": "flat",
-      "p_up": 0.44311181301517477,
-      "conviction": 0.2069,
+      "p_up": 0.455088284978493,
+      "conviction": 0.1949,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "XLM",
       "side": "flat",
-      "p_up": 0.48018381595119797,
-      "conviction": 0.1698,
+      "p_up": 0.45627911134895355,
+      "conviction": 0.1937,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "XRP",
-      "side": "flat",
-      "p_up": 0.4332482363764381,
-      "conviction": 0.2168,
+      "side": "sell",
+      "p_up": 0.39450039488212757,
+      "conviction": 0.6055,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "XTZ",
       "side": "flat",
-      "p_up": 0.5300083521012816,
-      "conviction": 0.18,
+      "p_up": 0.4813947323476033,
+      "conviction": 0.1686,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ZEC",
       "side": "flat",
-      "p_up": 0.47304836504840586,
-      "conviction": 0.177,
+      "p_up": 0.4747956663502448,
+      "conviction": 0.1752,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     },
     {
       "symbol": "ZRX",
       "side": "flat",
-      "p_up": 0.5167549953397944,
-      "conviction": 0.1668,
+      "p_up": 0.4784912472803436,
+      "conviction": 0.1715,
       "bar_time": null,
-      "expires_at": "2026-10-18T22:34:26Z"
+      "expires_at": "2026-10-18T23:40:49Z"
     }
   ]
 }
