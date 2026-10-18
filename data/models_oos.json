@@ -37,7 +37,7 @@
       "sleeve_sharpe": 1.7158,
       "n_cohorts": 25,
       "promoted": true,
-      "note": "lgbm_equity_v1. Models tab only. Desk CLI stays rules."
+      "note": "lgbm_equity_v1. Models tab only. Equity research is not the live crypto desk."
     },
     {
       "sleeve": "crypto",
@@ -82,7 +82,7 @@
       "n_cohorts": 1397,
       "benchmark": "BTC-USD",
       "promoted": true,
-      "note": "promoted on after_cost_mean only; IR trails logistic (+0.111 vs +0.235). Not IR-promoted. CLI stays --backend rules."
+      "note": "promoted on after_cost_mean only; IR trails logistic (+0.111 vs +0.235). Not IR-promoted. Live scoring is --backend ml, model_version lgbm_v1."
     }
   ],
   "updated_at": "2026-09-28T00:16:00Z",

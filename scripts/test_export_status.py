@@ -299,6 +299,7 @@ class ScorecardTests(unittest.TestCase):
         oos = json.loads((root / "data" / "models_oos.json").read_text(encoding="utf-8"))
         meta = json.loads((root / "data" / "meta.json").read_text(encoding="utf-8"))
         live = json.loads((root / "data" / "live_book.json").read_text(encoding="utf-8"))
+        signal = json.loads((root / "data" / "predictions.json").read_text(encoding="utf-8"))
         balance = export_kpi.published_running_balance(live)
         built = export_kpi.build_model_scorecard(
             summary,
@@ -307,13 +308,36 @@ class ScorecardTests(unittest.TestCase):
             oos,
             signal_linkage=meta.get("signal_linkage"),
             running_balance=balance,
+            signal=signal,
         )
         committed = json.loads((root / "data" / "model_scorecard.json").read_text(encoding="utf-8"))
         self.assertEqual(committed, built)
-        self.assertEqual(built["live_backend"]["id"], "rules")
-        self.assertEqual(built["live_backend"]["cli"], "--backend rules")
+        self.assertTrue(signal.get("backend"))
+        self.assertTrue(signal.get("model_version"))
+        self.assertEqual(built["live_backend"]["id"], signal["backend"])
+        self.assertEqual(built["live_backend"]["model_version"], signal["model_version"])
+        self.assertEqual(built["live_backend"]["cli"], f"--backend {signal['backend']}")
+        self.assertEqual(built["live_backend"]["source"], signal.get("source") or "signals/latest.json")
+        self.assertNotEqual(built["live_backend"]["id"], "rules")
+        self.assertNotIn("--backend rules", (root / "data" / "models.json").read_text(encoding="utf-8"))
         self.assertEqual(built["live_backend"]["promoted_model"], "lgbm")
-        self.assertIs(built["live_backend"]["promoted_in_use"], False)
+        # The signal names the live model. It is not the rules engine, and the
+        # OOS row name is not copied onto model_version.
+        self.assertIsNone(built["live_backend"]["promoted_in_use"])
+        stale = {
+            "note": "The CLI stays --backend rules.",
+            "models": [{"sleeve": "crypto", "used": "stays --backend rules"}],
+        }
+        overridden = export_kpi.live_backend_block(stale, oos, signal)
+        self.assertEqual(overridden["id"], signal["backend"])
+        self.assertEqual(overridden["model_version"], signal["model_version"])
+        self.assertNotEqual(overridden["id"], "rules")
+        fallback = export_kpi.live_backend_block(stale, oos, {"generated_at": "2026-10-17T00:00:00Z"})
+        self.assertEqual(fallback["id"], "rules")
+        self.assertEqual(fallback["cli"], "--backend rules")
+        self.assertIsNone(fallback["model_version"])
+        self.assertEqual(fallback["source"], "data/models.json")
+        self.assertIs(fallback["promoted_in_use"], False)
         fills = built["closed_fills"]
         for key in ("wins", "losses", "flats", "decided", "deduped"):
             self.assertIn(key, fills)

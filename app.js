@@ -34,8 +34,9 @@ import {
   formatWinRecord,
   adoptPublishedRails,
   cardPositionRows,
-  inferLiveBackend,
+  chooseDeskSignal,
   labelFor,
+  resolveLiveBackend,
   LIVE_SIGNAL_URL,
   mergeLiveBook,
   shownBooks,
@@ -1112,20 +1113,25 @@ function fixedDigits(value, digits) {
   return n.toFixed(digits);
 }
 
-function backendView(scorecard, models, oosPayload) {
-  const published = scorecard?.live_backend;
-  if (published && (published.id || published.note)) return published;
-  const inferred = inferLiveBackend(models);
+function backendView(scorecard, models, oosPayload, signal) {
+  const chosen = resolveLiveBackend(scorecard, models, signal);
+  if (
+    chosen?.promoted_model != null ||
+    chosen?.model_version ||
+    (chosen?.source && chosen.source !== "data/models.json")
+  ) {
+    return chosen;
+  }
   const promoted = cryptoOosModels(oosPayload).find((row) => row.promoted === true);
-  if (inferred.id === "rules" && promoted?.model) {
+  if (chosen?.id === "rules" && promoted?.model) {
     return {
-      ...inferred,
+      ...chosen,
       promoted_model: promoted.model,
       promoted_in_use: false,
       note: `The CLI is still --backend rules. ${promoted.model} is promoted on after-cost mean and is not the live backend.`,
     };
   }
-  return inferred;
+  return chosen;
 }
 
 function renderLatestCall(trades, backend) {
@@ -1200,7 +1206,7 @@ function renderModelRace(oosPayload, backend) {
   return card;
 }
 
-function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summary) {
+function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summary, signal) {
   const card = el("article", "sleeve crypto model-card model-scorecard card");
   card.id = "crypto-scorecard";
   const head = el("header", "sleeve-head");
@@ -1212,7 +1218,7 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summ
   panel.id = "card-panel-crypto-scorecard";
 
   const grid = el("div", "metrics");
-  const backend = backendView(scorecard, models, oosPayload);
+  const backend = backendView(scorecard, models, oosPayload, signal);
   const backendMetric = metric("Live backend", backend.id || "UNKNOWN", "flat");
   backendMetric.append(el("p", "fine", backend.note || "Live backend is not stated in this snapshot."));
   grid.append(backendMetric);
@@ -1350,7 +1356,7 @@ function renderSignalLinkage(scorecard) {
   );
 }
 
-function renderModels(payload, oosPayload, meta, summary, trades, scorecard, book) {
+function renderModels(payload, oosPayload, meta, summary, trades, scorecard, book, signal) {
   modelsEl.replaceChildren();
   const models = payload && Array.isArray(payload.models) ? payload.models.slice() : [];
   const exported = oosRows(oosPayload);
@@ -1360,12 +1366,12 @@ function renderModels(payload, oosPayload, meta, summary, trades, scorecard, boo
   if (oosPayload?.updated_at) freshBits.push(`OOS updated ${formatEt(oosPayload.updated_at)}`);
   if (freshBits.length) modelsEl.append(el("p", "freshness", freshBits.join(" · ")));
 
-  const backend = backendView(scorecard, payload, oosPayload);
+  const backend = backendView(scorecard, payload, oosPayload, signal);
   const top = el("div", "duo");
   top.append(renderModelRace(oosPayload, backend), renderLatestCall(trades, backend));
   modelsEl.append(top);
   if (payload && payload.note) modelsEl.append(el("p", "note", String(payload.note)));
-  modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book, summary));
+  modelsEl.append(renderCryptoScorecard(payload, oosPayload, trades, scorecard, book, summary, signal));
   if (!models.length && exported.length) {
     for (const row of exported) {
       models.push({
@@ -1482,16 +1488,17 @@ async function loadLiveBook(token) {
   const committed = await loadJson("data/live_book.json", token).catch(() => null);
   try {
     const response = await fetch(LIVE_SIGNAL_URL, { cache: "no-store" });
-    if (!response.ok) return committed;
-    return mergeLiveBook(committed, await response.json());
+    if (!response.ok) return { book: committed, signal: null };
+    const signal = await response.json();
+    return { book: mergeLiveBook(committed, signal), signal };
   } catch {
-    return committed;
+    return { book: committed, signal: null };
   }
 }
 
 async function loadAll(meta) {
   const token = meta.fetched_at || meta.export_attempted_at || Date.now();
-  const [summary, trades, models, oos, book, curves, scorecard] = await Promise.all([
+  const [summary, trades, models, oos, live, curves, scorecard, predictions] = await Promise.all([
     loadJson("data/kpi_summary.json", token),
     loadJson("data/kpi_trades_scrubbed.json", token),
     loadJson("data/models.json", token).catch(() => ({ models: [], note: "data/models.json is not in this snapshot." })),
@@ -1499,7 +1506,10 @@ async function loadAll(meta) {
     loadLiveBook(token),
     loadJson("data/sleeve_curves.json", token).catch(() => ({ missing: true, series: [] })),
     loadJson("data/model_scorecard.json", token).catch(() => null),
+    loadJson("data/predictions.json", token).catch(() => null),
   ]);
+  const book = live?.book ?? null;
+  const signal = chooseDeskSignal(live?.signal, predictions);
   lastTrades = Array.isArray(trades) ? trades : [];
   if (Array.isArray(summary)) adoptPublishedRails(summary, scorecard);
   state.points = curvePoints(curves, "crypto");
@@ -1509,7 +1519,7 @@ async function loadAll(meta) {
   paintCurves();
   renderRisk(view, summary, scorecard);
   renderPositions(book, view?.asOf);
-  renderModels(models, oos, meta, summary, lastTrades, scorecard, book);
+  renderModels(models, oos, meta, summary, lastTrades, scorecard, book, signal);
   applyHash();
   loadJson("data/runs.json", token)
     .then((raw) => paintLatestRun(normalizeBundle(raw)))

@@ -2,12 +2,13 @@
   "sleeve": "crypto",
   "ticket": "T24e",
   "live_backend": {
-    "id": "rules",
-    "cli": "--backend rules",
+    "id": "ml",
+    "cli": "--backend ml",
+    "model_version": "lgbm_v1",
     "promoted_model": "lgbm",
-    "promoted_in_use": false,
-    "source": "data/models.json",
-    "note": "The CLI is still --backend rules. lgbm is promoted on after-cost mean and is not the live backend."
+    "promoted_in_use": null,
+    "source": "signal_artifacts",
+    "note": "The CLI is --backend ml, model_version lgbm_v1."
   },
   "closed_fills": {
     "wins": 48,

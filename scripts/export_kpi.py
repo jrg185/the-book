@@ -42,8 +42,10 @@ Optional, written when the view exists and skipped when it does not:
 Derived for the Models tab, from the exported tape plus committed model files:
   data/model_scorecard.json
     Crypto live backend, closed-fill win rate, fee drag, kill headroom, and
-    the 30 bp OOS table. Fee dollars stay UNKNOWN when the warehouse has no
-    fee column. Order ids are not written.
+    the 30 bp OOS table. The live backend is the backend and model_version
+    on the signal document this export already reads. Notes in data/models.json
+    are used only when that document does not name a backend. Fee dollars stay
+    UNKNOWN when the warehouse has no fee column. Order ids are not written.
 """
 
 from __future__ import annotations
@@ -1811,8 +1813,21 @@ def _crypto_oos_rows(payload) -> list:
     return rows
 
 
-def live_backend_block(models: dict, oos) -> dict:
-    models = models if isinstance(models, dict) else {}
+_BACKEND_FLAG = re.compile(r"--backend\s+([A-Za-z0-9_-]+)")
+_BACKEND_TOKEN = re.compile(r"^[A-Za-z0-9_-]+$")
+_MODEL_VERSION_TOKEN = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _named_token(value, pattern) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or not pattern.fullmatch(text):
+        return None
+    return text
+
+
+def _models_backend_text(models: dict) -> str:
     parts = [str(models.get("note") or "")]
     for model in models.get("models") or []:
         if not isinstance(model, dict):
@@ -1824,29 +1839,125 @@ def live_backend_block(models: dict, oos) -> dict:
         nested = model.get("oos")
         if isinstance(nested, dict):
             parts.append(str(nested.get("note") or ""))
-    text = "\n".join(parts)
-    rules = "--backend rules" in text
-    promoted = None
+    return "\n".join(parts)
+
+
+def _promoted_model_name(oos) -> str | None:
     for row in _crypto_oos_rows(oos):
         if row.get("promoted") is True:
-            promoted = str(row.get("model") or "") or None
-            break
-    if rules and promoted:
-        note = (
-            f"The CLI is still --backend rules. {promoted} is promoted on after-cost mean "
+            return str(row.get("model") or "") or None
+    return None
+
+
+def _promoted_in_use(promoted, backend, model_version=None):
+    """Whether the promoted OOS row is the live model. None when the names differ.
+
+    A rules backend is not the promoted model. Equal names are. A different
+    model_version is left unknown instead of guessed from a prefix.
+    """
+    if not backend:
+        return None
+    if backend == "rules":
+        return False
+    name = (promoted or "").strip().lower()
+    if not name:
+        return None
+    if backend.lower() == name:
+        return True
+    version = (model_version or "").strip().lower()
+    if version and version == name:
+        return True
+    return None
+
+
+def _signal_source_label(signal: dict) -> str:
+    label = signal.get("source")
+    if isinstance(label, str):
+        text = label.strip()
+        if text and "\n" not in text and "\r" not in text:
+            return text
+    return "signals/latest.json"
+
+
+def _backend_note(backend: str, model_version: str | None, promoted, in_use, *, text_rules: bool) -> str:
+    if text_rules and backend == "rules":
+        head = "The CLI is still --backend rules."
+    elif model_version:
+        head = f"The CLI is --backend {backend}, model_version {model_version}."
+    else:
+        head = f"The CLI is --backend {backend}."
+    if promoted and in_use is False and backend == "rules":
+        return (
+            f"{head} {promoted} is promoted on after-cost mean "
             "and is not the live backend."
         )
-    elif rules:
-        note = "The CLI is still --backend rules."
-    else:
-        note = "Live backend is not stated in data/models.json. Not inferred."
+    return head
+
+
+def signal_for_backend(signal, source) -> dict | None:
+    """Copy the pulled signal and keep the source name the resolver chose."""
+    if not isinstance(signal, dict):
+        return None
+    stamped = dict(signal)
+    if source and not str(stamped.get("source") or "").strip():
+        stamped["source"] = source
+    return stamped
+
+
+def live_backend_block(models: dict, oos, signal=None) -> dict:
+    """Live CLI from the signal document. Notes are only the fallback.
+
+    backend and model_version are read from the signals file this export
+    already pulls. A missing backend falls back to a ``--backend`` flag in
+    data/models.json. The model name is not filled in here.
+    """
+    models = models if isinstance(models, dict) else {}
+    promoted = _promoted_model_name(oos)
+    payload = signal if isinstance(signal, dict) else None
+    backend = _named_token(payload.get("backend") if payload else None, _BACKEND_TOKEN)
+    model_version = _named_token(payload.get("model_version") if payload else None, _MODEL_VERSION_TOKEN)
+    if backend:
+        in_use = _promoted_in_use(promoted, backend, model_version)
+        return {
+            "id": backend,
+            "cli": f"--backend {backend}",
+            "model_version": model_version,
+            "promoted_model": promoted,
+            "promoted_in_use": in_use,
+            "source": _signal_source_label(payload),
+            "note": _backend_note(backend, model_version, promoted, in_use, text_rules=False),
+        }
+    match = _BACKEND_FLAG.search(_models_backend_text(models))
+    inferred = match.group(1) if match else None
+    if inferred == "rules":
+        return {
+            "id": "rules",
+            "cli": "--backend rules",
+            "model_version": None,
+            "promoted_model": promoted,
+            "promoted_in_use": False,
+            "source": "data/models.json",
+            "note": _backend_note("rules", None, promoted, False, text_rules=True),
+        }
+    if inferred:
+        in_use = _promoted_in_use(promoted, inferred, None)
+        return {
+            "id": inferred,
+            "cli": f"--backend {inferred}",
+            "model_version": None,
+            "promoted_model": promoted,
+            "promoted_in_use": in_use,
+            "source": "data/models.json",
+            "note": _backend_note(inferred, None, promoted, in_use, text_rules=False),
+        }
     return {
-        "id": "rules" if rules else None,
-        "cli": "--backend rules" if rules else None,
+        "id": None,
+        "cli": None,
+        "model_version": None,
         "promoted_model": promoted,
-        "promoted_in_use": False if rules else None,
+        "promoted_in_use": None,
         "source": "data/models.json",
-        "note": note,
+        "note": "Live backend is not stated in data/models.json. Not inferred.",
     }
 
 
@@ -2078,6 +2189,7 @@ def build_model_scorecard(
     order_id_unique=None,
     signal_linkage=None,
     running_balance=None,
+    signal=None,
 ) -> dict:
     """Crypto scorecard from already-exported JSON. Does not invent fees.
 
@@ -2121,7 +2233,7 @@ def build_model_scorecard(
     return scrub_published_identifiers({
         "sleeve": "crypto",
         "ticket": "T24e",
-        "live_backend": live_backend_block(model_payload, oos_payload),
+        "live_backend": live_backend_block(model_payload, oos_payload, signal),
         "closed_fills": {
             **published_fills,
             "dedupe": "order-id" if fills["order_id_available"] else "scrubbed-rows",
@@ -2310,8 +2422,32 @@ def write_model_scorecard(target: Path, bundle: dict, book: dict | None = None) 
         order_id_unique=bundle.get("order_id_unique"),
         signal_linkage=bundle.get("signal_linkage"),
         running_balance=published_running_balance(book),
+        signal=bundle.get("live_signal"),
     )
     write_json(target / "model_scorecard.json", payload)
+
+
+def stamp_live_backend(target: Path, signal) -> None:
+    """Rewrite live_backend from a pulled signal. A missing backend is left alone.
+
+    A failed signal read must not replace a published label with the notes
+    fallback. A fresh scorecard build still falls back when no signal is passed.
+    """
+    if not isinstance(signal, dict) or not _named_token(signal.get("backend"), _BACKEND_TOKEN):
+        return
+    card_path = target / "model_scorecard.json"
+    if not card_path.exists():
+        return
+    card = _read_json(card_path, None)
+    if not isinstance(card, dict):
+        return
+    models = _read_json(target / "models.json", {})
+    oos = _read_json(target / "models_oos.json", {"rows": []})
+    block = live_backend_block(models if isinstance(models, dict) else {}, oos, signal)
+    if card.get("live_backend") == block:
+        return
+    card["live_backend"] = block
+    write_json(card_path, card)
 
 
 LIVE_SIGNAL_URL = (
@@ -3746,6 +3882,39 @@ def self_test() -> int:
         raise RuntimeError(f"backend {card['live_backend']}")
     if card["live_backend"]["promoted_model"] != "lgbm":
         raise RuntimeError(f"promoted {card['live_backend']}")
+    if card["live_backend"]["model_version"] is not None or card["live_backend"]["source"] != "data/models.json":
+        raise RuntimeError(f"rules fallback used a signal field {card['live_backend']}")
+    signaled = build_model_scorecard(
+        summary=[{"sleeve": "crypto", "as_of": "2026-09-28T00:00:00Z"}],
+        trades=[{"sleeve": "crypto", "side": "sell", "pnl_frac_of_book": 0.01}],
+        models={
+            "note": "The CLI stays --backend rules.",
+            "models": [{"sleeve": "crypto", "used": "python -m model.run stays --backend rules."}],
+        },
+        oos={"rows": [{"sleeve": "crypto", "model": "lgbm", "promoted": True}]},
+        signal={"backend": "ml", "model_version": "candidate_v1", "source": "signals/latest.json"},
+    )
+    live = signaled["live_backend"]
+    if live["id"] != "ml" or live["model_version"] != "candidate_v1" or live["cli"] != "--backend ml":
+        raise RuntimeError(f"signal backend {live}")
+    if live["source"] != "signals/latest.json" or "candidate_v1" not in live["note"]:
+        raise RuntimeError(f"signal label {live}")
+    if live["id"] == "rules":
+        raise RuntimeError("stale rules note beat the signal")
+    missing = build_model_scorecard(
+        summary=[],
+        trades=[{"sleeve": "crypto", "side": "sell", "pnl_frac_of_book": 0.01}],
+        models={
+            "note": "The CLI stays --backend rules.",
+            "models": [{"sleeve": "crypto", "used": "stays --backend rules."}],
+        },
+        oos={"rows": []},
+        signal={"generated_at": "2026-10-17T00:00:00Z"},
+    )
+    if missing["live_backend"]["id"] != "rules" or missing["live_backend"]["model_version"] is not None:
+        raise RuntimeError(f"fallback {missing['live_backend']}")
+    if "lgbm" in Path(__file__).read_text(encoding="utf-8").split("def live_backend_block", 1)[1].split("\ndef ", 1)[0]:
+        raise RuntimeError("live_backend_block hardcodes a model name")
     if card["closed_fills"]["wins"] != 1 or card["closed_fills"]["losses"] != 1 or card["closed_fills"]["deduped"] != 1:
         raise RuntimeError(f"fills {card['closed_fills']}")
     if card["fee_drag"]["status"] != "known" or not usd_equal(card["fee_drag"]["fee_usd"], 1.0):
@@ -4898,7 +5067,9 @@ def main(argv: list[str] | None = None) -> int:
             install_sample(DATA)
         try:
             signal, signal_source = resolve_public_signal(base_url, key, db_url)
+            signal = signal_for_backend(signal, signal_source)
             refresh_live_book(DATA, signal=signal, fetch=False)
+            stamp_live_backend(DATA, signal)
             import export_runs
 
             export_runs.publish_predictions(
@@ -4924,6 +5095,15 @@ def main(argv: list[str] | None = None) -> int:
             import account_book
 
             assert_summary_fresh(bundle["kpi_summary"], unchanged=account_book.unchanged_sleeves())
+        signal = None
+        signal_source = None
+        try:
+            signal, signal_source = resolve_public_signal(base_url, key, db_url)
+        except Exception as exc:
+            print(f"live backend signal unread ({type(exc).__name__})")
+        signal = signal_for_backend(signal, signal_source)
+        if signal is not None:
+            bundle["live_signal"] = signal
         write_bundle(DATA, bundle)
         account_pnl = load_account_pnl(base_url, key, db_url)
         # Refresh already wrote this run's cash onto the shared marks file.
@@ -4947,7 +5127,6 @@ def main(argv: list[str] | None = None) -> int:
                 + " "
                 + " ".join(f"{ticker}={cash[ticker]}" for ticker in ("USD", "USDC") if ticker in cash)
             )
-        signal, signal_source = resolve_public_signal(base_url, key, db_url)
         refresh_live_book(
             DATA,
             signal=signal,
