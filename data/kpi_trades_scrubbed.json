@@ -1920,6 +1920,30 @@
     "fee_frac_of_book": 0.0
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-21T01:50:48.478745+00:00",
+    "ticker": "VVV",
+    "side": "sell",
+    "notional_frac_of_book": 0.1199,
+    "pnl_frac_of_book": 0.004402,
+    "why": "crypto-fast-mover-watch 9:50pm ET: VVV hit first +5% profit-take (bid 26.38 vs take 26.3589, cost 25.10); sold 35% at market",
+    "running_pnl_frac": 0.242603,
+    "running_balance_frac": 1.242603,
+    "fee_frac_of_book": 0.001133
+  },
+  {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-21T01:52:06.275238+00:00",
+    "ticker": "VVV",
+    "side": "sell",
+    "notional_frac_of_book": 0.221933,
+    "pnl_frac_of_book": 0.007488,
+    "why": "crypto-checkin 9:52pm ET: VVV bid 26.29 broke cost+5% trailing floor 26.3589 after the 35% take; sold remainder at market",
+    "running_pnl_frac": 0.250091,
+    "running_balance_frac": 1.250091,
+    "fee_frac_of_book": 0.0021
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
