@@ -95,6 +95,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Session open is the last published book before midnight ET.
+          fetch-depth: 0
 
       - name: Hourly Robinhood poll
         if: github.event_name == 'schedule' && github.event.schedule == '0 * * * *'

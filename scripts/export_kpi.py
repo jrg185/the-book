@@ -58,6 +58,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -2599,10 +2600,95 @@ def et_session_date(moment: dt.datetime | None = None) -> str:
     return when.astimezone(ZoneInfo("America/New_York")).date().isoformat()
 
 
-def carry_day_open(book: dict, now: dt.datetime | None = None) -> dict:
-    """Keep today's ET open. A new ET date takes the previous running balance.
+def et_session_start(moment: dt.datetime | None = None) -> dt.datetime:
+    """Midnight ET that opened the session containing ``moment``."""
+    when = moment or dt.datetime.now(dt.timezone.utc)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    from zoneinfo import ZoneInfo
 
-    A missing open is not the combined seed and not lifetime unrealized.
+    local = when.astimezone(ZoneInfo("America/New_York"))
+    return local.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def history_repo_for(target: Path | None) -> Path | None:
+    """Git repo that owns this data directory. A temp folder is not one."""
+    if target is None:
+        return None
+    folder = Path(target)
+    if (folder / ".git").exists():
+        return folder
+    parent = folder.parent
+    if (parent / ".git").exists():
+        return parent
+    return None
+
+
+def _git_text(repo: Path, args: list[str]) -> str | None:
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if done.returncode != 0:
+        return None
+    return done.stdout
+
+
+def published_balance_before(repo: Path | None, cutoff: dt.datetime, rel: str = "data/live_book.json") -> tuple[float, str] | None:
+    """Last ``running_balance_usd`` committed before ``cutoff``.
+
+    Reads ``git log`` of the published book. ``main`` when that ref exists,
+    otherwise ``HEAD``. The dollar is the file at that commit. It is not a
+    seed and not a literal in this function. None when no such commit exists.
+    """
+    if repo is None or not (Path(repo) / ".git").exists():
+        return None
+    root = Path(repo)
+    cutoff_s = cutoff.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rev = None
+    for candidate in ("origin/main", "main", "HEAD"):
+        if _git_text(root, ["rev-parse", "--verify", "--quiet", candidate]):
+            rev = candidate
+            break
+    if rev is None:
+        return None
+    log = _git_text(
+        root,
+        ["log", rev, f"--before={cutoff_s}", "-n", "40", "--format=%H", "--", rel],
+    )
+    if not log:
+        return None
+    for sha in log.split():
+        shown = _git_text(root, ["show", f"{sha}:{rel}"])
+        if not shown:
+            continue
+        try:
+            payload = json.loads(shown)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        balance = _finite_number(payload.get("running_balance_usd"))
+        if balance is None:
+            continue
+        return balance, sha
+    return None
+
+
+def carry_day_open(book: dict, now: dt.datetime | None = None, repo: Path | None = None) -> dict:
+    """Keep today's ET open. Otherwise take the last published balance before the roll.
+
+    A dated open for the current ET session stays. A missing date, or a date
+    from another session, is the last ``running_balance_usd`` committed to
+    ``data/live_book.json`` before midnight ET. That read is git history, not
+    the combined seed and not the balance already on the file. When history
+    has no such commit, the book is marked ``rail_unavailable`` and the stored
+    kill dollar is left in place.
     """
     out = dict(book) if isinstance(book, dict) else {}
     today = et_session_date(now)
@@ -2611,12 +2697,24 @@ def carry_day_open(book: dict, now: dt.datetime | None = None) -> dict:
     if stored_date == today and stored_open is not None:
         out["day_open_usd"] = stored_open
         out["day_open_date"] = today
+        if out.get("rail_status") == "rail_unavailable":
+            out.pop("rail_status", None)
+        if out.get("book_status") == "rail_unavailable":
+            out.pop("book_status", None)
         return out
-    previous = _finite_number(out.get("running_balance_usd"))
-    if stored_date and stored_date != today and previous is not None:
-        out["day_open_usd"] = previous
-        out["day_open_date"] = today
+    found = published_balance_before(repo, et_session_start(now))
+    if found is None:
+        out["book_status"] = "rail_unavailable"
+        out["rail_status"] = "rail_unavailable"
         return out
+    balance, sha = found
+    out["day_open_usd"] = balance
+    out["day_open_date"] = today
+    out["day_open_source"] = f"{sha}:data/live_book.json running_balance_usd"
+    if out.get("rail_status") == "rail_unavailable":
+        out.pop("rail_status", None)
+    if out.get("book_status") == "rail_unavailable":
+        out.pop("book_status", None)
     return out
 
 
@@ -3450,6 +3548,10 @@ def apply_residual_gate(book: dict, residual) -> dict:
     is non-zero so the export check fails.
     """
     out = dict(book) if isinstance(book, dict) else {}
+    rail_blocked = (
+        out.get("rail_status") == "rail_unavailable"
+        or out.get("book_status") == "rail_unavailable"
+    )
     if residual is None:
         return out
     import account_book
@@ -3461,6 +3563,10 @@ def apply_residual_gate(book: dict, residual) -> dict:
     if abs(amount) > tolerance:
         out["book_status"] = "out_of_balance"
         out["balance_ok"] = False
+    elif rail_blocked:
+        out["book_status"] = "rail_unavailable"
+        out["rail_status"] = "rail_unavailable"
+        out["balance_ok"] = False
     else:
         out["book_status"] = "ok"
         out["balance_ok"] = True
@@ -3468,15 +3574,17 @@ def apply_residual_gate(book: dict, residual) -> dict:
 
 
 def export_check_code(book) -> int:
-    """1 when the published book is flagged out of balance. Otherwise 0."""
+    """1 when the book is out of balance or the kill rail is unavailable."""
     if not isinstance(book, dict):
         return 0
-    if book.get("balance_ok") is False or book.get("book_status") == "out_of_balance":
+    status = str(book.get("book_status") or "")
+    rail = str(book.get("rail_status") or "")
+    if book.get("balance_ok") is False or status in {"out_of_balance", "rail_unavailable"} or rail == "rail_unavailable":
         return 1
     return 0
 
 
-def apply_published_book(book: dict, cash: dict | None, *, now=None, residual=None) -> dict:
+def apply_published_book(book: dict, cash: dict | None, *, now=None, residual=None, repo: Path | None = None) -> dict:
     """Write the agentic total, the drop's day P&L, and kill headroom.
 
     When a position list is present, running_balance_usd is the cash on the
@@ -3496,9 +3604,12 @@ def apply_published_book(book: dict, cash: dict | None, *, now=None, residual=No
     a warning is printed and the net is left unchanged. A missing
     day_realized_usd leaves the day already on the file and logs that.
     kill_remaining_usd is the marked book above the ET session-open kill
-    line. The session open is carried on the book. A missing open does not
-    fall back to the combined seed, and lifetime unrealized is not subtracted
-    again. residual, when passed, is the account_book unexplained residual.
+    line. The session open is today's dated open, or the last published
+    running balance committed before midnight ET. A missing history flags
+    the book rail_unavailable and leaves the stored kill dollar in place.
+    It does not fall back to the combined seed, and lifetime unrealized is
+    not subtracted again. residual, when passed, is the account_book
+    unexplained residual.
     """
     out = dict(book) if isinstance(book, dict) else {}
     cash_missing = not isinstance(cash, dict)
@@ -3531,7 +3642,7 @@ def apply_published_book(book: dict, cash: dict | None, *, now=None, residual=No
                 "day_pnl_usd stays the net figure",
                 file=sys.stderr,
             )
-    out = carry_day_open(out, now=now)
+    out = carry_day_open(out, now=now, repo=repo)
     marked = agentic_book_usd(out)
     if marked is None:
         return apply_residual_gate(out, residual)
@@ -3563,16 +3674,14 @@ def apply_published_book(book: dict, cash: dict | None, *, now=None, residual=No
             out["unrealized_pnl_usd"] = float(identity["unrealized_cents"])
             out["realized_pnl_usd"] = float(identity["realized_cents"])
             out["running_pnl_usd"] = float(identity["running_cents"])
+    if out.get("rail_status") == "rail_unavailable":
+        return apply_residual_gate(out, residual)
     day_open = _finite_number(out.get("day_open_usd"))
     kill = kill_remaining_usd(marked, day_open)
     line = kill_line_usd(day_open)
-    if kill is None:
-        out.pop("kill_remaining_usd", None)
-    else:
+    if kill is not None:
         out["kill_remaining_usd"] = kill
-    if line is None:
-        out.pop("kill_line_usd", None)
-    else:
+    if line is not None:
         out["kill_line_usd"] = line
     return apply_residual_gate(out, residual)
 
@@ -3587,6 +3696,8 @@ def shared_headroom(book) -> tuple[float | None, float | None]:
     does not invent a book.
     """
     if not isinstance(book, dict):
+        return None, None
+    if str(book.get("rail_status") or "") == "rail_unavailable":
         return None, None
     balance = _finite_number(book.get("running_balance_usd"))
     if balance is None:
@@ -3611,6 +3722,8 @@ def shared_kill_block(summary, book) -> dict:
     dollars, _frac = shared_headroom(book)
     if dollars is not None:
         block["kill_headroom_usd"] = dollars
+    elif isinstance(book, dict) and str(book.get("rail_status") or "") == "rail_unavailable":
+        block["kill_headroom_usd"] = _finite_number(book.get("kill_remaining_usd"))
     return block
 
 
@@ -3704,7 +3817,9 @@ def refresh_live_book(
         positions = overlay_rh_quantities(replay, live_positions)
     if positions is not None:
         merged = apply_card_positions(merged, positions)
-    merged = apply_published_book(merged, cash, now=now, residual=residual)
+    merged = apply_published_book(
+        merged, cash, now=now, residual=residual, repo=history_repo_for(path.parent)
+    )
     write_json(path, merged)
     stamp_shared_kill(target, merged)
     return merged
@@ -5407,13 +5522,22 @@ def main(argv: list[str] | None = None) -> int:
             residual=residual,
         )
         if export_check_code(published):
-            message = (
-                "Account book residual exceeds residual_tolerance_usd. "
-                "The book is flagged out of balance and is not a clean publish."
-            )
+            if str((published or {}).get("book_status") or "") == "out_of_balance":
+                status = "out_of_balance"
+                message = (
+                    "Account book residual exceeds residual_tolerance_usd. "
+                    "The book is flagged out of balance and is not a clean publish."
+                )
+            else:
+                status = "rail_unavailable"
+                message = (
+                    "Kill rail is unavailable. No published book before the ET "
+                    "date roll supplied a session open. The stored kill dollar "
+                    "was left in place."
+                )
             print(message, file=sys.stderr)
             try:
-                stamp_export_failure(DATA, "out_of_balance", message)
+                stamp_export_failure(DATA, status, message)
             except OSError as exc:
                 print(f"Could not record export status in data/meta.json: {exc}", file=sys.stderr)
             return 1

@@ -362,9 +362,12 @@ export function cryptoBookView(book, summary) {
   // above the session-open kill line. A missing open keeps the stored dollar
   // and does not subtract lifetime unrealized.
   const rails = railsFor(summary);
-  const dayOpen = num(book?.day_open_usd);
+  const railBlocked =
+    String(book?.rail_status || "").toLowerCase() === "rail_unavailable" ||
+    String(book?.book_status || "").toLowerCase() === "rail_unavailable";
+  const dayOpen = railBlocked ? null : num(book?.day_open_usd);
   const killHeadroom =
-    runningBalance != null && dayOpen != null
+    !railBlocked && runningBalance != null && dayOpen != null
       ? killRemainingUsd(runningBalance, dayOpen, rails.dayKillFrac)
       : killStored;
   const reconciled = reconciledPnl(book);
@@ -391,6 +394,7 @@ export function cryptoBookView(book, summary) {
     signalGeneratedAt: book?.generated_at || null,
     dayPnl,
     dayOpen,
+    railUnavailable: railBlocked,
     killLine: dayOpen == null ? null : killLineUsd(dayOpen, rails.dayKillFrac),
     dayKillFrac: rails.dayKillFrac,
     dayKill: railUsd(rail, rails.dayKillFrac),

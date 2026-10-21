@@ -282,6 +282,7 @@ class ScorecardTests(unittest.TestCase):
                 {
                     "running_balance_usd": nearby,
                     "day_open_usd": nearby,
+                    "day_open_date": export_kpi.et_session_date(),
                     "day_pnl_usd": 0,
                     "unrealized_pnl_usd": 0,
                     "kill_remaining_usd": 1,

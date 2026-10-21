@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import subprocess
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -1555,3 +1557,165 @@ def test_fills_newer_than_the_cursor_are_selected_before_the_cash_push():
     script = (ROOT / "scripts" / "book_sync_push.sh").read_text(encoding="utf-8")
     assert script.find("sync_rh_kpi_trades.py") < script.find('exec "$here/push_with_retry.sh"')
     assert "fills newer than the sync cursor were not upserted" in script
+
+
+# 18:00 UTC on 2026-10-21 is 14:00 ET. Midnight ET that session is 04:00 UTC.
+_SESSION_NOW = dt.datetime(2026, 10, 21, 18, tzinfo=dt.timezone.utc)
+_BEFORE_ROLL = "2026-10-21T03:30:00Z"
+_AFTER_ROLL = "2026-10-21T05:00:00Z"
+
+
+def _git(repo: Path, *args: str, when: str | None = None) -> str:
+    env = os.environ.copy()
+    env["GIT_AUTHOR_NAME"] = "book-test"
+    env["GIT_AUTHOR_EMAIL"] = "book-test@example.com"
+    env["GIT_COMMITTER_NAME"] = "book-test"
+    env["GIT_COMMITTER_EMAIL"] = "book-test@example.com"
+    if when:
+        env["GIT_AUTHOR_DATE"] = when
+        env["GIT_COMMITTER_DATE"] = when
+    done = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=book-test",
+            "-c",
+            "user.email=book-test@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return done.stdout
+
+
+def _init_book_repo(repo: Path) -> None:
+    repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-b", "main")
+
+
+def _commit_published_balance(repo: Path, balance: float, when: str) -> str:
+    data = repo / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "live_book.json").write_text(
+        json.dumps({"running_balance_usd": balance}),
+        encoding="utf-8",
+    )
+    _git(repo, "add", "data/live_book.json")
+    _git(repo, "commit", "-m", "publish book", when=when)
+    return _git(repo, "rev-parse", "HEAD").strip()
+
+
+def _undated_book(balance: float) -> dict:
+    return {
+        "running_balance_usd": balance,
+        "kill_remaining_usd": 4,
+        "kill_line_usd": 3,
+        "holdings": [{"ticker": "USD", "sleeve": "crypto", "value_usd": balance}],
+        "positions": [],
+    }
+
+
+def _history_with_decoy(repo: Path) -> str:
+    """Last book before midnight ET, plus a later publish that must not win."""
+    _init_book_repo(repo)
+    early = _commit_published_balance(repo, 50, _BEFORE_ROLL)
+    _commit_published_balance(repo, 99, _AFTER_ROLL)
+    return early
+
+
+def test_missing_day_open_date_bootstraps_from_history(tmp_path):
+    """A book with no dated open takes the last balance published before midnight ET."""
+    start = export_kpi.et_session_start(_SESSION_NOW).astimezone(dt.timezone.utc)
+    assert start == dt.datetime(2026, 10, 21, 4, tzinfo=dt.timezone.utc)
+    assert export_kpi.et_session_date(_SESSION_NOW) == "2026-10-21"
+    source = Path(export_kpi.__file__).read_text(encoding="utf-8")
+    carry_src = source.split("def carry_day_open", 1)[1].split("\ndef ", 1)[0]
+    hist_src = source.split("def published_balance_before", 1)[1].split("\ndef ", 1)[0]
+    assert "737" not in carry_src
+    assert "737" not in hist_src
+    repo = tmp_path / "history"
+    early = _history_with_decoy(repo)
+    current = _undated_book(80)
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], 50)
+    assert published["day_open_date"] == "2026-10-21"
+    assert not export_kpi.usd_equal(published["day_open_usd"], 80)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 99)
+    assert early in published["day_open_source"]
+    assert published.get("rail_status") != "rail_unavailable"
+    assert export_kpi.usd_equal(
+        published["kill_remaining_usd"],
+        export_kpi.kill_remaining_usd(80, published["day_open_usd"]),
+    )
+    assert export_kpi.usd_differ(published["kill_remaining_usd"], 4)
+    assert export_kpi.export_check_code(published) == 0
+
+
+def test_stale_day_open_date_rolls_to_the_published_balance(tmp_path):
+    """A previous session's open is replaced by the last book committed before this ET date."""
+    repo = tmp_path / "stale"
+    _history_with_decoy(repo)
+    current = _undated_book(80)
+    current["day_open_usd"] = 12
+    current["day_open_date"] = "2026-10-20"
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], 50)
+    assert published["day_open_date"] == "2026-10-21"
+    assert not export_kpi.usd_equal(published["day_open_usd"], 12)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 80)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 99)
+    assert published.get("rail_status") != "rail_unavailable"
+    assert export_kpi.usd_equal(
+        published["kill_line_usd"],
+        export_kpi.kill_line_usd(published["day_open_usd"]),
+    )
+
+
+def test_no_history_flags_the_rail_and_fails_the_check(tmp_path):
+    """No book before the ET roll keeps the stored kill dollar and fails the check."""
+    repo = tmp_path / "late-only"
+    _init_book_repo(repo)
+    _commit_published_balance(repo, 99, _AFTER_ROLL)
+    current = _undated_book(80)
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert published["book_status"] == "rail_unavailable"
+    assert published["rail_status"] == "rail_unavailable"
+    assert published["kill_remaining_usd"] == 4
+    assert published["kill_line_usd"] == 3
+    assert published.get("day_open_date") != "2026-10-21"
+    assert not export_kpi.usd_equal(published.get("day_open_usd"), 99)
+    assert export_kpi.export_check_code(published) == 1
+
+    bare = tmp_path / "no-git"
+    bare.mkdir()
+    (bare / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    flagged = export_kpi.refresh_live_book(bare, fetch=False, cash=None, now=_SESSION_NOW)
+    assert flagged["rail_status"] == "rail_unavailable"
+    assert flagged["book_status"] == "rail_unavailable"
+    assert flagged["kill_remaining_usd"] == 4
+    assert "day_open_usd" not in flagged
+    assert export_kpi.export_check_code(flagged) == 1
+
+    page = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "rail_unavailable" in page
+    assert "Rail unavailable" in page
+    main_src = Path(export_kpi.__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
+    assert 'status = "rail_unavailable"' in main_src
+    assert "stamp_export_failure(DATA, status, message)" in main_src
+    assert main_src.find('status = "rail_unavailable"') < main_src.rfind("return 1")
