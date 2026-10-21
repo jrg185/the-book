@@ -279,11 +279,15 @@ function assertCashDrop(drop, sources) {
     assertCentsEqual(view.bookUsd, holdingsSum(applied), label);
     assertCentsEqual(view.dayPnl, drop.day_realized_usd, label);
     assertCentsEqual(view.runningPnl, roundCents(balance - combinedSeed), label);
-    assertCentsEqual(
-      view.killHeadroom,
-      killRemainingUsd(balance, applied.day_open_usd, LIVE_RAILS.dayKillFrac),
-      label
-    );
+    if (applied.day_open_usd != null) {
+      assertCentsEqual(
+        view.killHeadroom,
+        killRemainingUsd(balance, applied.day_open_usd, LIVE_RAILS.dayKillFrac),
+        label
+      );
+    } else {
+      assertCentsEqual(view.killHeadroom, applied.kill_remaining_usd, label);
+    }
   }
   for (const [file, text] of sources) {
     assertCashLiteralAbsent(text, drop.USD, `${label} ${file} USD`);
@@ -479,10 +483,14 @@ test("the published book is the holdings sum, and the rails use the running bala
   // Export writes running_pnl_usd from the same cash + lots - seed.
   assertCentsEqual(live.running_pnl_usd, expectedRunning);
   assertCentsEqual(live.running_balance_usd, books[0].runningBalance);
-  assertCentsEqual(
-    live.kill_remaining_usd,
-    killRemainingUsd(books[0].runningBalance, live.day_open_usd, LIVE_RAILS.dayKillFrac)
-  );
+  // A snapshot from before the session-open fields keeps its stored headroom.
+  // The day-open rail is locked on the fixture below, not on this file.
+  if (live.day_open_usd != null) {
+    assertCentsEqual(
+      live.kill_remaining_usd,
+      killRemainingUsd(books[0].runningBalance, live.day_open_usd, LIVE_RAILS.dayKillFrac)
+    );
+  }
   assertCentsEqual(books[0].killHeadroom, live.kill_remaining_usd);
   // Reconciled realized can print the same cents as the warehouse field.
   assertCentsDifferWhen(

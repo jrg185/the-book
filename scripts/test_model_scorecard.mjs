@@ -154,10 +154,17 @@ test("live backend comes from the signal and falls back to notes", () => {
   assertCentsEqual(scorecard.kill.day_kill_usd, railUsd(view.runningBalance, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(view.dayKill, scorecard.kill.day_kill_usd);
   assertCentsEqual(scorecard.kill.day_target_usd, railUsd(view.runningBalance, LIVE_RAILS.dayTargetFrac));
-  const headroom = killRemainingUsd(book.running_balance_usd, book.day_open_usd, LIVE_RAILS.dayKillFrac);
-  assertCentsEqual(book.kill_remaining_usd, headroom);
-  assertCentsEqual(scorecard.kill.kill_headroom_usd, headroom);
-  assertCentsEqual(money(derived.seed, crypto.kill_headroom_frac), headroom);
+  assertCentsEqual(scorecard.kill.kill_headroom_usd, book.kill_remaining_usd);
+  assertCentsEqual(money(derived.seed, crypto.kill_headroom_frac), book.kill_remaining_usd);
+  if (book.day_open_usd != null) {
+    const headroom = killRemainingUsd(book.running_balance_usd, book.day_open_usd, LIVE_RAILS.dayKillFrac);
+    assertCentsEqual(book.kill_remaining_usd, headroom);
+  }
+  const fixtureOpen = 400;
+  const fixtureBalance = 380;
+  const fixtureHeadroom = killRemainingUsd(fixtureBalance, fixtureOpen, LIVE_RAILS.dayKillFrac);
+  assertCentsEqual(fixtureHeadroom, killRemainingUsd(fixtureBalance, fixtureOpen));
+  assertCentsDiffer(fixtureHeadroom, Math.abs(railUsd(fixtureBalance, LIVE_RAILS.dayKillFrac)));
   assertFracEqual(crypto.kill_headroom_frac, scorecard.kill.kill_headroom_frac);
   assertCentsDiffer(scorecard.kill.day_kill_usd, money(derived.seed, LIVE_RAILS.dayKillFrac));
   if (book.day_open_usd != null && approxCents(book.day_open_usd, book.running_balance_usd)) {

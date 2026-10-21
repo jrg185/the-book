@@ -5203,16 +5203,21 @@ def self_test() -> int:
         )
     if not usd_equal(live_card["kill"]["day_kill_usd"], rail_usd(live_frac, live_balance)):
         raise RuntimeError(f"published day kill {live_card['kill']} is not the live running balance")
-    if not usd_equal(
+    # data/live_book.json is the last export. It may not have a session open yet.
+    # The day-open rail is locked on this fixture, not on that snapshot.
+    fixture_open = 400.0
+    fixture_balance = 380.0
+    fixture_kill = kill_remaining_usd(fixture_balance, fixture_open)
+    fixture_budget = abs(rail_usd(live_rails()["dayKillFrac"], fixture_balance))
+    if fixture_kill is None or usd_equal(fixture_kill, fixture_budget):
+        raise RuntimeError("fixture headroom collapsed to the current-book budget")
+    if not usd_equal(kill_remaining_usd(kill_line_usd(fixture_open), fixture_open), 0):
+        raise RuntimeError("a book on the fixture kill line did not publish zero headroom")
+    if live_book.get("day_open_usd") is not None and not usd_equal(
         live_book.get("kill_remaining_usd"),
         kill_remaining_usd(live_balance, live_book.get("day_open_usd")),
     ):
         raise RuntimeError("live_book kill_remaining_usd is not the day-open rail")
-    if usd_equal(live_book.get("day_open_usd"), live_balance):
-        if not usd_equal(live_book["kill_remaining_usd"], abs(live_card["kill"]["day_kill_usd"])):
-            raise RuntimeError("kill remaining and |day_kill_usd| disagree when the book is unchanged from the open")
-    elif usd_equal(live_book.get("kill_remaining_usd"), abs(live_card["kill"]["day_kill_usd"])):
-        raise RuntimeError("kill remaining collapsed to the current-book budget")
     if not usd_equal(live_card["kill"].get("kill_headroom_usd"), live_book.get("kill_remaining_usd")):
         raise RuntimeError("scorecard kill headroom is not the live book kill remaining")
     if '"order_id"' in json.dumps(card):

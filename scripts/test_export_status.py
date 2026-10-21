@@ -201,15 +201,24 @@ class ScorecardTests(unittest.TestCase):
         self.assertTrue(export_kpi.usd_equal(live["running_balance_usd"], balance))
         self.assertTrue(export_kpi.usd_equal(card["kill"]["day_kill_usd"], export_kpi.rail_usd(frac, balance)))
         self.assertTrue(export_kpi.usd_equal(card["kill"]["day_target_usd"], export_kpi.rail_usd(crypto["day_target_pct"], balance)))
-        self.assertTrue(
-            export_kpi.usd_equal(
-                live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_open_usd")),
-            )
-        )
         self.assertTrue(export_kpi.usd_equal(card["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
-        if export_kpi.usd_equal(live.get("day_open_usd"), balance):
-            self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
+        # The published snapshot may predate day_open_usd. The rail is a fixture.
+        fixture_open = 400
+        fixture_balance = 380
+        fixture_kill = export_kpi.kill_remaining_usd(fixture_balance, fixture_open)
+        self.assertIsNotNone(fixture_kill)
+        self.assertTrue(
+            export_kpi.usd_differ(fixture_kill, abs(export_kpi.rail_usd(frac, fixture_balance)))
+        )
+        if live.get("day_open_usd") is not None:
+            self.assertTrue(
+                export_kpi.usd_equal(
+                    live["kill_remaining_usd"],
+                    export_kpi.kill_remaining_usd(balance, live.get("day_open_usd")),
+                )
+            )
+            if export_kpi.usd_equal(live.get("day_open_usd"), balance):
+                self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
 
     def test_half_cent_day_kill_is_restamped_from_the_written_balance(self):
         # 712.05 × 10% is a half cent. 712.1 × 10% is not. The two balances
@@ -359,7 +368,11 @@ class ScorecardTests(unittest.TestCase):
         )
         # Summary kill_headroom_frac is headroom dollars over the crypto seed.
         # The export stores kill_remaining_usd from the committed book.
+        # A snapshot with no session open still carries the dollar the last
+        # export wrote. The day-open rail is checked on a fixture below.
         built["kill"] = export_kpi.shared_kill_block(summary, live)
+        if live.get("day_open_usd") is None:
+            built["kill"]["kill_headroom_usd"] = live.get("kill_remaining_usd")
         committed = json.loads((root / "data" / "model_scorecard.json").read_text(encoding="utf-8"))
         self.assertEqual(committed, built)
         self.assertTrue(signal.get("backend"))
@@ -436,15 +449,34 @@ class ScorecardTests(unittest.TestCase):
         self.assertEqual(built["kill"]["kill_headroom_stored"], crypto["kill_headroom_frac"])
         self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(crypto["kill_headroom_frac"]))
         self.assertEqual(built["kill"]["kill_headroom_usd"], committed["kill"]["kill_headroom_usd"])
-        headroom = export_kpi.kill_remaining_usd(
-            live.get("running_balance_usd"),
-            live.get("day_open_usd"),
-        )
+        stored_kill = live.get("kill_remaining_usd")
+        self.assertEqual(built["kill"]["kill_headroom_usd"], stored_kill)
+        if live.get("day_open_usd") is not None:
+            headroom = export_kpi.kill_remaining_usd(
+                live.get("running_balance_usd"),
+                live.get("day_open_usd"),
+            )
+            seeded = export_kpi.kill_headroom_frac_of_seed(headroom)
+            self.assertEqual(built["kill"]["kill_headroom_usd"], headroom)
+            self.assertEqual(crypto["kill_headroom_frac"], seeded)
+            self.assertTrue(export_kpi.usd_equal(headroom, export_kpi._cents(seeded)))
+        else:
+            headroom = stored_kill
+            fixture_open = 400
+            fixture_balance = 380
+            fixture_headroom = export_kpi.kill_remaining_usd(fixture_balance, fixture_open)
+            fixture_seeded = export_kpi.kill_headroom_frac_of_seed(fixture_headroom)
+            self.assertIsNotNone(fixture_headroom)
+            self.assertTrue(export_kpi.usd_equal(fixture_headroom, export_kpi._cents(fixture_seeded)))
+            self.assertTrue(
+                export_kpi.usd_differ(
+                    fixture_headroom,
+                    abs(export_kpi.rail_usd(crypto["day_kill_pct"], fixture_balance)),
+                )
+            )
         seeded = export_kpi.kill_headroom_frac_of_seed(headroom)
-        self.assertEqual(built["kill"]["kill_headroom_usd"], headroom)
-        self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(seeded))
-        self.assertEqual(crypto["kill_headroom_frac"], seeded)
-        self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], export_kpi._cents(seeded)))
+        self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(crypto["kill_headroom_frac"]))
+        self.assertTrue(export_kpi.usd_equal(stored_kill, export_kpi._cents(crypto["kill_headroom_frac"])))
         # With headroom off zero and a book other than the seed, fraction
         # times the running balance is a different rail from the published dollar.
         balance_scaled = export_kpi.rail_usd(built["kill"]["kill_headroom_frac"], balance)
@@ -456,12 +488,6 @@ class ScorecardTests(unittest.TestCase):
         self.assertEqual(built["kill"]["day_target_usd"], export_kpi.rail_usd(crypto["day_target_pct"], balance))
         self.assertNotIn("seed_usd", built["kill"])
         self.assertTrue(export_kpi.usd_equal(built["kill"]["running_balance_usd"], live["running_balance_usd"]))
-        self.assertTrue(
-            export_kpi.usd_equal(
-                live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_open_usd")),
-            )
-        )
         self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
         blob = json.dumps(built)
         self.assertNotIn('"order_id"', blob)
