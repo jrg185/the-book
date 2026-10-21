@@ -82,6 +82,9 @@ jobs:
           python3 -m unittest scripts/test_runs_export.py
           node --test scripts/test_runs_page.mjs
 
+      - name: Push retry
+        run: scripts/push_with_retry.sh --self-test
+
   export:
     needs: check
     if: github.event_name != 'pull_request'
