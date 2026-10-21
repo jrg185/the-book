@@ -1,76 +1,76 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-21T01:39:41Z",
-  "sleeve_as_of": "2026-10-21T01:52:19+00:00",
-  "book_usd": 36.29,
+  "sleeve_as_of": "2026-10-21T01:53:13+00:00",
+  "book_usd": 102.24,
   "signal_book_usd": 742.0,
-  "day_pnl_usd": 1.31,
-  "running_balance_usd": 779.73,
-  "realized_pnl_usd": 69.86,
-  "unrealized_pnl_usd": -90.13,
-  "running_pnl_usd": -20.27,
-  "day_realized_gross_usd": 1.65,
-  "day_sell_fees_usd": 0.34,
+  "day_pnl_usd": 3.55,
+  "running_balance_usd": 845.17,
+  "realized_pnl_usd": 135.82,
+  "unrealized_pnl_usd": -90.65,
+  "running_pnl_usd": 45.17,
+  "day_realized_gross_usd": 4.52,
+  "day_sell_fees_usd": 0.97,
   "positions": [
     {
       "sleeve": "crypto",
       "ticker": "FET",
       "qty": "431.4",
-      "mark": "0.20107",
-      "value_usd": 86.74,
+      "mark": "0.2007",
+      "value_usd": 86.58,
       "avg_cost": "0.22943856",
-      "unrealized_pnl_usd": -12.24,
-      "running_pnl_usd": -12.24
+      "unrealized_pnl_usd": -12.4,
+      "running_pnl_usd": -12.4
     },
     {
       "sleeve": "crypto",
       "ticker": "ORCA",
       "qty": "36.32",
-      "mark": "1.7891",
-      "value_usd": 64.98,
+      "mark": "1.7908",
+      "value_usd": 65.04,
       "avg_cost": "2.72351",
-      "unrealized_pnl_usd": -33.94,
-      "running_pnl_usd": -33.94
+      "unrealized_pnl_usd": -33.88,
+      "running_pnl_usd": -33.88
     },
     {
       "sleeve": "crypto",
       "ticker": "QNT",
       "qty": "0.3457",
-      "mark": "197.8",
-      "value_usd": 68.38,
+      "mark": "197.4",
+      "value_usd": 68.24,
       "avg_cost": "209.413",
-      "unrealized_pnl_usd": -4.01,
-      "running_pnl_usd": -4.01
+      "unrealized_pnl_usd": -4.15,
+      "running_pnl_usd": -4.15
     },
     {
       "sleeve": "crypto",
       "ticker": "RAY",
       "qty": "110.6",
-      "mark": "2.003",
-      "value_usd": 221.53,
+      "mark": "2.0009",
+      "value_usd": 221.3,
       "avg_cost": "2.188158561962025316455696203",
-      "unrealized_pnl_usd": -20.48,
-      "running_pnl_usd": -20.48
+      "unrealized_pnl_usd": -20.71,
+      "running_pnl_usd": -20.71
     },
     {
       "sleeve": "crypto",
       "ticker": "STRK",
       "qty": "816.6",
-      "mark": "0.05797",
-      "value_usd": 47.34,
+      "mark": "0.05804",
+      "value_usd": 47.4,
       "avg_cost": "0.067941",
-      "unrealized_pnl_usd": -8.14,
-      "running_pnl_usd": -8.14
+      "unrealized_pnl_usd": -8.09,
+      "running_pnl_usd": -8.09
     },
     {
       "sleeve": "crypto",
       "ticker": "VVV",
       "qty": "3.905",
-      "mark": "26.2764",
-      "value_usd": 102.61,
+      "mark": "26.25",
+      "value_usd": 102.51,
       "avg_cost": "25.10328",
-      "unrealized_pnl_usd": 4.58,
-      "running_pnl_usd": 4.58
+      "unrealized_pnl_usd": 4.48,
+      "running_pnl_usd": 4.48
     },
     {
       "sleeve": "crypto",
@@ -88,7 +88,7 @@
     {
       "ticker": "USD",
       "sleeve": "crypto",
-      "value_usd": 36.29
+      "value_usd": 102.24
     },
     {
       "ticker": "USDC",
