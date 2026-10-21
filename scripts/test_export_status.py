@@ -204,13 +204,11 @@ class ScorecardTests(unittest.TestCase):
         self.assertTrue(
             export_kpi.usd_equal(
                 live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
+                export_kpi.kill_remaining_usd(balance, live.get("day_open_usd")),
             )
         )
         self.assertTrue(export_kpi.usd_equal(card["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))
-        day_clear = live.get("day_pnl_usd", 0) >= 0
-        open_clear = (live.get("unrealized_pnl_usd") or 0) >= 0
-        if day_clear and open_clear:
+        if export_kpi.usd_equal(live.get("day_open_usd"), balance):
             self.assertTrue(export_kpi.usd_equal(live["kill_remaining_usd"], abs(card["kill"]["day_kill_usd"])))
 
     def test_half_cent_day_kill_is_restamped_from_the_written_balance(self):
@@ -224,7 +222,7 @@ class ScorecardTests(unittest.TestCase):
         shared = export_kpi.rail_usd(frac, edge)
         signed = export_kpi.js_round_cents(frac * edge)
         self.assertNotEqual(shared, signed)
-        self.assertEqual(abs(shared), export_kpi.kill_remaining_usd(edge, 0, 0))
+        self.assertEqual(abs(shared), export_kpi.kill_remaining_usd(edge, edge))
         self.assertEqual(export_kpi.rail_usd(frac, nearby), export_kpi.js_round_cents(frac * nearby))
         summary = [
             {
@@ -244,6 +242,7 @@ class ScorecardTests(unittest.TestCase):
             export_kpi.write_json(target / "model_scorecard.json", {"sleeve": "crypto", "kill": stale})
             book = {
                 "running_balance_usd": edge,
+                "day_open_usd": edge,
                 "day_pnl_usd": 0,
                 "unrealized_pnl_usd": 0,
                 "kill_remaining_usd": 1,
@@ -259,10 +258,10 @@ class ScorecardTests(unittest.TestCase):
             self.assertEqual(card["kill"]["day_kill_usd"], export_kpi.rail_usd(frac, written["running_balance_usd"]))
             self.assertEqual(
                 abs(card["kill"]["day_kill_usd"]),
-                export_kpi.kill_remaining_usd(written["running_balance_usd"], 0, 0),
+                export_kpi.kill_remaining_usd(written["running_balance_usd"], written["running_balance_usd"]),
             )
             self.assertNotEqual(card["kill"]["day_kill_usd"], signed)
-            self.assertEqual(card["kill"]["kill_headroom_usd"], export_kpi.kill_remaining_usd(edge, 0, 0))
+            self.assertEqual(card["kill"]["kill_headroom_usd"], export_kpi.kill_remaining_usd(edge, edge))
             # The export write path: a stale scorecard is restamped from the
             # running balance refresh just wrote, not from the previous tenth.
             export_kpi.write_json(
@@ -273,6 +272,7 @@ class ScorecardTests(unittest.TestCase):
                 target / "live_book.json",
                 {
                     "running_balance_usd": nearby,
+                    "day_open_usd": nearby,
                     "day_pnl_usd": 0,
                     "unrealized_pnl_usd": 0,
                     "kill_remaining_usd": 1,
@@ -292,24 +292,24 @@ class ScorecardTests(unittest.TestCase):
             )
 
     def test_seed_fraction_headroom_is_not_scaled_by_balance(self):
-        """Published headroom dollars follow kill_remaining_usd.
+        """Published headroom dollars follow the day-open kill line.
 
-        The book is twice the crypto seed from config, and the open loss is
-        half the published day-kill budget. Both come from config and the
-        published rail.
+        The current book is below its session open, so headroom is not the
+        day-kill dollar on the current balance. The open and the fraction
+        come from the book and the published rail.
         """
         seed = export_kpi._crypto_seed()
         rails = export_kpi.live_rails()
         rail = export_kpi.as_fraction(rails["dayKillFrac"])
         target = export_kpi.as_fraction(rails["dayTargetFrac"])
-        balance = export_kpi.js_round_cents(seed + seed)
-        self.assertTrue(export_kpi.usd_differ(balance, seed))
-        budget = abs(rail) * balance
-        open_pnl = export_kpi.js_round_cents(-budget / 2)
+        day_open = export_kpi.js_round_cents(seed + seed)
+        self.assertTrue(export_kpi.usd_differ(day_open, seed))
+        balance = export_kpi.js_round_cents(day_open - abs(rail) * day_open / 2)
         book = {
             "running_balance_usd": balance,
+            "day_open_usd": day_open,
             "day_pnl_usd": 0,
-            "unrealized_pnl_usd": open_pnl,
+            "unrealized_pnl_usd": 0,
         }
         dollars, frac = export_kpi.shared_headroom(book)
         self.assertIsNotNone(dollars)
@@ -438,8 +438,7 @@ class ScorecardTests(unittest.TestCase):
         self.assertEqual(built["kill"]["kill_headroom_usd"], committed["kill"]["kill_headroom_usd"])
         headroom = export_kpi.kill_remaining_usd(
             live.get("running_balance_usd"),
-            live.get("day_pnl_usd"),
-            live.get("unrealized_pnl_usd"),
+            live.get("day_open_usd"),
         )
         seeded = export_kpi.kill_headroom_frac_of_seed(headroom)
         self.assertEqual(built["kill"]["kill_headroom_usd"], headroom)
@@ -460,7 +459,7 @@ class ScorecardTests(unittest.TestCase):
         self.assertTrue(
             export_kpi.usd_equal(
                 live["kill_remaining_usd"],
-                export_kpi.kill_remaining_usd(balance, live.get("day_pnl_usd"), live.get("unrealized_pnl_usd")),
+                export_kpi.kill_remaining_usd(balance, live.get("day_open_usd")),
             )
         )
         self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], live["kill_remaining_usd"]))

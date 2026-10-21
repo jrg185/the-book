@@ -275,20 +275,13 @@ function assertCashDrop(drop, sources) {
       day_realized_usd: drop.day_realized_usd,
     });
     const balance = agenticTotal(applied);
-    const spent = Math.min(drop.day_realized_usd, 0);
-    const openLoss = Math.min(applied.unrealized_pnl_usd ?? 0, 0);
     assertCentsEqual(view.runningBalance, balance, label);
     assertCentsEqual(view.bookUsd, holdingsSum(applied), label);
     assertCentsEqual(view.dayPnl, drop.day_realized_usd, label);
     assertCentsEqual(view.runningPnl, roundCents(balance - combinedSeed), label);
     assertCentsEqual(
       view.killHeadroom,
-      killRemainingUsd(balance, drop.day_realized_usd, LIVE_RAILS.dayKillFrac, applied.unrealized_pnl_usd),
-      label
-    );
-    assertCentsEqual(
-      view.killHeadroom,
-      Math.max(0, roundCents(Math.abs(LIVE_RAILS.dayKillFrac) * balance + spent + openLoss)),
+      killRemainingUsd(balance, applied.day_open_usd, LIVE_RAILS.dayKillFrac),
       label
     );
   }
@@ -334,11 +327,8 @@ function assertLiveRails(view, book) {
       assertCentsDiffer(view.dayTarget, signalTarget);
     }
   }
-  if (base != null) {
-    assertCentsEqual(
-      view.killHeadroom,
-      killRemainingUsd(base, book.day_pnl_usd, LIVE_RAILS.dayKillFrac, book.unrealized_pnl_usd)
-    );
+  if (base != null && book.day_open_usd != null) {
+    assertCentsEqual(view.killHeadroom, killRemainingUsd(base, book.day_open_usd, LIVE_RAILS.dayKillFrac));
   }
   if (rail == null || rail === 0 || view.killHeadroom == null) {
     assert.equal(view.killHeadroomFrac, null);
@@ -380,13 +370,14 @@ test("a published summary rail replaces the committed export", () => {
   assert.equal(LIVE_RAILS.dayTargetFrac, Number(crypto.day_target_pct));
   const book = {
     running_balance_usd: 400,
+    day_open_usd: 400,
     day_pnl_usd: -10,
     holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: 400 }],
   };
   const view = cryptoBookView(book, [{ sleeve: "crypto", day_kill_pct: -0.2, day_target_pct: 0.05 }]);
   assertCentsEqual(view.dayKill, railDollars(400, -0.2));
   assertCentsEqual(view.dayTarget, railDollars(400, 0.05));
-  assertCentsEqual(view.killHeadroom, killRemainingUsd(400, -10, -0.2));
+  assertCentsEqual(view.killHeadroom, killRemainingUsd(400, 400, -0.2));
   const committed = cryptoBookView(book);
   assertCentsEqual(committed.dayKill, railDollars(400, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(committed.dayTarget, railDollars(400, LIVE_RAILS.dayTargetFrac));
@@ -490,7 +481,7 @@ test("the published book is the holdings sum, and the rails use the running bala
   assertCentsEqual(live.running_balance_usd, books[0].runningBalance);
   assertCentsEqual(
     live.kill_remaining_usd,
-    killRemainingUsd(books[0].runningBalance, live.day_pnl_usd, LIVE_RAILS.dayKillFrac, live.unrealized_pnl_usd)
+    killRemainingUsd(books[0].runningBalance, live.day_open_usd, LIVE_RAILS.dayKillFrac)
   );
   assertCentsEqual(books[0].killHeadroom, live.kill_remaining_usd);
   // Reconciled realized can print the same cents as the warehouse field.
@@ -964,11 +955,12 @@ test("a float sum of lot marks matches at cents and misses exact equality", () =
   assertCentsDiffer(view.bookUsd, view.runningBalance);
 });
 
-test("running balance is cash plus lots, and kill headroom follows the day rail", () => {
+test("running balance is cash plus lots, and kill headroom follows the day-open rail", () => {
   const book = {
     book_usd: 30,
     signal_book_usd: 1000,
     day_pnl_usd: -5,
+    day_open_usd: 220,
     kill_remaining_usd: 100,
     running_balance_usd: 9999,
     running_pnl_usd: 1,
@@ -985,20 +977,23 @@ test("running balance is cash plus lots, and kill headroom follows the day rail"
   assertCentsEqual(view.runningBalance, cash + lots);
   assertCentsDiffer(view.runningBalance, book.running_balance_usd);
   assertCentsDiffer(view.bookUsd, view.runningBalance);
-  const budget = railDollars(cash + lots, Math.abs(LIVE_RAILS.dayKillFrac));
-  assertCentsEqual(view.killHeadroom, killRemainingUsd(cash + lots, book.day_pnl_usd));
-  assertCentsEqual(view.killHeadroom, railDollars(1, budget + book.day_pnl_usd));
+  assertCentsEqual(view.killHeadroom, killRemainingUsd(cash + lots, book.day_open_usd));
+  assertCentsDiffer(view.killHeadroom, killRemainingUsd(book.day_open_usd, book.day_open_usd));
   assertCentsDiffer(view.killHeadroom, railDollars(cash + lots, book.kill_remaining_usd / book.signal_book_usd));
   assertCentsEqual(view.runningPnl, railDollars(1, cash + lots - SEEDS_USD.combined));
   assertCentsEqual(view.dayPnl, book.day_pnl_usd);
 
-  const profit = cryptoBookView({ ...book, day_pnl_usd: -book.day_pnl_usd + 1 });
-  assertCentsEqual(profit.killHeadroom, killRemainingUsd(cash + lots, profit.dayPnl));
-  assertCentsEqual(profit.killHeadroom, killRemainingUsd(cash + lots, 0));
-  assertCentsEqual(profit.dayPnl, -book.day_pnl_usd + 1);
+  const sameBook = cryptoBookView({ ...book, day_pnl_usd: -book.day_pnl_usd + 1 });
+  assertCentsEqual(sameBook.killHeadroom, view.killHeadroom);
+  assertCentsEqual(sameBook.dayPnl, -book.day_pnl_usd + 1);
 
-  const stopped = cryptoBookView({ ...book, day_pnl_usd: -(cash + lots) });
-  assertCentsEqual(stopped.killHeadroom, 0);
+  const stopped = cryptoBookView({
+    ...book,
+    day_open_usd: cash + lots,
+    holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: 0 }],
+    positions: [{ sleeve: "crypto", ticker: "ZZ", qty: "1", value_usd: 0, unrealized_pnl_usd: 0 }],
+  });
+  assertCentsEqual(stopped.runningBalance, 0);
 
   const kept = mergeLiveBook(book, { ...publicSignal, day_pnl_usd: 9, kill_remaining_usd: 3 });
   assertCentsEqual(kept.day_pnl_usd, book.day_pnl_usd);

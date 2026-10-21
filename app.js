@@ -245,7 +245,7 @@ function agePhrase(ms) {
   return `${hours}h ${rest}m`;
 }
 
-function statusChip(meta, sleeveAsOf) {
+function statusChip(meta, sleeveAsOf, book) {
   const exportStatus = String(meta?.export_status || "").toLowerCase();
   const refreshedAt = parseTime(meta?.fetched_at);
   const snapshotAt = parseTime(sleeveAsOf);
@@ -253,6 +253,9 @@ function statusChip(meta, sleeveAsOf) {
   const snapshotAge = snapshotAt == null ? null : Date.now() - snapshotAt.getTime();
   const warehouse = String(meta?.warehouse_status || "").toLowerCase();
   const mtmStale = meta?.source === "supabase" && snapshotAge != null && snapshotAge > SNAPSHOT_STALE_MS;
+  const outOfBalance =
+    String(book?.book_status || "").toLowerCase() === "out_of_balance" || book?.balance_ok === false;
+  if (outOfBalance || exportStatus === "out_of_balance") return { cls: "stale", text: "Out of balance" };
   if (warehouse === "read-only") return { cls: "error", text: "Warehouse read-only" };
   if (warehouse === "disk-full") return { cls: "error", text: "Warehouse disk full" };
   if (exportStatus === "error") return { cls: "error", text: "Export failed" };
@@ -262,9 +265,11 @@ function statusChip(meta, sleeveAsOf) {
   return { cls: "sample", text: "Sample snapshot" };
 }
 
-function renderStatus(meta, sleeveAsOf) {
+function renderStatus(meta, sleeveAsOf, book) {
   statusEl.replaceChildren();
   const exportStatus = String(meta?.export_status || "").toLowerCase();
+  const outOfBalance =
+    String(book?.book_status || "").toLowerCase() === "out_of_balance" || book?.balance_ok === false;
   const refreshedAt = parseTime(meta?.fetched_at);
   const snapshotAt = parseTime(sleeveAsOf);
   const agedOut = refreshedAt != null && Date.now() - refreshedAt.getTime() > STALE_AFTER_MS;
@@ -273,7 +278,7 @@ function renderStatus(meta, sleeveAsOf) {
   const mtmStale = meta?.source === "supabase" && snapshotAge != null && snapshotAge > SNAPSHOT_STALE_MS;
   const exportBroken = exportStatus === "error" || exportStatus === "stale" || agedOut;
   const frozenLabel = formatEt(meta?.snapshot_as_of || sleeveAsOf);
-  const chip = statusChip(meta, sleeveAsOf);
+  const chip = statusChip(meta, sleeveAsOf, book);
   statusEl.className = `status is-${chip.cls}`;
 
   const lines = el("div", "status-lines");
@@ -291,6 +296,14 @@ function renderStatus(meta, sleeveAsOf) {
     lines.append(
       el("p", "status-copy status-error", frozenLabel ? `warehouse disk full — snapshot frozen at ${frozenLabel}` : "warehouse disk full — snapshot frozen")
     );
+  } else if (outOfBalance) {
+    const residual = book?.unexplained_residual_usd;
+    const tolerance = book?.residual_tolerance_usd;
+    const detail =
+      residual == null
+        ? "Account residual is over tolerance. This is not a clean book."
+        : `Account residual ${formatUsd(residual, { signed: true })} is over tolerance ${formatUsd(tolerance)}. This is not a clean book.`;
+    lines.append(el("p", "status-copy status-error", detail));
   } else if (meta?.export_error) {
     lines.append(el("p", "status-copy status-error", String(meta.export_error)));
   } else if (exportBroken) {
@@ -543,7 +556,7 @@ function railBar({ title, value, detail, fill, toneClass, hint }) {
 function renderRisk(view, summary, scorecard) {
   railsEl.replaceChildren();
   const rails = liveRails(summary, scorecard);
-  const r = railView(view?.runningBalance, view?.dayPnl, rails, view?.unrealizedPnl);
+  const r = railView(view?.runningBalance, view?.dayPnl, rails, view?.dayOpen);
   railsSourceEl.textContent = rails.source
     ? `Day rails from ${rails.source}${rails.asOf ? `, as of ${formatEt(rails.asOf)}` : ""}.`
     : "No day rail is published in this snapshot.";
@@ -556,10 +569,10 @@ function renderRisk(view, summary, scorecard) {
       railBar({
         title: "Day kill headroom",
         value: formatUsd(r.headroomUsd),
-        detail: `${formatPct(r.killFrac)} rail = ${formatUsd(r.killUsd)} on ${formatUsd(r.balance)}. Today ${formatUsd(r.dayPnl, { signed: true })}. Open ${formatUsd(view?.unrealizedPnl, { signed: true })}.`,
+        detail: `Kill line ${formatUsd(r.killLine)} from the ${formatUsd(r.dayOpen)} open. Book ${formatUsd(r.balance)}.`,
         fill: left,
         toneClass: left == null ? "flat" : left < 0.25 ? "down" : left < 0.6 ? "warn" : "up",
-        hint: "Budget left before the day kill. A losing day spends it, and open losses spend it. A winning day does not add to it.",
+        hint: "Room between the live book and the kill line. The line is the session-open book times one minus the day-kill fraction. A book above the open has more room.",
       })
     );
   }
@@ -975,8 +988,8 @@ function render(tradeRows, meta, book, summary) {
   const books = shownBooks(book, summary);
   const view = books[0] || null;
   const sleeveAsOf = warehouseSleeveAsOf(book, summary);
-  renderStatus(meta || {}, sleeveAsOf);
-  renderHero(view, meta, statusChip(meta || {}, sleeveAsOf));
+  renderStatus(meta || {}, sleeveAsOf, book);
+  renderHero(view, meta, statusChip(meta || {}, sleeveAsOf, book));
 
   const grouped = new Map();
   for (const trade of trades) {
@@ -1246,7 +1259,7 @@ function renderCryptoScorecard(models, oosPayload, trades, scorecard, book, summ
   grid.append(feeMetric);
 
   const view = shownBooks(book, summary)[0] || null;
-  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard), view?.unrealizedPnl);
+  const rails = railView(view?.runningBalance, view?.dayPnl, liveRails(summary, scorecard), view?.dayOpen);
   const headroom = metric("Kill headroom");
   const headroomValue = headroom.querySelector(".v");
   if (rails.headroomUsd == null) {

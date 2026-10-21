@@ -1136,7 +1136,18 @@ def refresh(dry_run: bool) -> int:
     account_book.save_shared_cash(cash, origin, as_of)
     if origin:
         print(f"account cash from {origin}", file=sys.stderr)
+    if origin == "robinhood":
+        import export_kpi
+
+        account_book.save_shared_positions(export_kpi.load_rh_positions(env))
     rows, opens = build_rows(trades, marks, priors, as_of, cash=cash)
+    if account_book.cash_total(cash) is not None:
+        reading = account_book.statement(trades, marks, cash)
+        account_book.save_account_residual(reading["residual"])
+        if account_book.residual_over_tolerance(reading["residual"]):
+            raise RefreshError(
+                "unexplained residual exceeds tolerance; snapshot was not updated"
+            )
     combined = next(row for row in rows if row["sleeve"] == "combined")
     if combined.get("running_balance_usd") is None:
         raise RefreshError(

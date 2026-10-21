@@ -70,24 +70,23 @@ test("day rails come from the warehouse export, then the scorecard, never a cons
 test("rail bars use the export headroom formula on the running balance", () => {
   const view = cryptoBookView(book, summary);
   const rails = liveRails(summary, scorecard);
-  const r = railView(view.runningBalance, view.dayPnl, rails, view.unrealizedPnl);
+  const r = railView(view.runningBalance, view.dayPnl, rails, view.dayOpen);
   if (rails.killFrac != null) {
-    assert.equal(
-      r.headroomUsd,
-      killRemainingUsd(view.runningBalance, view.dayPnl, rails.killFrac, view.unrealizedPnl)
-    );
+    assert.equal(r.headroomUsd, killRemainingUsd(view.runningBalance, view.dayOpen, rails.killFrac));
     assert.equal(r.killUsd, railUsd(view.runningBalance, rails.killFrac));
     assert.equal(r.killUsd, scorecard.kill.day_kill_usd);
   }
-  const losing = railView(1000, -25, { killFrac: -0.1, targetFrac: 0.025 });
-  assert.equal(losing.killUsd, -100);
+  const flat = railView(1000, 0, { killFrac: -0.1, targetFrac: 0.025 }, 1000);
+  assert.equal(flat.killUsd, -100);
+  assert.equal(flat.headroomUsd, 100);
+  const losing = railView(975, -25, { killFrac: -0.1, targetFrac: 0.025 }, 1000);
   assert.equal(losing.headroomUsd, 75);
   assert.equal(losing.killUsedFrac, 0.25);
-  assert.equal(losing.targetUsd, 25);
+  assert.equal(losing.targetUsd, railUsd(975, 0.025));
   assert.equal(losing.targetProgress, 0);
-  const winning = railView(1000, 10, { killFrac: -0.1, targetFrac: 0.025 });
-  assert.equal(winning.headroomUsd, 100);
-  assert.equal(winning.targetProgress, 0.4);
+  const winning = railView(1032, 32, { killFrac: -0.1, targetFrac: 0.025 }, 1000);
+  assert.equal(winning.headroomUsd, 132);
+  assert.equal(winning.targetProgress, 1);
   const unpublished = railView(1000, 10, { killFrac: null, targetFrac: null });
   assert.equal(unpublished.headroomUsd, null);
   assert.equal(unpublished.targetUsd, null);

@@ -82,6 +82,9 @@ jobs:
           python3 -m unittest scripts/test_runs_export.py
           node --test scripts/test_runs_page.mjs
 
+      - name: Book sync pushes fills before cash
+        run: scripts/book_sync_push.sh --self-test
+
       - name: Push retry
         run: scripts/push_with_retry.sh --self-test
 
@@ -161,7 +164,8 @@ jobs:
           # and running_pnl_usd is that total minus the combined seed. Those two are not the warehouse row.
           # sleeve_as_of is that snapshot as_of. generated_at stays the signal file time and is not the MTM clock.
           # Day P&L is day_realized_usd from data/rh_cash.json when the drop has it. A missing day leaves the signal day.
-          # Open positions on that file are net qty from kpi_trades with the snapshot mark.
+          # When cash is the Robinhood holdings read, open quantities are that read.
+          # kpi_trades supplies cost basis. The desk drop still replays kpi_trades.
           # USD and USDC holdings are Robinhood cash: REST when RH keys are set, otherwise data/rh_cash.json.
           # Unset RH keys skip REST and do not fail this step. Live balances are not hardcoded here.
           # The card sizes the day kill and the day target from that cash plus open marks, not from signal_book_usd.

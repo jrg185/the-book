@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { approxFrac, assertCentsDiffer, assertCentsEqual, assertFracEqual, FRAC_TOL } from "./cents.mjs";
+import { approxCents, approxFrac, assertCentsDiffer, assertCentsEqual, assertFracEqual, FRAC_TOL } from "./cents.mjs";
 import {
   closedFillStats,
   cryptoBookView,
@@ -154,20 +154,13 @@ test("live backend comes from the signal and falls back to notes", () => {
   assertCentsEqual(scorecard.kill.day_kill_usd, railUsd(view.runningBalance, LIVE_RAILS.dayKillFrac));
   assertCentsEqual(view.dayKill, scorecard.kill.day_kill_usd);
   assertCentsEqual(scorecard.kill.day_target_usd, railUsd(view.runningBalance, LIVE_RAILS.dayTargetFrac));
-  const headroom = killRemainingUsd(
-    book.running_balance_usd,
-    book.day_pnl_usd,
-    LIVE_RAILS.dayKillFrac,
-    book.unrealized_pnl_usd
-  );
+  const headroom = killRemainingUsd(book.running_balance_usd, book.day_open_usd, LIVE_RAILS.dayKillFrac);
   assertCentsEqual(book.kill_remaining_usd, headroom);
   assertCentsEqual(scorecard.kill.kill_headroom_usd, headroom);
   assertCentsEqual(money(derived.seed, crypto.kill_headroom_frac), headroom);
   assertFracEqual(crypto.kill_headroom_frac, scorecard.kill.kill_headroom_frac);
   assertCentsDiffer(scorecard.kill.day_kill_usd, money(derived.seed, LIVE_RAILS.dayKillFrac));
-  const dayClear = (book.day_pnl_usd ?? 0) >= 0;
-  const openClear = (book.unrealized_pnl_usd ?? 0) >= 0;
-  if (dayClear && openClear) {
+  if (book.day_open_usd != null && approxCents(book.day_open_usd, book.running_balance_usd)) {
     assertCentsEqual(book.kill_remaining_usd, Math.abs(scorecard.kill.day_kill_usd));
   }
   assertFracEqual(derived.dayTargetFrac, scorecard.kill.day_target_pct);
@@ -190,10 +183,11 @@ test("day kill uses the kill-remaining cent round on a half-cent balance", () =>
   const shared = railUsd(edge, frac);
   const signed = money(edge, frac);
   assertCentsDiffer(shared, signed);
-  assertCentsEqual(Math.abs(shared), killRemainingUsd(edge, 0, frac, 0));
+  assertCentsEqual(Math.abs(shared), killRemainingUsd(edge, edge, frac));
   assertCentsEqual(railUsd(nearby, frac), money(nearby, frac));
   const book = {
     running_balance_usd: edge,
+    day_open_usd: edge,
     day_pnl_usd: 0,
     unrealized_pnl_usd: 0,
     holdings: [{ ticker: "USD", sleeve: "crypto", value_usd: nearby }],
