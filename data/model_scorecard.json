@@ -11,13 +11,13 @@
     "note": "The CLI is --backend ml, model_version lgbm_v1."
   },
   "closed_fills": {
-    "wins": 50,
+    "wins": 51,
     "losses": 34,
     "flats": 0,
-    "decided": 84,
-    "win_rate": 0.595238,
-    "expectancy_frac": 0.002977,
-    "expectancy_usd": 0.89,
+    "decided": 85,
+    "win_rate": 0.6,
+    "expectancy_frac": 0.003056,
+    "expectancy_usd": 0.92,
     "seed_usd": 300,
     "deduped": 0,
     "dedupe": "scrubbed-rows",
@@ -28,20 +28,20 @@
     "fee_usd": 39.66,
     "sell_fee_usd": 19.25,
     "fee_frac": 0.1322,
-    "n": 162,
+    "n": 163,
     "seed_usd": 300,
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-21T16:14:32+00:00",
-    "kill_headroom_stored": 0.0637666667,
-    "kill_headroom_frac": 0.0637666667,
-    "kill_headroom_usd": 19.13,
+    "as_of": "2026-10-21T16:15:46+00:00",
+    "kill_headroom_stored": 0.0314333333,
+    "kill_headroom_frac": 0.0314333333,
+    "kill_headroom_usd": 9.43,
     "day_kill_pct": -0.1,
-    "day_kill_usd": -83.52,
+    "day_kill_usd": -77.28,
     "day_target_pct": 0.025,
-    "day_target_usd": 20.88,
-    "running_balance_usd": 835.18,
+    "day_target_usd": 19.32,
+    "running_balance_usd": 772.82,
     "note": "Day kill and day target are fractions of the live running balance, the same base as kill_remaining_usd. A stored absolute value above 1 is percent points."
   },
   "oos": {
@@ -94,7 +94,7 @@
     "artifacts_table": "signal_artifacts",
     "outcomes_table": "signal_trade_outcomes",
     "artifact_count": 1396,
-    "outcome_count": 68,
+    "outcome_count": 69,
     "last_generated_at": "2026-10-21T15:40:10+00:00",
     "note": "Counts only. The artifact payload stays in the warehouse."
   }

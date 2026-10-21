@@ -1944,6 +1944,18 @@
     "fee_frac_of_book": 0.0021
   },
   {
+    "sleeve": "crypto",
+    "timestamp_et": "2026-10-21T16:05:19.489651+00:00",
+    "ticker": "W",
+    "side": "sell",
+    "notional_frac_of_book": 0.206,
+    "pnl_frac_of_book": 0.009654,
+    "why": "crypto-fast-mover-watch 12:05pm ET: W bid 0.01558091 cleared cost+5% take 0.01557546; sold 35% at market per profit-take rule",
+    "running_pnl_frac": 0.259745,
+    "running_balance_frac": 1.259745,
+    "fee_frac_of_book": 0.0
+  },
+  {
     "sleeve": "equities",
     "timestamp_et": "2026-09-25T19:37:00+00:00",
     "ticker": "QCOM",
