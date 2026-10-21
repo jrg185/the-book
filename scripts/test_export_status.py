@@ -291,6 +291,53 @@ class ScorecardTests(unittest.TestCase):
                 refreshed["kill_remaining_usd"],
             )
 
+    def test_seed_fraction_headroom_is_not_scaled_by_balance(self):
+        """Published headroom dollars follow kill_remaining_usd.
+
+        The book is twice the crypto seed from config, and the open loss is
+        half the published day-kill budget. Both come from config and the
+        published rail.
+        """
+        seed = export_kpi._crypto_seed()
+        rails = export_kpi.live_rails()
+        rail = export_kpi.as_fraction(rails["dayKillFrac"])
+        target = export_kpi.as_fraction(rails["dayTargetFrac"])
+        balance = export_kpi.js_round_cents(seed + seed)
+        self.assertTrue(export_kpi.usd_differ(balance, seed))
+        budget = abs(rail) * balance
+        open_pnl = export_kpi.js_round_cents(-budget / 2)
+        book = {
+            "running_balance_usd": balance,
+            "day_pnl_usd": 0,
+            "unrealized_pnl_usd": open_pnl,
+        }
+        dollars, frac = export_kpi.shared_headroom(book)
+        self.assertIsNotNone(dollars)
+        self.assertNotEqual(dollars, 0)
+        self.assertTrue(export_kpi.usd_equal(dollars, export_kpi._cents(frac)))
+        summary = [
+            {
+                "sleeve": "crypto",
+                "as_of": "2026-01-01T00:00:00Z",
+                "day_kill_pct": rail,
+                "day_target_pct": target,
+                "kill_headroom_frac": frac,
+            }
+        ]
+        block = export_kpi.shared_kill_block(summary, book)
+        naive = export_kpi.kill_block(summary, balance)
+        self.assertEqual(block["kill_headroom_usd"], dollars)
+        self.assertEqual(block["kill_headroom_frac"], export_kpi.as_fraction(frac))
+        self.assertTrue(export_kpi.usd_equal(block["day_kill_usd"], export_kpi.rail_usd(rail, balance)))
+        self.assertTrue(export_kpi.usd_equal(block["day_target_usd"], export_kpi.rail_usd(target, balance)))
+        self.assertTrue(export_kpi.usd_differ(block["kill_headroom_usd"], naive["kill_headroom_usd"]))
+        self.assertTrue(
+            export_kpi.usd_differ(
+                block["kill_headroom_usd"],
+                export_kpi.rail_usd(block["kill_headroom_frac"], balance),
+            )
+        )
+
     def test_committed_crypto_scorecard_matches_exported_json(self):
         root = Path(__file__).resolve().parents[1]
         summary = json.loads((root / "data" / "kpi_summary.json").read_text(encoding="utf-8"))
@@ -310,6 +357,9 @@ class ScorecardTests(unittest.TestCase):
             running_balance=balance,
             signal=signal,
         )
+        # Summary kill_headroom_frac is headroom dollars over the crypto seed.
+        # The export stores kill_remaining_usd from the committed book.
+        built["kill"] = export_kpi.shared_kill_block(summary, live)
         committed = json.loads((root / "data" / "model_scorecard.json").read_text(encoding="utf-8"))
         self.assertEqual(committed, built)
         self.assertTrue(signal.get("backend"))
@@ -386,10 +436,21 @@ class ScorecardTests(unittest.TestCase):
         self.assertEqual(built["kill"]["kill_headroom_stored"], crypto["kill_headroom_frac"])
         self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(crypto["kill_headroom_frac"]))
         self.assertEqual(built["kill"]["kill_headroom_usd"], committed["kill"]["kill_headroom_usd"])
-        self.assertEqual(
-            built["kill"]["kill_headroom_usd"],
-            export_kpi.rail_usd(built["kill"]["kill_headroom_frac"], balance),
+        headroom = export_kpi.kill_remaining_usd(
+            live.get("running_balance_usd"),
+            live.get("day_pnl_usd"),
+            live.get("unrealized_pnl_usd"),
         )
+        seeded = export_kpi.kill_headroom_frac_of_seed(headroom)
+        self.assertEqual(built["kill"]["kill_headroom_usd"], headroom)
+        self.assertEqual(built["kill"]["kill_headroom_frac"], export_kpi.as_fraction(seeded))
+        self.assertEqual(crypto["kill_headroom_frac"], seeded)
+        self.assertTrue(export_kpi.usd_equal(built["kill"]["kill_headroom_usd"], export_kpi._cents(seeded)))
+        # With headroom off zero and a book other than the seed, fraction
+        # times the running balance is a different rail from the published dollar.
+        balance_scaled = export_kpi.rail_usd(built["kill"]["kill_headroom_frac"], balance)
+        if headroom not in (None, 0) and not export_kpi.usd_equal(balance, export_kpi._crypto_seed()):
+            self.assertTrue(export_kpi.usd_differ(built["kill"]["kill_headroom_usd"], balance_scaled))
         self.assertEqual(built["kill"]["day_kill_pct"], crypto["day_kill_pct"])
         self.assertEqual(built["kill"]["day_target_pct"], crypto["day_target_pct"])
         self.assertEqual(built["kill"]["day_kill_usd"], export_kpi.rail_usd(crypto["day_kill_pct"], balance))

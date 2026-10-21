@@ -1985,6 +1985,11 @@ def kill_block(summary, running_balance=None) -> dict:
     That balance is the same base ``kill_remaining_usd`` uses. The sleeve seed
     in config/book_seeds.json is the tape divisor and is not this rail.
     A missing balance leaves the dollar fields empty. It does not invent a book.
+
+    The published scorecard does not keep this headroom dollar. After the
+    summary fraction is rewritten as headroom dollars over the crypto seed,
+    ``shared_kill_block`` stores ``kill_remaining_usd`` instead. Scaling that
+    seed fraction by the running balance is a different number.
     """
     rows = summary if isinstance(summary, list) else []
     crypto = next((row for row in rows if isinstance(row, dict) and _sleeve_name(row) == "crypto"), None)
@@ -3371,6 +3376,43 @@ def apply_published_book(book: dict, cash: dict | None) -> dict:
     return out
 
 
+def shared_headroom(book) -> tuple[float | None, float | None]:
+    """Headroom dollars and that figure divided by the crypto seed.
+
+    Dollars are ``kill_remaining_usd`` on the book's running balance, day
+    P&L, and open P&L. The fraction is those dollars over the crypto seed
+    from config/book_seeds.json. It is not a fraction of the running balance.
+    A missing balance returns ``(None, None)`` and does not invent a book.
+    """
+    if not isinstance(book, dict):
+        return None, None
+    balance = _finite_number(book.get("running_balance_usd"))
+    if balance is None:
+        return None, None
+    day = _finite_number(book.get("day_pnl_usd"))
+    open_pnl = _finite_number(book.get("unrealized_pnl_usd"))
+    dollars = kill_remaining_usd(balance, day, open_pnl)
+    return dollars, kill_headroom_frac_of_seed(dollars)
+
+
+def shared_kill_block(summary, book) -> dict:
+    """Scorecard kill block ``stamp_shared_kill`` writes.
+
+    Day kill and day target are fractions of ``running_balance_usd``.
+    Headroom dollars are ``shared_headroom``, not the summary fraction
+    times that balance. The summary fraction has to already be the seed
+    fraction, so the block's fraction fields match the summary. The balance
+    is the field on the book. Recomputing it from holdings can land on the
+    other side of a cent.
+    """
+    balance = _finite_number(book.get("running_balance_usd")) if isinstance(book, dict) else None
+    block = kill_block(summary, balance)
+    dollars, _frac = shared_headroom(book)
+    if dollars is not None:
+        block["kill_headroom_usd"] = dollars
+    return block
+
+
 def stamp_shared_kill(target: Path, book: dict) -> None:
     """Write the live book's kill headroom onto the summary and the scorecard.
 
@@ -3387,11 +3429,7 @@ def stamp_shared_kill(target: Path, book: dict) -> None:
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     if not isinstance(summary, list):
         return
-    balance = _finite_number(book.get("running_balance_usd"))
-    day = _finite_number(book.get("day_pnl_usd"))
-    open_pnl = _finite_number(book.get("unrealized_pnl_usd"))
-    dollars = None if balance is None else kill_remaining_usd(balance, day, open_pnl)
-    frac = kill_headroom_frac_of_seed(dollars)
+    _, frac = shared_headroom(book)
     if frac is not None:
         changed = False
         for row in summary:
@@ -3406,14 +3444,7 @@ def stamp_shared_kill(target: Path, book: dict) -> None:
     card = json.loads(card_path.read_text(encoding="utf-8"))
     if not isinstance(card, dict):
         return
-    # The balance just written on live_book. Recomputing from holdings can
-    # land on the other side of a cent from that field.
-    block = kill_block(summary, balance)
-    # Headroom dollars are the shared helper, not the fraction times the
-    # running balance. The summary stores those dollars divided by the crypto
-    # seed, and day kill stays a fraction of the live balance.
-    if dollars is not None:
-        block["kill_headroom_usd"] = dollars
+    block = shared_kill_block(summary, book)
     if card.get("kill") != block:
         card["kill"] = block
         write_json(card_path, card)
