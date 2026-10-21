@@ -33,15 +33,15 @@
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-21T22:20:22+00:00",
-    "kill_headroom_stored": 0.3597666667,
-    "kill_headroom_frac": 0.3597666667,
-    "kill_headroom_usd": 107.93,
+    "as_of": "2026-10-21T23:08:31+00:00",
+    "kill_headroom_stored": 0.3423666667,
+    "kill_headroom_frac": 0.3423666667,
+    "kill_headroom_usd": 102.71,
     "day_kill_pct": -0.1,
-    "day_kill_usd": -77.2,
+    "day_kill_usd": -76.68,
     "day_target_pct": 0.025,
-    "day_target_usd": 19.3,
-    "running_balance_usd": 772.03,
+    "day_target_usd": 19.17,
+    "running_balance_usd": 766.81,
     "note": "Day kill and day target are fractions of the live running balance, the same base as kill_remaining_usd. A stored absolute value above 1 is percent points."
   },
   "oos": {
@@ -93,9 +93,9 @@
     "status": "known",
     "artifacts_table": "signal_artifacts",
     "outcomes_table": "signal_trade_outcomes",
-    "artifact_count": 1420,
+    "artifact_count": 1424,
     "outcome_count": 70,
-    "last_generated_at": "2026-10-21T21:41:39+00:00",
+    "last_generated_at": "2026-10-21T22:33:06+00:00",
     "note": "Counts only. The artifact payload stays in the warehouse."
   }
 }
