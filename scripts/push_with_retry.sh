@@ -71,6 +71,9 @@ rebase_onto_remote() {
 
 push_retry_self_test() {
   local script caller bare work subject stamp now got delta today remote_readme
+  # The book-sync caller upserts fills before it pushes. This sandbox has no
+  # Robinhood keys, so the self-test supplies a sync that succeeds.
+  export BOOK_SYNC_FILL_CMD=true
   script=$(readlink -f "$0")
   caller=$(dirname "$script")/book_sync_push.sh
   # Not local: the EXIT trap runs after this function's locals are gone.

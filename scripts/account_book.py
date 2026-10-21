@@ -409,6 +409,61 @@ def _cash_from_stamp(stamp: dict) -> tuple[dict | None, str | None] | None:
     return cash, source
 
 
+def _write_marks_payload(payload: dict) -> Path:
+    path = marks_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def save_account_residual(residual) -> Path:
+    """Record the account unexplained residual beside the cash stamp."""
+    payload = _load_marks_file() or {}
+    amount = _dec(residual)
+    if amount is None:
+        payload.pop("account_residual_usd", None)
+    else:
+        payload["account_residual_usd"] = format(amount, "f")
+    return _write_marks_payload(payload)
+
+
+def load_account_residual():
+    """Residual from a fresh marks stamp. None when this run did not record one."""
+    payload = _read_marks_payload()
+    if not isinstance(payload, dict) or "account_residual_usd" not in payload:
+        return None
+    return _dec(payload.get("account_residual_usd"))
+
+
+def save_shared_positions(rows: list | None) -> Path:
+    """Record the RH holdings quantities that belonged to this cash read."""
+    payload = _load_marks_file() or {}
+    if rows is None:
+        payload.pop("rh_positions", None)
+    else:
+        payload["rh_positions"] = rows
+    return _write_marks_payload(payload)
+
+
+def load_shared_positions() -> list | None:
+    """RH open quantities from a fresh marks stamp. None when they were not recorded."""
+    payload = _read_marks_payload()
+    if not isinstance(payload, dict) or "rh_positions" not in payload:
+        return None
+    rows = payload.get("rh_positions")
+    if not isinstance(rows, list):
+        return None
+    return rows
+
+
+def residual_over_tolerance(residual, path: Path | None = None) -> bool:
+    """True when |residual| is over the configured tolerance. A missing residual is not over."""
+    amount = _dec(residual)
+    if amount is None:
+        return False
+    return abs(amount) > residual_tolerance(path)
+
+
 def load_shared_cash() -> tuple[dict | None, str | None] | None:
     """Cash refresh wrote, when the marks file is fresh for this run.
 

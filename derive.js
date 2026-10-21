@@ -146,22 +146,25 @@ export function railUsd(balance, frac) {
   return fraction < 0 ? -magnitude : magnitude;
 }
 
-// Headroom inside the day-kill rail. dayKillFrac is the signed published
-// fraction (LIVE_RAILS when the caller omits it). The budget is that
-// fraction's magnitude times the running balance. A negative day P&L spends
-// the budget. Open losses spend it too: negative unrealized counts, and a
-// positive open mark does not add headroom or offset a loss. A positive day
-// does not add headroom and does not offset open losses. The result is never
-// below zero. Export writes the same dollars from the same published fraction.
-// There is no second copy of the fraction here.
-export function killRemainingUsd(runningBalance, dayPnl, dayKillFrac = LIVE_RAILS.dayKillFrac, openPnl = null) {
+// Headroom of the marked book above the session-open kill line.
+// dayKillFrac is the signed published fraction (LIVE_RAILS when the caller
+// omits it). The line is the session open times one minus that fraction's
+// magnitude. A book above the open has more room. Lifetime open P&L is
+// already inside the marked book and is not subtracted again. A missing
+// session open does not fall back to a seed. Export writes the same dollars.
+export function killRemainingUsd(runningBalance, dayOpen, dayKillFrac = LIVE_RAILS.dayKillFrac) {
   const balance = num(runningBalance);
+  const opened = num(dayOpen);
   const frac = num(dayKillFrac);
-  if (balance == null || frac == null) return null;
-  const day = num(dayPnl);
-  const open = num(openPnl);
-  const spent = (day == null ? 0 : Math.min(day, 0)) + (open == null ? 0 : Math.min(open, 0));
-  return Math.max(0, roundCents(Math.abs(frac) * balance + spent));
+  if (balance == null || opened == null || frac == null) return null;
+  return Math.max(0, roundCents(balance - opened + Math.abs(frac) * opened));
+}
+
+export function killLineUsd(dayOpen, dayKillFrac = LIVE_RAILS.dayKillFrac) {
+  const opened = num(dayOpen);
+  const frac = num(dayKillFrac);
+  if (opened == null || frac == null) return null;
+  return roundCents(opened * (1 - Math.abs(frac)));
 }
 
 // Keep the committed account holdings, including each value and cost basis.
@@ -244,10 +247,9 @@ function accountUnrealizedUsd(book) {
 // position list still shows the stored running_balance_usd.
 // Day P&L is the dollar on the file. Export fills it from the cash drop
 // when that drop has day_realized_usd. The day kill and the day target are
-// fractions of the same total as RUNNING BALANCE. Kill headroom is
-// max(0, |dayKillFrac| × that total + min(day P&L, 0) + min(open P&L, 0)),
-// using the published crypto rail (the summary row when it has one,
-// otherwise LIVE_RAILS). Open P&L is the book's unrealized dollars.
+// fractions of the same total as RUNNING BALANCE. Kill headroom is the
+// marked book above the session-open kill line, using the published crypto
+// rail (the summary row when it has one, otherwise LIVE_RAILS).
 // When the RH total is known, running P&L is that total minus the combined
 // seed. Unrealized is the open lots' mark versus cost. Realized is running
 // minus unrealized, so the three match the cash-and-lots book.
@@ -356,14 +358,18 @@ export function cryptoBookView(book, summary) {
           ? published
           : null;
   if (bookUsd == null && rail == null) return null;
-  // Same headroom export writes on kill_remaining_usd: the day-kill budget
-  // on the running balance, reduced by a negative day and by open losses,
-  // floored at zero.
+  // Same headroom export writes on kill_remaining_usd: the marked book
+  // above the session-open kill line. A missing open keeps the stored dollar
+  // and does not subtract lifetime unrealized.
   const rails = railsFor(summary);
-  const publishedOpen = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
-  const openForKill = publishedOpen != null ? publishedOpen : openCryptoUnrealized(book);
+  const railBlocked =
+    String(book?.rail_status || "").toLowerCase() === "rail_unavailable" ||
+    String(book?.book_status || "").toLowerCase() === "rail_unavailable";
+  const dayOpen = railBlocked ? null : num(book?.day_open_usd);
   const killHeadroom =
-    runningBalance != null ? killRemainingUsd(runningBalance, dayPnl, rails.dayKillFrac, openForKill) : killStored;
+    !railBlocked && runningBalance != null && dayOpen != null
+      ? killRemainingUsd(runningBalance, dayOpen, rails.dayKillFrac)
+      : killStored;
   const reconciled = reconciledPnl(book);
   let realizedPnl = num(pick(book, ["realized_pnl_usd", "realized_pnl"]));
   let unrealizedPnl = num(pick(book, ["unrealized_pnl_usd", "unrealized_pnl"]));
@@ -387,6 +393,9 @@ export function cryptoBookView(book, summary) {
     asOf: warehouseSleeveAsOf(book, summary),
     signalGeneratedAt: book?.generated_at || null,
     dayPnl,
+    dayOpen,
+    railUnavailable: railBlocked,
+    killLine: dayOpen == null ? null : killLineUsd(dayOpen, rails.dayKillFrac),
     dayKillFrac: rails.dayKillFrac,
     dayKill: railUsd(rail, rails.dayKillFrac),
     dayTargetFrac: rails.dayTargetFrac,

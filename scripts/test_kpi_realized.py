@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
+import subprocess
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -1114,13 +1116,15 @@ def test_missing_cash_refresh_still_exports(tmp_path, monkeypatch):
                 "positions": [
                     {"sleeve": "crypto", "ticker": "ZZ", "qty": "2", "value_usd": 80, "unrealized_pnl_usd": 3}
                 ],
+                "day_open_usd": 110,
+                "day_open_date": export_kpi.et_session_date(),
             }
         ),
         encoding="utf-8",
     )
     published = export_kpi.refresh_live_book(book_dir, fetch=False, cash=None)
     assert export_kpi.usd_equal(published["running_balance_usd"], 110)
-    assert export_kpi.usd_equal(published["kill_remaining_usd"], export_kpi.kill_remaining_usd(110, 0))
+    assert export_kpi.usd_equal(published["kill_remaining_usd"], export_kpi.kill_remaining_usd(110, published.get("day_open_usd")))
     assert export_kpi.usd_differ(published["kill_remaining_usd"], 1)
     assert export_kpi.usd_equal(published["realized_pnl_usd"], 2)
     assert export_kpi.usd_equal(published["unrealized_pnl_usd"], 3)
@@ -1377,38 +1381,405 @@ def _publish_kill_case(tmp_path: Path, book: dict, frac: float) -> dict:
 
 
 def test_kill_headroom_files_share_one_computation(tmp_path):
-    """Open losses spend the live-book rail, and the three published files match.
+    """Headroom is the marked book above the session-open kill line.
 
-    The rail is the published crypto fraction, not a literal. A flat realized
-    day with an open loss inside the budget must not publish the full budget.
-    An open loss past the budget must publish zero. Ignoring open losses, or
-    letting the summary, the scorecard, and the live book each keep their own
-    figure, fails this test.
+    The rail is the published crypto fraction, not a literal. A book below
+    its open publishes less than the full budget. A book on the kill line
+    publishes zero. The summary, the scorecard, and the live book share
+    that dollar.
     """
     rail = export_kpi.live_rails()["dayKillFrac"]
-    balance = Decimal("400")
+    day_open = Decimal("400")
+    balance = Decimal("380")
     cash = Decimal("20")
-    budget = abs(rail) * balance
-    open_loss = -(budget / Decimal("2"))
-    expected = export_kpi.kill_remaining_usd(balance, 0, open_loss)
-    day_only = export_kpi.kill_remaining_usd(balance, 0, None)
-    assert export_kpi.usd_differ(expected, day_only)
-    assert export_kpi.usd_equal(expected, export_kpi.js_round_cents(budget + open_loss))
+    expected = export_kpi.kill_remaining_usd(balance, day_open)
+    full = export_kpi.kill_remaining_usd(day_open, day_open)
+    assert export_kpi.usd_differ(expected, full)
+    assert export_kpi.usd_equal(
+        expected, export_kpi.js_round_cents(abs(rail) * day_open + (balance - day_open))
+    )
 
-    partial = _publish_kill_case(tmp_path / "partial", _kill_book(balance, cash, open_loss, Decimal("0")), 0.5)
+    partial_book = _kill_book(balance, cash, Decimal("0"), Decimal("0"))
+    partial_book["day_open_usd"] = float(day_open)
+    partial_book["day_open_date"] = export_kpi.et_session_date()
+    partial = _publish_kill_case(tmp_path / "partial", partial_book, 0.5)
     assert export_kpi.usd_equal(partial["book"]["kill_remaining_usd"], expected)
     assert export_kpi.usd_equal(partial["scorecard"], expected)
     assert export_kpi.usd_equal(export_kpi._cents(partial["summary_frac"]), expected)
     assert export_kpi.usd_equal(export_kpi._cents(partial["scorecard_frac"]), expected)
-    assert export_kpi.usd_differ(partial["book"]["kill_remaining_usd"], day_only)
+    assert export_kpi.usd_differ(partial["book"]["kill_remaining_usd"], full)
 
-    breach = -(budget + Decimal("1"))
-    stopped = export_kpi.kill_remaining_usd(balance, 0, breach)
-    assert export_kpi.usd_equal(stopped, 0)
-    assert export_kpi.usd_differ(stopped, export_kpi.kill_remaining_usd(balance, 0, None))
-    flat = _publish_kill_case(tmp_path / "breach", _kill_book(balance, cash, breach, Decimal("0")), 0.5)
+    line = Decimal(str(export_kpi.kill_line_usd(day_open)))
+    assert export_kpi.usd_equal(export_kpi.kill_remaining_usd(line, day_open), 0)
+    stopped_book = _kill_book(line, cash, Decimal("0"), Decimal("0"))
+    stopped_book["day_open_usd"] = float(day_open)
+    stopped_book["day_open_date"] = export_kpi.et_session_date()
+    flat = _publish_kill_case(tmp_path / "breach", stopped_book, 0.5)
     assert export_kpi.usd_equal(flat["book"]["kill_remaining_usd"], 0)
     assert export_kpi.usd_equal(flat["scorecard"], 0)
     assert export_kpi.usd_equal(export_kpi._cents(flat["summary_frac"]), 0)
     assert export_kpi.usd_equal(export_kpi._cents(flat["scorecard_frac"]), 0)
     assert flat["book"]["kill_remaining_usd"] == flat["scorecard"]
+
+
+def _publish_case(tmp_path: Path, book: dict, **kwargs) -> dict:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "live_book.json").write_text(json.dumps(book), encoding="utf-8")
+    return export_kpi.refresh_live_book(tmp_path, fetch=False, **kwargs)
+
+
+def test_rh_qty_drops_a_fill_missing_from_kpi_trades(tmp_path):
+    """12:22 W sell was in rh_cash and missing from kpi_trades past the cursor.
+
+    Replaying the trade list keeps W open on top of the sale cash. The RH
+    holdings read is the open set, so the published balance drops W. The
+    replay path still double-counts; removing the overlay fails this test.
+    """
+    w_qty = Decimal("7352")
+    w_mark = Decimal("0.015334")
+    w_avg = Decimal("0.014805489713")
+    w_value = Decimal(str(export_kpi.js_round_cents(w_qty * w_mark)))
+    ray_qty = Decimal("10")
+    ray_mark = Decimal("2")
+    ray_avg = Decimal("1.5")
+    ray_value = Decimal(str(export_kpi.js_round_cents(ray_qty * ray_mark)))
+    cash = Decimal("200")
+    replay = [
+        {
+            "sleeve": "crypto",
+            "ticker": "W",
+            "qty": format(w_qty, "f"),
+            "avg_cost": format(w_avg, "f"),
+            "mark": format(w_mark, "f"),
+            "value_usd": float(w_value),
+        },
+        {
+            "sleeve": "crypto",
+            "ticker": "RAY",
+            "qty": format(ray_qty, "f"),
+            "avg_cost": format(ray_avg, "f"),
+            "mark": format(ray_mark, "f"),
+            "value_usd": float(ray_value),
+        },
+    ]
+    live = [{"ticker": "RAY", "sleeve": "crypto", "qty": format(ray_qty, "f")}]
+    book = {
+        "day_open_usd": float(cash + ray_value),
+        "day_open_date": export_kpi.et_session_date(),
+        "holdings": [
+            {"ticker": "USD", "sleeve": "crypto", "value_usd": float(cash)},
+            {"ticker": "USDC", "sleeve": "crypto", "value_usd": 0},
+        ],
+        "positions": [],
+    }
+    replayed = _publish_case(tmp_path / "replay", book, positions=replay, cash={"USD": float(cash), "USDC": 0})
+    published = _publish_case(
+        tmp_path / "live",
+        book,
+        positions=replay,
+        cash={"USD": float(cash), "USDC": 0},
+        live_positions=live,
+    )
+    assert any(row["ticker"] == "W" for row in replayed["positions"])
+    assert all(row["ticker"] != "W" for row in published["positions"])
+    ray = next(row for row in published["positions"] if row["ticker"] == "RAY")
+    assert Decimal(ray["avg_cost"]) == ray_avg
+    assert Decimal(ray["qty"]) == ray_qty
+    assert export_kpi.usd_equal(replayed["running_balance_usd"], cash + ray_value + w_value)
+    assert export_kpi.usd_equal(published["running_balance_usd"], cash + ray_value)
+    assert export_kpi.usd_equal(
+        Decimal(str(replayed["running_balance_usd"])) - Decimal(str(published["running_balance_usd"])),
+        w_value,
+    )
+
+
+def test_unmarked_live_lot_does_not_blank_the_book(tmp_path, capsys):
+    """A Robinhood name missing from kpi_trades has no mark.
+
+    Publishing that row without value_usd makes the agentic total unknown.
+    The lot stays off the open set. Marked names still publish the balance
+    and the session kill.
+    """
+    cash = Decimal("50")
+    ray_qty = Decimal("4")
+    ray_mark = Decimal("10")
+    ray_avg = Decimal("8")
+    ray_value = Decimal(str(export_kpi.js_round_cents(ray_qty * ray_mark)))
+    stale = Decimal("999")
+    day_open = Decimal("80")
+    replay = [
+        {
+            "sleeve": "crypto",
+            "ticker": "RAY",
+            "qty": format(ray_qty, "f"),
+            "avg_cost": format(ray_avg, "f"),
+            "mark": format(ray_mark, "f"),
+            "value_usd": float(ray_value),
+        }
+    ]
+    live = [
+        {"ticker": "RAY", "sleeve": "crypto", "qty": format(ray_qty, "f")},
+        {"ticker": "NEW", "sleeve": "crypto", "qty": "3", "avg_cost": "5"},
+    ]
+    book = {
+        "running_balance_usd": float(stale),
+        "running_pnl_usd": 1,
+        "realized_pnl_usd": 0,
+        "unrealized_pnl_usd": 1,
+        "day_open_usd": float(day_open),
+        "day_open_date": export_kpi.et_session_date(),
+        "kill_remaining_usd": 1,
+        "kill_line_usd": 1,
+        "holdings": [
+            {"ticker": "USD", "sleeve": "crypto", "value_usd": 1},
+            {"ticker": "USDC", "sleeve": "crypto", "value_usd": 1},
+        ],
+        "positions": [],
+    }
+    published = _publish_case(
+        tmp_path / "held",
+        book,
+        positions=replay,
+        cash={"USD": float(cash), "USDC": 0},
+        live_positions=live,
+    )
+    err = capsys.readouterr().err
+    assert "NEW" in err and "no mark" in err
+    assert [row["ticker"] for row in published["positions"]] == ["RAY"]
+    expected = cash + ray_value
+    assert export_kpi.usd_equal(published["running_balance_usd"], expected)
+    assert export_kpi.usd_differ(published["running_balance_usd"], stale)
+    assert export_kpi.usd_equal(published["kill_line_usd"], export_kpi.kill_line_usd(day_open))
+    assert export_kpi.usd_equal(
+        published["kill_remaining_usd"],
+        export_kpi.kill_remaining_usd(expected, day_open),
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], day_open)
+
+
+def test_residual_over_tolerance_flags_publish_and_fails_the_check(tmp_path):
+    """An account residual over the configured tolerance is not a clean book."""
+    tolerance = account_book.residual_tolerance()
+    book = {
+        "day_open_usd": 30,
+        "day_open_date": export_kpi.et_session_date(),
+        "holdings": [
+            {"ticker": "USD", "sleeve": "crypto", "value_usd": 20},
+            {"ticker": "USDC", "sleeve": "crypto", "value_usd": 10},
+        ],
+        "positions": [],
+    }
+    flagged = _publish_case(
+        tmp_path / "over",
+        book,
+        cash={"USD": 20, "USDC": 10},
+        residual=tolerance + Decimal("1"),
+    )
+    assert flagged["book_status"] == "out_of_balance"
+    assert flagged["balance_ok"] is False
+    assert export_kpi.export_check_code(flagged) == 1
+    assert Decimal(str(flagged["residual_tolerance_usd"])) == tolerance
+    assert "out_of_balance" in (ROOT / "app.js").read_text(encoding="utf-8")
+    clean = _publish_case(
+        tmp_path / "clean",
+        book,
+        cash={"USD": 20, "USDC": 10},
+        residual=tolerance,
+    )
+    assert clean["book_status"] == "ok"
+    assert clean["balance_ok"] is True
+    assert export_kpi.export_check_code(clean) == 0
+
+
+def test_fills_newer_than_the_cursor_are_selected_before_the_cash_push():
+    """The 12:22 fill is after a cursor stuck at 12:05. The cash push upserts it first."""
+    cursor = "2026-10-21T16:05:20Z"
+    newer = {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "currency_code": "W",
+        "side": "sell",
+        "state": "filled",
+        "cumulative_quantity": "7352",
+        "average_price": "0.0155277",
+        "updated_at": "2026-10-21T16:22:32Z",
+        "created_at": "2026-10-21T16:22:32Z",
+    }
+    stuck = {
+        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "currency_code": "W",
+        "side": "buy",
+        "state": "filled",
+        "cumulative_quantity": "1",
+        "average_price": "1",
+        "updated_at": cursor,
+        "created_at": cursor,
+    }
+    selected = sync.fills_after_cursor([newer, stuck], cursor)
+    assert [row["id"] for row in selected] == [newer["id"]]
+    fresh, _notes, _fees = sync.plan_sync(selected, [])
+    assert any(row["ticker"] == "W" and row["side"] == "sell" for row in fresh)
+    script = (ROOT / "scripts" / "book_sync_push.sh").read_text(encoding="utf-8")
+    assert script.find("sync_rh_kpi_trades.py") < script.find('exec "$here/push_with_retry.sh"')
+    assert "fills newer than the sync cursor were not upserted" in script
+
+
+# 18:00 UTC on 2026-10-21 is 14:00 ET. Midnight ET that session is 04:00 UTC.
+_SESSION_NOW = dt.datetime(2026, 10, 21, 18, tzinfo=dt.timezone.utc)
+_BEFORE_ROLL = "2026-10-21T03:30:00Z"
+_AFTER_ROLL = "2026-10-21T05:00:00Z"
+
+
+def _git(repo: Path, *args: str, when: str | None = None) -> str:
+    env = os.environ.copy()
+    env["GIT_AUTHOR_NAME"] = "book-test"
+    env["GIT_AUTHOR_EMAIL"] = "book-test@example.com"
+    env["GIT_COMMITTER_NAME"] = "book-test"
+    env["GIT_COMMITTER_EMAIL"] = "book-test@example.com"
+    if when:
+        env["GIT_AUTHOR_DATE"] = when
+        env["GIT_COMMITTER_DATE"] = when
+    done = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=book-test",
+            "-c",
+            "user.email=book-test@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            *args,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return done.stdout
+
+
+def _init_book_repo(repo: Path) -> None:
+    repo.mkdir(parents=True, exist_ok=True)
+    _git(repo, "init", "-b", "main")
+
+
+def _commit_published_balance(repo: Path, balance: float, when: str) -> str:
+    data = repo / "data"
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "live_book.json").write_text(
+        json.dumps({"running_balance_usd": balance}),
+        encoding="utf-8",
+    )
+    _git(repo, "add", "data/live_book.json")
+    _git(repo, "commit", "-m", "publish book", when=when)
+    return _git(repo, "rev-parse", "HEAD").strip()
+
+
+def _undated_book(balance: float) -> dict:
+    return {
+        "running_balance_usd": balance,
+        "kill_remaining_usd": 4,
+        "kill_line_usd": 3,
+        "holdings": [{"ticker": "USD", "sleeve": "crypto", "value_usd": balance}],
+        "positions": [],
+    }
+
+
+def _history_with_decoy(repo: Path) -> str:
+    """Last book before midnight ET, plus a later publish that must not win."""
+    _init_book_repo(repo)
+    early = _commit_published_balance(repo, 50, _BEFORE_ROLL)
+    _commit_published_balance(repo, 99, _AFTER_ROLL)
+    return early
+
+
+def test_missing_day_open_date_bootstraps_from_history(tmp_path):
+    """A book with no dated open takes the last balance published before midnight ET."""
+    start = export_kpi.et_session_start(_SESSION_NOW).astimezone(dt.timezone.utc)
+    assert start == dt.datetime(2026, 10, 21, 4, tzinfo=dt.timezone.utc)
+    assert export_kpi.et_session_date(_SESSION_NOW) == "2026-10-21"
+    source = Path(export_kpi.__file__).read_text(encoding="utf-8")
+    carry_src = source.split("def carry_day_open", 1)[1].split("\ndef ", 1)[0]
+    hist_src = source.split("def published_balance_before", 1)[1].split("\ndef ", 1)[0]
+    assert "737" not in carry_src
+    assert "737" not in hist_src
+    repo = tmp_path / "history"
+    early = _history_with_decoy(repo)
+    current = _undated_book(80)
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], 50)
+    assert published["day_open_date"] == "2026-10-21"
+    assert not export_kpi.usd_equal(published["day_open_usd"], 80)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 99)
+    assert early in published["day_open_source"]
+    assert published.get("rail_status") != "rail_unavailable"
+    assert export_kpi.usd_equal(
+        published["kill_remaining_usd"],
+        export_kpi.kill_remaining_usd(80, published["day_open_usd"]),
+    )
+    assert export_kpi.usd_differ(published["kill_remaining_usd"], 4)
+    assert export_kpi.export_check_code(published) == 0
+
+
+def test_stale_day_open_date_rolls_to_the_published_balance(tmp_path):
+    """A previous session's open is replaced by the last book committed before this ET date."""
+    repo = tmp_path / "stale"
+    _history_with_decoy(repo)
+    current = _undated_book(80)
+    current["day_open_usd"] = 12
+    current["day_open_date"] = "2026-10-20"
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], 50)
+    assert published["day_open_date"] == "2026-10-21"
+    assert not export_kpi.usd_equal(published["day_open_usd"], 12)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 80)
+    assert not export_kpi.usd_equal(published["day_open_usd"], 99)
+    assert published.get("rail_status") != "rail_unavailable"
+    assert export_kpi.usd_equal(
+        published["kill_line_usd"],
+        export_kpi.kill_line_usd(published["day_open_usd"]),
+    )
+
+
+def test_no_history_flags_the_rail_and_fails_the_check(tmp_path):
+    """No book before the ET roll keeps the stored kill dollar and fails the check."""
+    repo = tmp_path / "late-only"
+    _init_book_repo(repo)
+    _commit_published_balance(repo, 99, _AFTER_ROLL)
+    current = _undated_book(80)
+    (repo / "data" / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    published = export_kpi.refresh_live_book(
+        repo / "data", fetch=False, cash=None, now=_SESSION_NOW
+    )
+    assert published["book_status"] == "rail_unavailable"
+    assert published["rail_status"] == "rail_unavailable"
+    assert published["kill_remaining_usd"] == 4
+    assert published["kill_line_usd"] == 3
+    assert published.get("day_open_date") != "2026-10-21"
+    assert not export_kpi.usd_equal(published.get("day_open_usd"), 99)
+    assert export_kpi.export_check_code(published) == 1
+
+    bare = tmp_path / "no-git"
+    bare.mkdir()
+    (bare / "live_book.json").write_text(json.dumps(current), encoding="utf-8")
+    flagged = export_kpi.refresh_live_book(bare, fetch=False, cash=None, now=_SESSION_NOW)
+    assert flagged["rail_status"] == "rail_unavailable"
+    assert flagged["book_status"] == "rail_unavailable"
+    assert flagged["kill_remaining_usd"] == 4
+    assert "day_open_usd" not in flagged
+    assert export_kpi.export_check_code(flagged) == 1
+
+    page = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "rail_unavailable" in page
+    assert "Rail unavailable" in page
+    main_src = Path(export_kpi.__file__).read_text(encoding="utf-8").split("\ndef main(argv", 1)[1]
+    assert 'status = "rail_unavailable"' in main_src
+    assert "stamp_export_failure(DATA, status, message)" in main_src
+    assert main_src.find('status = "rail_unavailable"') < main_src.rfind("return 1")

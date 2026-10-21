@@ -1134,6 +1134,23 @@ def poll_start(path: Path = CURSOR_PATH) -> str:
     return query_start(read_cursor(path) or BOOTSTRAP_CURSOR)
 
 
+def fills_after_cursor(orders: list[dict], cursor: str) -> list[dict]:
+    """Fills whose update is strictly after the sync cursor.
+
+    The cash push uses this set so a fill already in rh_cash cannot stay
+    missing from kpi_trades. The cursor stamp itself is not newer.
+    """
+    floor = parse_ts(cursor)
+    chosen = []
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+        stamp = order_updated_at(order)
+        if stamp is not None and stamp > floor:
+            chosen.append(order)
+    return chosen
+
+
 def advance_cursor(previous: str, orders: list[dict]) -> str | None:
     moments = [stamp for order in orders if (stamp := order_updated_at(order))]
     if not moments:

@@ -1,7 +1,7 @@
 // Scoreboard helpers. No DOM, no network. Every number comes from data/*.json
 // or config/*.json. Rails, seeds, fees, and prices are never written here.
 
-import { killRemainingUsd, num, publishedRails, railUsd, SEEDS_USD, sleeveKey } from "./derive.js";
+import { killLineUsd, killRemainingUsd, num, publishedRails, railUsd, SEEDS_USD, sleeveKey } from "./derive.js";
 
 export const SITE_URL = "https://jrg185.github.io/the-book/";
 
@@ -38,9 +38,9 @@ export function liveRails(summary, scorecard) {
 }
 
 // Dollars for the rail bars. Both rails are fractions of the running balance
-// (RH cash plus open lots). Headroom uses the same formula export writes,
-// including open losses.
-export function railView(balance, dayPnl, rails, openPnl = null) {
+// (RH cash plus open lots). Headroom is the marked book above the session-open
+// kill line, the same figure export writes.
+export function railView(balance, dayPnl, rails, dayOpen = null) {
   const total = num(balance);
   const day = num(dayPnl);
   const killFrac = rails?.killFrac ?? null;
@@ -58,13 +58,18 @@ export function railView(balance, dayPnl, rails, openPnl = null) {
     targetProgress: null,
   };
   if (total == null || total === 0) return out;
+  const opened = num(dayOpen);
+  out.dayOpen = opened;
   if (killFrac != null) {
-    const budget = Math.abs(killFrac) * total;
+    const budget = opened == null ? null : Math.abs(killFrac) * opened;
     out.killUsd = railUsd(total, killFrac);
-    out.headroomUsd = killRemainingUsd(total, day, killFrac, openPnl);
-    out.headroomFrac = out.headroomUsd == null ? null : out.headroomUsd / total;
+    out.killLine = opened == null ? null : killLineUsd(opened, killFrac);
+    out.headroomUsd = opened == null ? null : killRemainingUsd(total, opened, killFrac);
+    out.headroomFrac = out.headroomUsd == null || total === 0 ? null : out.headroomUsd / total;
     out.killUsedFrac =
-      budget === 0 || out.headroomUsd == null ? null : clamp01((budget - out.headroomUsd) / budget);
+      budget == null || budget === 0 || out.headroomUsd == null
+        ? null
+        : clamp01((budget - out.headroomUsd) / budget);
   }
   if (targetFrac != null) {
     out.targetUsd = railUsd(total, targetFrac);
