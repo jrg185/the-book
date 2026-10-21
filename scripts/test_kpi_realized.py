@@ -1493,6 +1493,70 @@ def test_rh_qty_drops_a_fill_missing_from_kpi_trades(tmp_path):
     )
 
 
+def test_unmarked_live_lot_does_not_blank_the_book(tmp_path, capsys):
+    """A Robinhood name missing from kpi_trades has no mark.
+
+    Publishing that row without value_usd makes the agentic total unknown.
+    The lot stays off the open set. Marked names still publish the balance
+    and the session kill.
+    """
+    cash = Decimal("50")
+    ray_qty = Decimal("4")
+    ray_mark = Decimal("10")
+    ray_avg = Decimal("8")
+    ray_value = Decimal(str(export_kpi.js_round_cents(ray_qty * ray_mark)))
+    stale = Decimal("999")
+    day_open = Decimal("80")
+    replay = [
+        {
+            "sleeve": "crypto",
+            "ticker": "RAY",
+            "qty": format(ray_qty, "f"),
+            "avg_cost": format(ray_avg, "f"),
+            "mark": format(ray_mark, "f"),
+            "value_usd": float(ray_value),
+        }
+    ]
+    live = [
+        {"ticker": "RAY", "sleeve": "crypto", "qty": format(ray_qty, "f")},
+        {"ticker": "NEW", "sleeve": "crypto", "qty": "3", "avg_cost": "5"},
+    ]
+    book = {
+        "running_balance_usd": float(stale),
+        "running_pnl_usd": 1,
+        "realized_pnl_usd": 0,
+        "unrealized_pnl_usd": 1,
+        "day_open_usd": float(day_open),
+        "day_open_date": export_kpi.et_session_date(),
+        "kill_remaining_usd": 1,
+        "kill_line_usd": 1,
+        "holdings": [
+            {"ticker": "USD", "sleeve": "crypto", "value_usd": 1},
+            {"ticker": "USDC", "sleeve": "crypto", "value_usd": 1},
+        ],
+        "positions": [],
+    }
+    published = _publish_case(
+        tmp_path / "held",
+        book,
+        positions=replay,
+        cash={"USD": float(cash), "USDC": 0},
+        live_positions=live,
+    )
+    err = capsys.readouterr().err
+    assert "NEW" in err and "no mark" in err
+    assert [row["ticker"] for row in published["positions"]] == ["RAY"]
+    expected = cash + ray_value
+    assert export_kpi.usd_equal(published["running_balance_usd"], expected)
+    assert export_kpi.usd_differ(published["running_balance_usd"], stale)
+    assert export_kpi.usd_equal(published["kill_line_usd"], export_kpi.kill_line_usd(day_open))
+    assert export_kpi.usd_equal(
+        published["kill_remaining_usd"],
+        export_kpi.kill_remaining_usd(expected, day_open),
+    )
+    assert export_kpi.usd_equal(published["day_open_usd"], day_open)
+
+
 def test_residual_over_tolerance_flags_publish_and_fails_the_check(tmp_path):
     """An account residual over the configured tolerance is not a clean book."""
     tolerance = account_book.residual_tolerance()

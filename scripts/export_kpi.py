@@ -3352,7 +3352,9 @@ def overlay_rh_quantities(replay: list | None, live: list | None) -> list:
     A replay name absent from the live read is not still open. A live name
     absent from the replay keeps the RH quantity and the RH cost when the
     holdings row had one. Mark and value are recomputed from the replay mark
-    when that mark exists. A missing mark is not invented.
+    when that mark exists. A missing mark is not invented. A live name that
+    still has no value is omitted: one blank lot would make the agentic total
+    unknown and leave the previous balance beside the new row.
     """
     replay_by = {}
     for row in replay or []:
@@ -3395,6 +3397,12 @@ def overlay_rh_quantities(replay: list | None, live: list | None) -> list:
         elif "value_usd" in base and str(replay_by.get(("crypto", ticker), {}).get("qty") or "") != base["qty"]:
             base.pop("value_usd", None)
             base.pop("unrealized_pnl_usd", None)
+        if _decimal_or_none(base.get("value_usd")) is None:
+            print(
+                f"warning: {ticker} has no mark; omitted so one unpriced lot does not blank the book",
+                file=sys.stderr,
+            )
+            continue
         out.append(base)
     out.sort(key=lambda row: (str(row.get("sleeve") or ""), str(row.get("ticker") or "")))
     return out
