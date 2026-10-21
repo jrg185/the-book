@@ -197,4 +197,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- data/meta.json
+          # Export already wrote the flagged book and returned 1. Publish that
+          # file so Pages gets the Robinhood quantities and the chip. The job
+          # stays red. Any other failure leaves the previous book in place.
+          if python3 -c 'import json,sys; from pathlib import Path; p=Path("data/live_book.json"); b=json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}; s=str(b.get("book_status") or ""); r=str(b.get("rail_status") or ""); sys.exit(0 if b.get("balance_ok") is False or s in {"out_of_balance","rail_unavailable"} or r=="rail_unavailable" else 1)'; then
+            git add -- data/live_book.json
+          fi
           scripts/push_with_retry.sh "Mark KPI export stale"

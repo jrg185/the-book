@@ -1580,6 +1580,16 @@ def test_residual_over_tolerance_flags_publish_and_fails_the_check(tmp_path):
     assert export_kpi.export_check_code(flagged) == 1
     assert Decimal(str(flagged["residual_tolerance_usd"])) == tolerance
     assert "out_of_balance" in (ROOT / "app.js").read_text(encoding="utf-8")
+    refresh_src = (ROOT / "scripts" / "refresh_kpi_snapshots.py").read_text(encoding="utf-8")
+    refresh_body = refresh_src.split("def refresh(", 1)[1].split("\ndef ", 1)[0]
+    assert "snapshot was not updated" not in refresh_body.split("cash drop absent", 1)[0]
+    assert "export flags the book" in refresh_body
+    for relative in (".github/workflows/export-kpi.yml", "scripts/export-kpi.yml"):
+        workflow = (ROOT / relative).read_text(encoding="utf-8")
+        failed = workflow.split("Publish export failure", 1)[1]
+        assert "if: success()" not in failed
+        assert "data/live_book.json" in failed
+        assert "data/meta.json" in failed
     clean = _publish_case(
         tmp_path / "clean",
         book,
