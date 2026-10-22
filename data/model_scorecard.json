@@ -4,11 +4,11 @@
   "live_backend": {
     "id": "ml",
     "cli": "--backend ml",
-    "model_version": "lgbm_v1",
+    "model_version": "lgbm_fee_h8_v1feats",
     "promoted_model": "lgbm",
     "promoted_in_use": null,
     "source": "signal_artifacts",
-    "note": "The CLI is --backend ml, model_version lgbm_v1."
+    "note": "The CLI is --backend ml, model_version lgbm_fee_h8_v1feats."
   },
   "closed_fills": {
     "wins": 52,
@@ -33,15 +33,15 @@
     "note": "Sum of crypto fee dollars on the rows that were read. Identifiers are not written. Measured live fee ~95 bps/leg (median) / ~190 RT from tape. T24d will set FEE_BPS from that. This read median 95 bps/leg (~190 RT)."
   },
   "kill": {
-    "as_of": "2026-10-21T23:19:06+00:00",
-    "kill_headroom_stored": 0.3455,
-    "kill_headroom_frac": 0.3455,
-    "kill_headroom_usd": 103.65,
+    "as_of": "2026-10-22T00:08:01+00:00",
+    "kill_headroom_stored": 0.3567333333,
+    "kill_headroom_frac": 0.3567333333,
+    "kill_headroom_usd": 107.02,
     "day_kill_pct": -0.1,
-    "day_kill_usd": -76.78,
+    "day_kill_usd": -77.11,
     "day_target_pct": 0.025,
-    "day_target_usd": 19.19,
-    "running_balance_usd": 767.75,
+    "day_target_usd": 19.28,
+    "running_balance_usd": 771.12,
     "note": "Day kill and day target are fractions of the live running balance, the same base as kill_remaining_usd. A stored absolute value above 1 is percent points."
   },
   "oos": {
@@ -93,9 +93,9 @@
     "status": "known",
     "artifacts_table": "signal_artifacts",
     "outcomes_table": "signal_trade_outcomes",
-    "artifact_count": 1424,
+    "artifact_count": 1428,
     "outcome_count": 70,
-    "last_generated_at": "2026-10-21T22:33:06+00:00",
+    "last_generated_at": "2026-10-21T23:38:06+00:00",
     "note": "Counts only. The artifact payload stays in the warehouse."
   }
 }
