@@ -1,14 +1,14 @@
 {
   "source": "https://github.com/jrg185/agentic-crypto-signals/blob/main/signals/latest.json",
   "generated_at": "2026-10-23T19:35:52Z",
-  "sleeve_as_of": "2026-10-23T20:09:27+00:00",
+  "sleeve_as_of": "2026-10-23T20:11:23+00:00",
   "book_usd": 278.19,
   "signal_book_usd": 726.0,
   "day_pnl_usd": 0.0,
-  "running_balance_usd": 725.03,
-  "realized_pnl_usd": 45.97,
-  "unrealized_pnl_usd": -120.94,
-  "running_pnl_usd": -74.97,
+  "running_balance_usd": 724.94,
+  "realized_pnl_usd": 45.98,
+  "unrealized_pnl_usd": -121.04,
+  "running_pnl_usd": -75.06,
   "day_realized_gross_usd": 0.0,
   "day_sell_fees_usd": 0.0,
   "positions": [
@@ -16,31 +16,31 @@
       "sleeve": "crypto",
       "ticker": "FET",
       "qty": "431.4",
-      "mark": "0.18387",
-      "value_usd": 79.32,
+      "mark": "0.1838",
+      "value_usd": 79.29,
       "avg_cost": "0.22943856",
-      "unrealized_pnl_usd": -19.66,
-      "running_pnl_usd": -19.66
+      "unrealized_pnl_usd": -19.69,
+      "running_pnl_usd": -19.69
     },
     {
       "sleeve": "crypto",
       "ticker": "ORCA",
       "qty": "36.32",
-      "mark": "1.7621",
-      "value_usd": 64.0,
+      "mark": "1.7605",
+      "value_usd": 63.94,
       "avg_cost": "2.72351",
-      "unrealized_pnl_usd": -34.92,
-      "running_pnl_usd": -34.92
+      "unrealized_pnl_usd": -34.98,
+      "running_pnl_usd": -34.98
     },
     {
       "sleeve": "crypto",
       "ticker": "QNT",
       "qty": "0.3457",
-      "mark": "180.17",
-      "value_usd": 62.28,
+      "mark": "180.24",
+      "value_usd": 62.31,
       "avg_cost": "209.413",
-      "unrealized_pnl_usd": -10.11,
-      "running_pnl_usd": -10.11
+      "unrealized_pnl_usd": -10.09,
+      "running_pnl_usd": -10.09
     },
     {
       "sleeve": "crypto",
@@ -56,14 +56,14 @@
       "sleeve": "crypto",
       "ticker": "STRK",
       "qty": "816.6",
-      "mark": "0.05027",
-      "value_usd": 41.05,
+      "mark": "0.05023",
+      "value_usd": 41.02,
       "avg_cost": "0.067941",
-      "unrealized_pnl_usd": -14.43,
-      "running_pnl_usd": -14.43
+      "unrealized_pnl_usd": -14.46,
+      "running_pnl_usd": -14.46
     }
   ],
-  "kill_remaining_usd": 60.6,
+  "kill_remaining_usd": 60.51,
   "day_open_usd": 738.26,
   "day_open_date": "2026-10-23",
   "kill_line_usd": 664.43,
