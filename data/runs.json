@@ -1,6 +1,6 @@
 {
   "source": "supabase",
-  "fetched_at": "2026-10-23T17:17:06Z",
+  "fetched_at": "2026-10-23T17:40:42Z",
   "runs": [
     {
       "id": "run_14378e08b60d",
@@ -265644,11 +265644,11 @@
     }
   ],
   "calibration": {
-    "n_resolved": 55988,
-    "n_scored": 55874,
+    "n_resolved": 56159,
+    "n_scored": 56045,
     "n_unscored": 114,
-    "logloss": 0.670203,
-    "brier": 0.237708,
+    "logloss": 0.669902,
+    "brier": 0.237563,
     "bins": [
       {
         "lo": 0.0,
@@ -265674,23 +265674,23 @@
       {
         "lo": 0.3,
         "hi": 0.4,
-        "n": 13565,
-        "mean_p_up": 0.360904,
-        "label_rate": 0.35481
+        "n": 13625,
+        "mean_p_up": 0.360943,
+        "label_rate": 0.353248
       },
       {
         "lo": 0.4,
         "hi": 0.5,
-        "n": 27049,
-        "mean_p_up": 0.451319,
-        "label_rate": 0.37018
+        "n": 27139,
+        "mean_p_up": 0.451278,
+        "label_rate": 0.369468
       },
       {
         "lo": 0.5,
         "hi": 0.6,
-        "n": 4802,
-        "mean_p_up": 0.518071,
-        "label_rate": 0.49167
+        "n": 4823,
+        "mean_p_up": 0.518077,
+        "label_rate": 0.490151
       },
       {
         "lo": 0.6,
@@ -265723,9 +265723,9 @@
     ],
     "scope": "all_predictions",
     "full_precision": {
-      "n_scored": 45972,
-      "logloss": 0.66927,
-      "brier": 0.237109
+      "n_scored": 46086,
+      "logloss": 0.669132,
+      "brier": 0.237044
     }
   },
   "sources": {
