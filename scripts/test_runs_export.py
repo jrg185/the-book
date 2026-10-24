@@ -3,8 +3,11 @@
 import json
 import sys
 import unittest
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import export_runs
@@ -417,6 +420,396 @@ class RunsExportTests(unittest.TestCase):
                 ["--require-fresh", "--predictions", str(out / "predictions.json"), "--newest-artifact-at", artifact_at]
             )
             self.assertEqual(fresh, 0)
+
+
+def _desc_key(value):
+    if value is None:
+        return (0,)
+    return (1, tuple(-ord(char) for char in str(value)))
+
+
+def prediction_sort_key(row):
+    """PREDICTION_ORDER: bar_time DESC NULLS FIRST, run_id DESC, symbol DESC."""
+    return (
+        _desc_key(row.get("bar_time")),
+        _desc_key(row.get("run_id")),
+        _desc_key(row.get("symbol")),
+    )
+
+
+def _split_filter_args(text):
+    parts = []
+    buf = []
+    depth = 0
+    quoted = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if quoted:
+            buf.append(char)
+            if char == '"':
+                if index + 1 < len(text) and text[index + 1] == '"':
+                    buf.append(text[index + 1])
+                    index += 2
+                    continue
+                quoted = False
+            index += 1
+            continue
+        if char == '"':
+            quoted = True
+            buf.append(char)
+        elif char == "(":
+            depth += 1
+            buf.append(char)
+        elif char == ")":
+            depth -= 1
+            buf.append(char)
+        elif char == "," and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(char)
+        index += 1
+    if buf:
+        parts.append("".join(buf))
+    return parts
+
+
+def _unquote_filter(value):
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        return value[1:-1].replace('""', '"')
+    return value
+
+
+def _match_condition(row, text):
+    for op in ("not.is", "is", "lte", "gte", "lt", "gt", "eq"):
+        token = "." + op + "."
+        found = text.find(token)
+        if found < 0:
+            continue
+        column = text[:found]
+        value = _unquote_filter(text[found + len(token):])
+        actual = row.get(column)
+        if op == "is":
+            return actual is None if value == "null" else False
+        if op == "not.is":
+            return actual is not None if value == "null" else False
+        if actual is None:
+            return False
+        left = str(actual)
+        if op == "eq":
+            return left == value
+        if op == "lt":
+            return left < value
+        if op == "gt":
+            return left > value
+        if op == "lte":
+            return left <= value
+        if op == "gte":
+            return left >= value
+    raise AssertionError("unparsed filter condition " + text)
+
+
+def _match_filter(row, text):
+    text = text.strip()
+    if text.startswith("or(") and text.endswith(")"):
+        return any(_match_filter(row, part) for part in _split_filter_args(text[3:-1]))
+    if text.startswith("and(") and text.endswith(")"):
+        return all(_match_filter(row, part) for part in _split_filter_args(text[4:-1]))
+    return _match_condition(row, text)
+
+
+def _match_query(row, query):
+    if "or" in query:
+        text = query["or"][0]
+        if text.startswith("(") and text.endswith(")"):
+            text = text[1:-1]
+        return any(_match_filter(row, part) for part in _split_filter_args(text))
+    if "and" in query:
+        text = query["and"][0]
+        if text.startswith("(") and text.endswith(")"):
+            text = text[1:-1]
+        return all(_match_filter(row, part) for part in _split_filter_args(text))
+    return True
+
+
+class _Body:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return self._payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def fixture_predictions():
+    """Ties on bar_time, a null bar_time, and one row past a 4-row window."""
+    rows = [
+        {"run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2", "symbol": "ETH", "bar_time": "2026-10-24T06:00:00Z", "p_up": 0.8, "side": "long", "conviction": 0.2, "expires_at": "2026-10-25T06:00:00Z", "fwd_ret_8h": 0.01, "label_up_net30": True, "resolved_at": "2026-10-25T06:00:00Z", "traded": True, "p_up_source": "payload", "features": {"secret": True}},
+        {"run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2", "symbol": "BTC", "bar_time": "2026-10-24T06:00:00Z", "p_up": 0.2, "side": "short", "conviction": 0.1, "expires_at": "2026-10-25T06:00:00Z", "fwd_ret_8h": -0.02, "label_up_net30": False, "resolved_at": "2026-10-25T06:00:00Z", "traded": False, "p_up_source": "payload", "features": {"secret": True}},
+        {"run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "symbol": "ETH", "bar_time": "2026-10-24T06:00:00Z", "p_up": 0.55, "side": "flat", "conviction": 0.0, "expires_at": "2026-10-25T06:00:00Z", "fwd_ret_8h": 0.0, "label_up_net30": False, "resolved_at": "2026-10-25T06:00:00Z", "traded": False, "p_up_source": "thesis_2dp"},
+        {"run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "symbol": "SOL", "bar_time": "2026-10-24T05:00:00+00:00", "p_up": 0.4, "side": "long", "conviction": 0.05, "expires_at": "2026-10-25T05:00:00Z", "fwd_ret_8h": 0.03, "label_up_net30": True, "resolved_at": "2026-10-25T05:00:00Z", "traded": True, "p_up_source": "payload"},
+        {"run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "symbol": "BTC", "bar_time": "2026-10-24T05:00:00+00:00", "p_up": 0.1, "side": "flat", "conviction": 0.0, "expires_at": "2026-10-25T05:00:00Z", "fwd_ret_8h": None, "label_up_net30": None, "resolved_at": None, "traded": False, "p_up_source": "thesis_2dp"},
+        {"run_id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc3", "symbol": "SOL", "bar_time": None, "p_up": 0.5, "side": "flat", "conviction": 0.0, "expires_at": None, "fwd_ret_8h": None, "label_up_net30": True, "resolved_at": None, "traded": False, "p_up_source": "payload"},
+    ]
+    return rows
+
+
+def _markers(rows):
+    return [(row.get("bar_time"), row.get("run_id"), row.get("symbol")) for row in rows]
+
+
+class _PredictionServer:
+    def __init__(self, rows):
+        self.ordered = sorted(rows, key=prediction_sort_key)
+        self.queries = []
+        self.selects = []
+
+    def urlopen(self, request, timeout=30):
+        del timeout
+        parsed = urllib.parse.urlparse(request.full_url)
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        self.queries.append(query)
+        select = query.get("select", [""])[0]
+        self.selects.append(select)
+        columns = [column for column in select.split(",") if column]
+        limit = int(query["limit"][0])
+        if "offset" in query:
+            start = int(query["offset"][0])
+            page = self.ordered[start:start + limit]
+        else:
+            matched = [row for row in self.ordered if _match_query(row, query)]
+            page = matched[:limit]
+        projected = [{column: row.get(column) for column in columns} for row in page]
+        return _Body(json.dumps(projected).encode("utf-8"))
+
+
+class PredictionKeysetTests(unittest.TestCase):
+    def test_fetch_columns_are_the_union_and_omit_features(self):
+        self.assertEqual(
+            export_runs.PREDICTION_FETCH_COLUMNS,
+            export_runs.PREDICTION_COLUMNS + ("p_up_source",),
+        )
+        for banned in ("features", "fill_trade_id", "size_frac", "realized_pnl_frac"):
+            self.assertNotIn(banned, export_runs.PREDICTION_FETCH_COLUMNS)
+        self.assertEqual(export_runs.PREDICTION_SOURCES[0], "run_predictions")
+        self.assertNotIn("id", export_runs.PREDICTION_KEY)
+        self.assertEqual(export_runs.PREDICTION_KEY, ("bar_time", "run_id", "symbol"))
+
+    def test_keyset_matches_offset_including_ties_nulls_and_exact_pages(self):
+        rows = fixture_predictions()
+        expected = _markers(sorted(rows, key=prediction_sort_key))
+        # Null bar_time sorts first. The 06:00 ETH row sorts ahead of BTC on the same run.
+        self.assertEqual(expected[0][0], None)
+        self.assertEqual(expected[1][2], "ETH")
+        self.assertEqual(expected[1][0], "2026-10-24T06:00:00Z")
+        self.assertEqual(expected[2][2], "BTC")
+        old_page = export_runs.PAGE_SIZE
+        export_runs.PAGE_SIZE = 2
+        try:
+            offset_server = _PredictionServer(rows)
+            keyset_server = _PredictionServer(rows)
+            with mock.patch.object(urllib.request, "urlopen", offset_server.urlopen):
+                offset_rows = export_runs.fetch_rest(
+                    "https://example.invalid",
+                    "test-key",
+                    "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS,
+                    export_runs.PREDICTION_ORDER,
+                    len(rows) + 5,
+                    paging="offset",
+                )
+            with mock.patch.object(urllib.request, "urlopen", keyset_server.urlopen):
+                keyset_rows = export_runs.fetch_rest(
+                    "https://example.invalid",
+                    "test-key",
+                    "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS,
+                    export_runs.PREDICTION_ORDER,
+                    len(rows) + 5,
+                    paging="keyset",
+                )
+        finally:
+            export_runs.PAGE_SIZE = old_page
+        self.assertEqual(_markers(offset_rows), expected)
+        self.assertEqual(_markers(keyset_rows), expected)
+        self.assertEqual(_markers(offset_rows), _markers(keyset_rows))
+        # 6 rows, page size 2: three full pages plus one empty probe.
+        self.assertEqual(len(offset_server.queries), export_runs.prediction_get_count(len(rows), len(rows) + 5, 2))
+        self.assertEqual(len(keyset_server.queries), len(offset_server.queries))
+        self.assertEqual(len(keyset_server.queries), 4)
+        self.assertTrue(all("offset" in query for query in offset_server.queries))
+        self.assertTrue(all("offset" not in query for query in keyset_server.queries))
+        self.assertNotIn("or", keyset_server.queries[0])
+        self.assertIn("or", keyset_server.queries[1])
+        self.assertIn("symbol.lt.", keyset_server.queries[1]["or"][0])
+        for select in keyset_server.selects + offset_server.selects:
+            self.assertNotIn("features", select.split(","))
+            self.assertIn("p_up_source", select.split(","))
+        self.assertTrue(all("features" not in row for row in keyset_rows))
+
+    def test_empty_page_and_exact_page_size(self):
+        old_page = export_runs.PAGE_SIZE
+        export_runs.PAGE_SIZE = 2
+        try:
+            empty = _PredictionServer([])
+            with mock.patch.object(urllib.request, "urlopen", empty.urlopen):
+                rows = export_runs.fetch_rest(
+                    "https://example.invalid",
+                    "k",
+                    "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS,
+                    export_runs.PREDICTION_ORDER,
+                    10,
+                    paging="keyset",
+                )
+            self.assertEqual(rows, [])
+            self.assertEqual(len(empty.queries), 1)
+            exact_rows = sorted(fixture_predictions(), key=prediction_sort_key)[:2]
+            exact = _PredictionServer(exact_rows)
+            with mock.patch.object(urllib.request, "urlopen", exact.urlopen):
+                fetched = export_runs.fetch_rest(
+                    "https://example.invalid",
+                    "k",
+                    "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS,
+                    export_runs.PREDICTION_ORDER,
+                    10,
+                    paging="keyset",
+                )
+        finally:
+            export_runs.PAGE_SIZE = old_page
+        self.assertEqual(_markers(fetched), _markers(exact_rows))
+        self.assertEqual(len(exact.queries), 2)
+        self.assertEqual(exact.queries[1].get("or") is not None or exact.queries[1].get("and") is not None, True)
+
+    def test_timestamp_with_plus_roundtrips_the_keyset_filter(self):
+        cursor = {
+            "bar_time": "2026-10-24T05:00:00+00:00",
+            "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+            "symbol": "SOL",
+        }
+        name, value = export_runs.prediction_page_filter(older_than=cursor)
+        self.assertEqual(name, "or")
+        self.assertIn('bar_time.lt."2026-10-24T05:00:00+00:00"', value)
+        encoded = urllib.parse.urlencode({name: value})
+        self.assertIn("%2B00", encoded)
+        decoded = urllib.parse.parse_qs(encoded, keep_blank_values=True)
+        self.assertIn("+00:00", decoded["or"][0])
+
+    def test_offset_and_keyset_exports_are_byte_identical(self):
+        rows = fixture_predictions()
+        runs = [
+            {"id": row["run_id"], "backend": "ml", "generated_at": "2026-10-24T07:00:00Z"}
+            for row in rows
+        ]
+        # One run id per distinct run. build_bundle keeps every run under RUN_LIMIT.
+        seen = []
+        unique_runs = []
+        for run in runs:
+            if run["id"] in seen:
+                continue
+            seen.append(run["id"])
+            unique_runs.append(run)
+        versions = [{"id": "ver-1", "name": "lgbm_v1", "status": "promoted"}]
+        old_page = export_runs.PAGE_SIZE
+        old_limit = export_runs.PREDICTION_LIMIT
+        export_runs.PAGE_SIZE = 2
+        export_runs.PREDICTION_LIMIT = 4
+        try:
+            offset_server = _PredictionServer(rows)
+            keyset_server = _PredictionServer(rows)
+            with mock.patch.object(urllib.request, "urlopen", offset_server.urlopen):
+                offset_rows = export_runs.fetch_rest(
+                    "https://example.invalid", "k", "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS, export_runs.PREDICTION_ORDER,
+                    export_runs.CALIBRATION_LIMIT, paging="offset",
+                )
+            with mock.patch.object(urllib.request, "urlopen", keyset_server.urlopen):
+                keyset_rows = export_runs.fetch_rest(
+                    "https://example.invalid", "k", "run_predictions",
+                    export_runs.PREDICTION_FETCH_COLUMNS, export_runs.PREDICTION_ORDER,
+                    export_runs.CALIBRATION_LIMIT, paging="keyset",
+                )
+            offset_bytes = _public_bytes(unique_runs, offset_rows, versions)
+            keyset_bytes = _public_bytes(unique_runs, keyset_rows, versions)
+        finally:
+            export_runs.PAGE_SIZE = old_page
+            export_runs.PREDICTION_LIMIT = old_limit
+        self.assertEqual(offset_bytes, keyset_bytes)
+        self.assertEqual(offset_bytes[0], keyset_bytes[0])
+        self.assertEqual(offset_bytes[1], keyset_bytes[1])
+
+    def test_one_fetch_derives_the_window_and_calibration(self):
+        rows = sorted(fixture_predictions(), key=prediction_sort_key)
+        calls = []
+
+        def read_rows(source, columns, order, limit):
+            calls.append((source, tuple(columns), order, limit))
+            if source == "runs_public":
+                return [{"id": row["run_id"], "backend": "ml", "generated_at": "2026-10-24T07:00:00Z"} for row in rows]
+            if source == "run_predictions":
+                return list(rows)
+            if source == "model_versions_public":
+                return [{"id": "ver-1", "name": "lgbm_v1", "status": "promoted"}]
+            raise export_runs.SourceMissing(source)
+
+        old_limit = export_runs.PREDICTION_LIMIT
+        export_runs.PREDICTION_LIMIT = 2
+        try:
+            bundle, missing = export_runs.collect(read_rows, "2026-10-24T08:00:00Z")
+        finally:
+            export_runs.PREDICTION_LIMIT = old_limit
+        prediction_calls = [call for call in calls if call[0] in export_runs.PREDICTION_SOURCES]
+        self.assertEqual(prediction_calls, [(
+            "run_predictions",
+            export_runs.PREDICTION_FETCH_COLUMNS,
+            export_runs.PREDICTION_ORDER,
+            export_runs.CALIBRATION_LIMIT,
+        )])
+        self.assertEqual(missing, [])
+        self.assertEqual(len(bundle["predictions"]), 2)
+        self.assertEqual(bundle["calibration"]["scope"], "all_predictions")
+        self.assertGreater(bundle["calibration"]["n_resolved"], len(bundle["predictions"]))
+        self.assertEqual(bundle["calibration"]["full_precision"]["n_scored"], 4)
+        self.assertEqual(bundle["sources"]["predictions"], "run_predictions")
+        blob = json.dumps(bundle)
+        self.assertNotIn("features", blob)
+
+    def test_request_count_before_and_after(self):
+        # ~63k rows, page size 1000. The public window stops at 20_000.
+        # 63_000 is an exact multiple of the page, so the full keyset walk pays one empty GET.
+        full = export_runs.prediction_export_gets(63_000)
+        self.assertEqual(full, {"before": 84, "after": 64})
+        self.assertEqual(export_runs.prediction_get_count(0, 10, 2), 1)
+        self.assertEqual(export_runs.prediction_get_count(2, 10, 2), 2)
+        self.assertEqual(export_runs.prediction_get_count(4, 4, 2), 2)
+
+    def test_sql_order_keeps_nulls_first(self):
+        order = export_runs._order_sql(export_runs.PREDICTION_ORDER)
+        self.assertIn("bar_time desc nulls first", order)
+        self.assertIn("run_id desc", order)
+        self.assertIn("symbol desc", order)
+        self.assertEqual(export_runs._order_sql("generated_at.desc"), " order by generated_at desc nulls last")
+
+
+def _public_bytes(runs, prediction_rows, versions):
+    window, calibration_rows = export_runs.derive_prediction_outputs(prediction_rows)
+    bundle = export_runs.build_bundle(runs, window, versions, "2026-10-24T08:00:00Z")
+    bundle["calibration"] = export_runs.calibrate(calibration_rows)
+    bundle["calibration"]["scope"] = "all_predictions"
+    bundle["calibration"]["full_precision"] = export_runs.full_precision_calibration(calibration_rows)
+    bundle["sources"] = {
+        "runs": "runs_public",
+        "predictions": "run_predictions",
+        "model_versions": "model_versions_public",
+    }
+    return export_runs.bundle_json(bundle), export_runs.bundle_csv(bundle)
 
 
 if __name__ == "__main__":
