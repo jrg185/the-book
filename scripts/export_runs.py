@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Export public scoring runs for the Book.
 
-Reads only safe columns from the public views. Falls back to the same
-columns on the base tables when a view is not installed yet. Dollar
-amounts, fill_trade_id, order ids, and account fields are not written.
+Reads only safe columns from the public views, then the same columns on
+the base tables when a view is not installed yet. Predictions are read
+from public.run_predictions first: the service role bypasses RLS, and the
+public view cannot push down order or limit. The features jsonb column is
+never selected. Dollar amounts, fill_trade_id, order ids, and account
+fields are not written.
 
 A missing or empty relation is logged. It does not fail Export KPI.
 
@@ -49,6 +52,7 @@ RUN_LIMIT = 500
 PREDICTION_LIMIT = 20_000
 VERSION_LIMIT = 200
 BIN_COUNT = 10
+# PostgREST page size for every paged read in this script. Not a live balance.
 PAGE_SIZE = 1000
 # Calibration reads every prediction (few columns) so aggregates are not cut by
 # RUN_LIMIT or PREDICTION_LIMIT. Pages of PAGE_SIZE; this is a runaway guard only.
@@ -67,8 +71,20 @@ def full_precision_calibration(rows: list):
     return {"n_scored": scores["n_scored"], "logloss": scores["logloss"], "brier": scores["brier"]}
 
 RUN_SOURCES = ("runs_public", "scoring_runs")
-PREDICTION_SOURCES = ("run_predictions_public", "run_predictions")
+# Base table first. service_role bypasses RLS, and the public view wraps
+# ledger_private.run_predictions_rows(), which materializes every row (including
+# features) before PostgREST can apply order or limit. The migration primary
+# key is (run_id, symbol); the table has no id column.
+PREDICTION_TABLE = "run_predictions"
+PREDICTION_SOURCES = (PREDICTION_TABLE, "run_predictions_public")
 VERSION_SOURCES = ("model_versions_public", "model_versions")
+# Newest bar first, then the primary key, so a tie on bar_time cannot skip or
+# repeat a row. nullsfirst matches Postgres DESC default and the bar_time index.
+PREDICTION_ORDER = "bar_time.desc.nullsfirst,run_id.desc,symbol.desc"
+PREDICTION_KEY = ("bar_time", "run_id", "symbol")
+# Not a sibling of data/*.json. That glob is the published-identifier scan, and
+# this cache holds raw run_id values. Git does not publish it. Missing → full scan.
+PREDICTION_STATE_NAME = ".cache/run_predictions_page_state.json"
 
 RUN_COLUMNS = (
     "id",
@@ -94,6 +110,20 @@ PREDICTION_COLUMNS = (
     "resolved_at",
     "traded",
 )
+
+
+def union_columns(*groups) -> tuple:
+    """Column names in first-seen order. The prediction fetch is this union."""
+    seen = []
+    for group in groups:
+        for column in group:
+            if column not in seen:
+                seen.append(column)
+    return tuple(seen)
+
+
+# One read serves the public window and calibration. features is not in either list.
+PREDICTION_FETCH_COLUMNS = union_columns(PREDICTION_COLUMNS, CALIBRATION_COLUMNS)
 VERSION_COLUMNS = (
     "id",
     "name",
@@ -586,15 +616,164 @@ def raise_for_http(source: str, code: int, detail: str, columns) -> None:
     raise RuntimeError(f"REST {source} HTTP {code}: {detail[:180]}")
 
 
-def fetch_rest(base_url: str, key: str, source: str, columns, order: str | None, limit: int) -> list:
-    rows: list = []
-    offset = 0
-    headers = {
+_FILTER_BARE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def prediction_get_count(row_count: int, limit: int, page_size: int | None = None) -> int:
+    """GETs one paging loop issues.
+
+    A last page that fills the page size while still under ``limit`` costs one
+    more GET that comes back empty. ``page_size`` defaults to PAGE_SIZE.
+    """
+    page = PAGE_SIZE if page_size is None else int(page_size)
+    if page <= 0:
+        raise RuntimeError("page size must be positive")
+    if limit <= 0:
+        return 0
+    remaining = max(0, int(row_count))
+    got = 0
+    requests = 0
+    while got < limit:
+        requests += 1
+        batch = min(page, limit - got)
+        take = min(batch, remaining)
+        remaining -= take
+        got += take
+        if take < batch:
+            break
+    return requests
+
+
+def prediction_export_gets(row_count: int, *, new_rows: int | None = None, page_size: int | None = None) -> dict:
+    """Prediction GETs for one export.
+
+    ``before`` is the old pair of offset walks (public window, then calibration).
+    ``after`` is one keyset walk of the same rows, or of ``new_rows`` when the
+    caller already holds the previous rows.
+    """
+    before = prediction_get_count(row_count, PREDICTION_LIMIT, page_size) + prediction_get_count(
+        row_count, CALIBRATION_LIMIT, page_size
+    )
+    scanned = row_count if new_rows is None else new_rows
+    after = prediction_get_count(scanned, CALIBRATION_LIMIT, page_size)
+    return {"before": before, "after": after}
+
+
+def _filter_value(value) -> str:
+    text = as_text(value)
+    if not text:
+        raise RuntimeError("keyset filter value is empty")
+    if _FILTER_BARE.fullmatch(text):
+        return text
+    return '"' + text.replace('"', '""') + '"'
+
+
+def _cond(column: str, op: str, value=None) -> str:
+    if op in ("is", "not.is"):
+        literal = "null" if value is None else _filter_value(value)
+        return f"{_ident(column)}.{op}.{literal}"
+    return f"{_ident(column)}.{op}.{_filter_value(value)}"
+
+
+def prediction_cursor(row: dict) -> dict | None:
+    """Tie-break key for one prediction. None when the primary key is incomplete."""
+    if not isinstance(row, dict):
+        return None
+    run_id = as_text(row.get("run_id"))
+    symbol = as_text(row.get("symbol"))
+    if not run_id or not symbol:
+        return None
+    return {"bar_time": as_text(row.get("bar_time")), "run_id": run_id, "symbol": symbol}
+
+
+def _older_than_filter(cursor: dict) -> str:
+    """Rows that sort after cursor in PREDICTION_ORDER (older page)."""
+    bar = cursor.get("bar_time")
+    run_id = cursor["run_id"]
+    symbol = cursor["symbol"]
+    if bar is None:
+        return (
+            f"(and({_cond('bar_time', 'is')},{_cond('run_id', 'lt', run_id)}),"
+            f"and({_cond('bar_time', 'is')},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'lt', symbol)}),"
+            f"{_cond('bar_time', 'not.is')})"
+        )
+    return (
+        f"({_cond('bar_time', 'lt', bar)},"
+        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'lt', run_id)}),"
+        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'lt', symbol)}))"
+    )
+
+
+def _newer_than_filter(cursor: dict) -> str:
+    """Rows that sort before cursor in PREDICTION_ORDER (strictly newer)."""
+    bar = cursor.get("bar_time")
+    run_id = cursor["run_id"]
+    symbol = cursor["symbol"]
+    if bar is None:
+        return (
+            f"(and({_cond('bar_time', 'is')},{_cond('run_id', 'gt', run_id)}),"
+            f"and({_cond('bar_time', 'is')},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'gt', symbol)}))"
+        )
+    return (
+        f"({_cond('bar_time', 'gt', bar)},"
+        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'gt', run_id)}),"
+        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'gt', symbol)}))"
+    )
+
+
+def prediction_page_filter(*, older_than=None, newer_than=None):
+    """PostgREST ``(param, value)`` for a keyset bound. None on the first full page."""
+    bounds = []
+    if newer_than is not None:
+        bounds.append(_newer_than_filter(newer_than))
+    if older_than is not None:
+        bounds.append(_older_than_filter(older_than))
+    if not bounds:
+        return None
+    if len(bounds) == 1:
+        return "or", bounds[0]
+    return "and", "(or" + bounds[0] + ",or" + bounds[1] + ")"
+
+
+def _keyset_ready(source: str, columns, order: str | None) -> bool:
+    if source != PREDICTION_TABLE or order != PREDICTION_ORDER:
+        return False
+    return set(PREDICTION_KEY) <= set(columns)
+
+
+def _rest_headers(key: str) -> dict:
+    return {
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Accept": "application/json",
         "User-Agent": "agentic-sleeves-kpi-export",
     }
+
+
+def _rest_get(base_url: str, key: str, source: str, params: dict, columns) -> list:
+    url = (
+        base_url.rstrip("/")
+        + "/rest/v1/"
+        + urllib.parse.quote(_ident(source))
+        + "?"
+        + urllib.parse.urlencode(params)
+    )
+    request = urllib.request.Request(url, headers=_rest_headers(key))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise_for_http(source, exc.code, _redact(detail, [key]), columns)
+    payload = json.loads(body)
+    if not isinstance(payload, list):
+        raise RuntimeError(f"REST {source} did not return a row list")
+    return payload
+
+
+def _fetch_rest_offset(base_url: str, key: str, source: str, columns, order: str | None, limit: int) -> list:
+    rows: list = []
+    offset = 0
     while len(rows) < limit:
         batch = min(PAGE_SIZE, limit - len(rows))
         params = {
@@ -604,17 +783,7 @@ def fetch_rest(base_url: str, key: str, source: str, columns, order: str | None,
         }
         if order:
             params["order"] = order
-        url = base_url.rstrip("/") + "/rest/v1/" + urllib.parse.quote(_ident(source)) + "?" + urllib.parse.urlencode(params)
-        request = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                body = response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise_for_http(source, exc.code, _redact(detail, [key]), columns)
-        payload = json.loads(body)
-        if not isinstance(payload, list):
-            raise RuntimeError(f"REST {source} did not return a row list")
+        payload = _rest_get(base_url, key, source, params, columns)
         rows.extend(row for row in payload if isinstance(row, dict))
         if len(payload) < batch:
             break
@@ -624,7 +793,123 @@ def fetch_rest(base_url: str, key: str, source: str, columns, order: str | None,
     return rows
 
 
-def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int) -> list:
+def _fetch_rest_keyset(
+    base_url: str,
+    key: str,
+    source: str,
+    columns,
+    order: str | None,
+    limit: int,
+    newer_than=None,
+) -> list:
+    rows: list = []
+    older = None
+    seen: set[tuple] = set()
+    while len(rows) < limit:
+        batch = min(PAGE_SIZE, limit - len(rows))
+        params = {
+            "select": ",".join(_ident(column) for column in columns),
+            "limit": str(batch),
+            "order": order or PREDICTION_ORDER,
+        }
+        bound = prediction_page_filter(older_than=older, newer_than=newer_than)
+        if bound:
+            params[bound[0]] = bound[1]
+        payload = _rest_get(base_url, key, source, params, columns)
+        page = [row for row in payload if isinstance(row, dict)]
+        rows.extend(page)
+        if not page or len(payload) < batch:
+            break
+        cursor = prediction_cursor(page[-1])
+        if cursor is None:
+            raise RuntimeError(f"REST {source} keyset page has no run_id and symbol")
+        marker = (cursor.get("bar_time"), cursor["run_id"], cursor["symbol"])
+        if marker in seen:
+            raise RuntimeError(f"REST {source} keyset repeated a cursor")
+        seen.add(marker)
+        older = cursor
+    if len(rows) >= limit:
+        print(f"scoring runs: {source} capped at {limit} rows")
+    return rows
+
+
+def fetch_rest(
+    base_url: str,
+    key: str,
+    source: str,
+    columns,
+    order: str | None,
+    limit: int,
+    after=None,
+    paging: str | None = None,
+) -> list:
+    """Read one relation.
+
+    ``run_predictions`` uses keyset pages on ``(bar_time, run_id, symbol)``.
+    ``after`` is the newest row already on hand; the read returns only rows
+    that sort strictly ahead of it. Other relations keep offset pages. A view
+    fallback ignores ``after`` and returns the full offset read so the caller
+    can still merge.
+    """
+    use_keyset = paging == "keyset" or (paging is None and _keyset_ready(source, columns, order))
+    if paging == "offset":
+        use_keyset = False
+    if use_keyset:
+        if not set(PREDICTION_KEY) <= set(columns):
+            raise RuntimeError("keyset paging needs bar_time, run_id, and symbol")
+        return _fetch_rest_keyset(base_url, key, source, columns, order, limit, newer_than=after)
+    return _fetch_rest_offset(base_url, key, source, columns, order, limit)
+
+
+def _order_sql(order: str | None) -> str:
+    if not order:
+        return ""
+    parts = []
+    for term in order.split(","):
+        pieces = [piece for piece in term.strip().split(".") if piece]
+        if not pieces:
+            continue
+        column = _ident(pieces[0])
+        direction = "asc"
+        nulls = None
+        for piece in pieces[1:]:
+            lowered = piece.lower()
+            if lowered.startswith("desc"):
+                direction = "desc"
+            elif lowered.startswith("asc"):
+                direction = "asc"
+            elif lowered == "nullsfirst":
+                nulls = "first"
+            elif lowered == "nullslast":
+                nulls = "last"
+        if nulls is None:
+            nulls = "last"
+        parts.append(f"{column} {direction} nulls {nulls}")
+    if not parts:
+        return ""
+    return " order by " + ", ".join(parts)
+
+
+def _prediction_newer_sql(cursor: dict) -> tuple[str, list]:
+    """SQL for rows strictly newer than cursor. Values stay parameters."""
+    bar = cursor.get("bar_time")
+    run_id = cursor["run_id"]
+    symbol = cursor["symbol"]
+    if bar is None:
+        sql = (
+            "(bar_time is null and run_id > %s::uuid)"
+            " or (bar_time is null and run_id = %s::uuid and symbol > %s)"
+        )
+        return sql, [run_id, run_id, symbol]
+    sql = (
+        "(bar_time > %s::timestamptz)"
+        " or (bar_time = %s::timestamptz and run_id > %s::uuid)"
+        " or (bar_time = %s::timestamptz and run_id = %s::uuid and symbol > %s)"
+    )
+    return sql, [bar, bar, run_id, bar, run_id, symbol]
+
+
+def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int, after=None) -> list:
     try:
         import psycopg
         from psycopg.errors import UndefinedColumn, UndefinedTable
@@ -632,14 +917,18 @@ def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int) -
         raise SourceMissing(source) from exc
     selected = ", ".join(_ident(column) for column in columns)
     sql = f"select {selected} from public.{_ident(source)}"
-    if order:
-        column, direction = order.split(".", 1)
-        sql += f" order by {_ident(column)} {'desc' if direction.startswith('desc') else 'asc'} nulls last"
+    params: list = []
+    if after is not None and source == PREDICTION_TABLE:
+        where, where_params = _prediction_newer_sql(after)
+        sql += " where " + where
+        params.extend(where_params)
+    sql += _order_sql(order)
     sql += " limit %s"
+    params.append(int(limit))
     try:
         with psycopg.connect(db_url, connect_timeout=20) as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (int(limit),))
+                cur.execute(sql, params)
                 names = [desc.name for desc in cur.description]
                 return [dict(zip(names, row)) for row in cur.fetchall()]
     except UndefinedTable:
@@ -655,10 +944,10 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
     missing_rest: set[str] = set()
     secrets = [key or "", db_url or ""]
 
-    def read_rows(source: str, columns, order: str | None, limit: int) -> list:
+    def read_rows(source: str, columns, order: str | None, limit: int, after=None) -> list:
         if key and source not in missing_rest:
             try:
-                return fetch_rest(base_url, key, source, columns, order, limit)
+                return fetch_rest(base_url, key, source, columns, order, limit, after=after)
             except ColumnMissing:
                 raise
             except SourceMissing:
@@ -673,7 +962,7 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
                     raise SourceMissing(source) from None
         if db_url:
             try:
-                return fetch_db(db_url, source, columns, order, limit)
+                return fetch_db(db_url, source, columns, order, limit, after=after)
             except ColumnMissing:
                 raise
             except SourceMissing:
@@ -686,13 +975,24 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
     return read_rows
 
 
-def read_with_columns(read_rows, source: str, columns, order: str | None, limit: int) -> list:
+def _invoke_reader(read_rows, source, cols, use_order, limit, after):
+    if after is None:
+        return read_rows(source, cols, use_order, limit)
+    try:
+        return read_rows(source, cols, use_order, limit, after=after)
+    except TypeError as exc:
+        if "after" not in str(exc):
+            raise
+        return read_rows(source, cols, use_order, limit)
+
+
+def read_with_columns(read_rows, source: str, columns, order: str | None, limit: int, after=None) -> list:
     cols = list(columns)
     while cols:
         order_column = order.split(".", 1)[0] if order else None
         use_order = order if order_column in cols else None
         try:
-            return read_rows(source, cols, use_order, limit)
+            return _invoke_reader(read_rows, source, cols, use_order, limit, after)
         except ColumnMissing as exc:
             column = exc.column if exc.column in cols else None
             if column is None:
@@ -704,22 +1004,101 @@ def read_with_columns(read_rows, source: str, columns, order: str | None, limit:
     raise SourceMissing(source)
 
 
-def read_first(read_rows, sources, columns, order: str | None, limit: int):
+def read_first(read_rows, sources, columns, order: str | None, limit: int, after=None):
     notes = []
     for source in sources:
         try:
-            rows = read_with_columns(read_rows, source, columns, order, limit)
+            rows = read_with_columns(read_rows, source, columns, order, limit, after=after)
             return source, rows, notes
         except SourceMissing as exc:
             notes.append(str(exc) or source)
     return None, None, notes
 
 
-def collect(read_rows, fetched_at: str):
-    run_source, runs, run_notes = read_first(read_rows, RUN_SOURCES, RUN_COLUMNS, "generated_at.desc", RUN_LIMIT)
-    pred_source, predictions, pred_notes = read_first(
-        read_rows, PREDICTION_SOURCES, PREDICTION_COLUMNS, "bar_time.desc", PREDICTION_LIMIT
+def derive_prediction_outputs(rows: list) -> tuple[list, list]:
+    """Public window and calibration rows from one ordered fetch."""
+    ordered = [row for row in rows or [] if isinstance(row, dict)]
+    return ordered[:PREDICTION_LIMIT], ordered
+
+
+def _prediction_key(row: dict):
+    cursor = prediction_cursor(row)
+    if cursor is None:
+        return None
+    return (cursor["run_id"], cursor["symbol"])
+
+
+def merge_prediction_rows(prior: list, fresh: list) -> list:
+    """Null bar times, then rows newer than the watermark, then the rest.
+
+    Both inputs are in PREDICTION_ORDER. Fresh rows replace the same primary key.
+    """
+    fresh_rows = []
+    seen: set[tuple] = set()
+    for row in fresh or []:
+        if not isinstance(row, dict):
+            continue
+        key = _prediction_key(row)
+        if key is not None and key in seen:
+            continue
+        if key is not None:
+            seen.add(key)
+        fresh_rows.append(row)
+    nulls = []
+    rest = []
+    for row in prior or []:
+        if not isinstance(row, dict):
+            continue
+        key = _prediction_key(row)
+        if key is not None and key in seen:
+            continue
+        if key is not None:
+            seen.add(key)
+        cursor = prediction_cursor(row)
+        if cursor and cursor.get("bar_time") is None:
+            nulls.append(row)
+        else:
+            rest.append(row)
+    return nulls + fresh_rows + rest
+
+
+def incremental_cursor(rows: list) -> dict | None:
+    """Newest non-null bar_time already on hand.
+
+    Page order is nulls-first, so the first row is not the max bar_time.
+    A cache of only null bar times cannot anchor an incremental read.
+    """
+    for row in rows or []:
+        cursor = prediction_cursor(row)
+        if cursor and cursor.get("bar_time"):
+            return cursor
+    return None
+
+
+def _read_predictions(read_rows, prior):
+    prior_rows = [row for row in (prior or []) if isinstance(row, dict)]
+    cursor = incremental_cursor(prior_rows) if prior_rows else None
+    source, rows, notes = read_first(
+        read_rows,
+        PREDICTION_SOURCES,
+        PREDICTION_FETCH_COLUMNS,
+        PREDICTION_ORDER,
+        CALIBRATION_LIMIT,
+        after=cursor,
     )
+    if source is None:
+        return None, None, notes
+    fetched = list(rows or [])
+    if cursor is not None:
+        fetched = merge_prediction_rows(prior_rows, fetched)
+    mode = "incremental" if cursor is not None else "full"
+    print(f"scoring runs: {source} {mode} rows={len(fetched)}")
+    return source, fetched, notes
+
+
+def collect(read_rows, fetched_at: str, *, prior_predictions=None, fetched_out=None):
+    run_source, runs, run_notes = read_first(read_rows, RUN_SOURCES, RUN_COLUMNS, "generated_at.desc", RUN_LIMIT)
+    pred_source, predictions, pred_notes = _read_predictions(read_rows, prior_predictions)
     version_source, versions, version_notes = read_first(
         read_rows, VERSION_SOURCES, VERSION_COLUMNS, "name.asc", VERSION_LIMIT
     )
@@ -732,19 +1111,21 @@ def collect(read_rows, fetched_at: str):
         missing.extend(version_notes or list(VERSION_SOURCES))
     if run_source is None and pred_source is None and version_source is None:
         return None, missing
-    bundle = build_bundle(runs or [], predictions or [], versions or [], fetched_at)
+    window: list = []
     calibration_rows = None
     if pred_source is not None:
-        try:
-            calibration_rows = read_with_columns(
-                read_rows, pred_source, CALIBRATION_COLUMNS, "bar_time.desc", CALIBRATION_LIMIT
-            )
-        except SourceMissing as exc:
-            print(f"scoring runs: calibration read skipped: {exc}")
+        window, calibration_rows = derive_prediction_outputs(predictions or [])
+    bundle = build_bundle(runs or [], window, versions or [], fetched_at)
     if calibration_rows is not None:
         bundle["calibration"] = calibrate(calibration_rows)
         bundle["calibration"]["scope"] = "all_predictions"
         bundle["calibration"]["full_precision"] = full_precision_calibration(calibration_rows)
+        if (
+            fetched_out is not None
+            and calibration_rows
+            and len(calibration_rows) < CALIBRATION_LIMIT
+        ):
+            fetched_out.extend(calibration_rows)
     else:
         bundle["calibration"]["scope"] = "exported_predictions"
         bundle["calibration"]["full_precision"] = None
@@ -754,6 +1135,67 @@ def collect(read_rows, fetched_at: str):
         "model_versions": version_source,
     }
     return bundle, missing
+
+
+def remembered_predictions(folder: Path) -> list | None:
+    """Prior raw prediction rows, or None when this folder has no usable cache."""
+    path = folder / PREDICTION_STATE_NAME
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("complete") is not True:
+        return None
+    if payload.get("order") != PREDICTION_ORDER:
+        return None
+    if list(payload.get("columns") or []) != list(PREDICTION_FETCH_COLUMNS):
+        return None
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows or len(rows) >= CALIBRATION_LIMIT:
+        return None
+    if not all(isinstance(row, dict) and prediction_cursor(row) for row in rows):
+        return None
+    return rows
+
+
+def _plain_state_row(row: dict) -> dict | None:
+    """JSON values for the page cache. None when a cell is not a scalar."""
+    plain = {}
+    for key, value in row.items():
+        if isinstance(value, bool) or value is None or isinstance(value, (int, float, str)):
+            plain[key] = value
+            continue
+        if isinstance(value, dt.datetime):
+            plain[key] = as_text(value)
+            continue
+        text = as_text(value)
+        if text is None:
+            continue
+        plain[key] = text
+    return plain
+
+
+def remember_prediction_state(folder: Path, rows: list) -> None:
+    """Write the raw page cache. A capped or empty read is not a resume point."""
+    if not rows or len(rows) >= CALIBRATION_LIMIT:
+        return
+    plain = []
+    for row in rows:
+        if prediction_cursor(row) is None:
+            return
+        stored = _plain_state_row(row)
+        if stored is None or prediction_cursor(stored) is None:
+            return
+        plain.append(stored)
+    payload = {
+        "order": PREDICTION_ORDER,
+        "columns": list(PREDICTION_FETCH_COLUMNS),
+        "complete": True,
+        "rows": plain,
+    }
+    path = folder / PREDICTION_STATE_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
 
 
 # Latest desk score. The public raw URL of signals/latest.json 404s when that
@@ -921,8 +1363,21 @@ def publish_predictions(target: Path, signal: dict | None, *, source: str | None
     return document
 
 
-def publish(target: Path, base_url: str, key: str | None = None, db_url: str | None = None, *, now: str | None = None, read_rows=None) -> None:
-    """Write the public runs snapshot. Never raises; a miss is a log line."""
+def publish(
+    target: Path,
+    base_url: str,
+    key: str | None = None,
+    db_url: str | None = None,
+    *,
+    now: str | None = None,
+    read_rows=None,
+    prior_predictions=None,
+) -> None:
+    """Write the public runs snapshot. Never raises; a miss is a log line.
+
+    A hidden page cache in ``target`` is the prior row set. When it is absent
+    the prediction read is a full keyset scan. The cache is not a published file.
+    """
     fetched_at = now or utc_now()
     secrets = [key or "", db_url or ""]
     try:
@@ -932,7 +1387,15 @@ def publish(target: Path, base_url: str, key: str | None = None, db_url: str | N
                 ensure_placeholder(target)
                 return
             read_rows = make_reader(base_url, key, db_url)
-        bundle, missing = collect(read_rows, fetched_at)
+        if prior_predictions is None:
+            prior_predictions = remembered_predictions(target)
+        fetched_out: list = []
+        bundle, missing = collect(
+            read_rows,
+            fetched_at,
+            prior_predictions=prior_predictions,
+            fetched_out=fetched_out,
+        )
         if bundle is None:
             print("scoring runs export skipped: " + ", ".join(missing))
             ensure_placeholder(target)
@@ -940,6 +1403,11 @@ def publish(target: Path, base_url: str, key: str | None = None, db_url: str | N
         for note in missing:
             print(f"scoring runs source skipped: {note}")
         write_public(target, bundle)
+        if fetched_out:
+            try:
+                remember_prediction_state(target, fetched_out)
+            except Exception:
+                print("scoring runs: page state not saved")
     except Exception as exc:
         print(f"scoring runs export skipped: {_redact(exc, secrets)}", file=sys.stderr)
         try:

@@ -4,3 +4,5 @@ __pycache__/
 .env.*
 _site/
 .DS_Store
+# Raw prediction page cache. Not a published artifact.
+data/.cache/
