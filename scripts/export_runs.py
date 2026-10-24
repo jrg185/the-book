@@ -6,7 +6,9 @@ the base tables when a view is not installed yet. Predictions are read
 from public.run_predictions first: the service role bypasses RLS, and the
 public view cannot push down order or limit. The features jsonb column is
 never selected. Dollar amounts, fill_trade_id, order ids, and account
-fields are not written.
+fields are not written. Every export reads the full prediction table.
+Resolutions land after bar_time, so a cached prefix would publish stale
+resolved_at, label_up_net30, fwd_ret_8h, and traded values.
 
 A missing or empty relation is logged. It does not fail Export KPI.
 
@@ -82,9 +84,6 @@ VERSION_SOURCES = ("model_versions_public", "model_versions")
 # repeat a row. nullsfirst matches Postgres DESC default and the bar_time index.
 PREDICTION_ORDER = "bar_time.desc.nullsfirst,run_id.desc,symbol.desc"
 PREDICTION_KEY = ("bar_time", "run_id", "symbol")
-# Not a sibling of data/*.json. That glob is the published-identifier scan, and
-# this cache holds raw run_id values. Git does not publish it. Missing → full scan.
-PREDICTION_STATE_NAME = ".cache/run_predictions_page_state.json"
 
 RUN_COLUMNS = (
     "id",
@@ -644,18 +643,16 @@ def prediction_get_count(row_count: int, limit: int, page_size: int | None = Non
     return requests
 
 
-def prediction_export_gets(row_count: int, *, new_rows: int | None = None, page_size: int | None = None) -> dict:
+def prediction_export_gets(row_count: int, *, page_size: int | None = None) -> dict:
     """Prediction GETs for one export.
 
     ``before`` is the old pair of offset walks (public window, then calibration).
-    ``after`` is one keyset walk of the same rows, or of ``new_rows`` when the
-    caller already holds the previous rows.
+    ``after`` is one full keyset walk of the same rows.
     """
     before = prediction_get_count(row_count, PREDICTION_LIMIT, page_size) + prediction_get_count(
         row_count, CALIBRATION_LIMIT, page_size
     )
-    scanned = row_count if new_rows is None else new_rows
-    after = prediction_get_count(scanned, CALIBRATION_LIMIT, page_size)
+    after = prediction_get_count(row_count, CALIBRATION_LIMIT, page_size)
     return {"before": before, "after": after}
 
 
@@ -704,35 +701,11 @@ def _older_than_filter(cursor: dict) -> str:
     )
 
 
-def _newer_than_filter(cursor: dict) -> str:
-    """Rows that sort before cursor in PREDICTION_ORDER (strictly newer)."""
-    bar = cursor.get("bar_time")
-    run_id = cursor["run_id"]
-    symbol = cursor["symbol"]
-    if bar is None:
-        return (
-            f"(and({_cond('bar_time', 'is')},{_cond('run_id', 'gt', run_id)}),"
-            f"and({_cond('bar_time', 'is')},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'gt', symbol)}))"
-        )
-    return (
-        f"({_cond('bar_time', 'gt', bar)},"
-        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'gt', run_id)}),"
-        f"and({_cond('bar_time', 'eq', bar)},{_cond('run_id', 'eq', run_id)},{_cond('symbol', 'gt', symbol)}))"
-    )
-
-
-def prediction_page_filter(*, older_than=None, newer_than=None):
-    """PostgREST ``(param, value)`` for a keyset bound. None on the first full page."""
-    bounds = []
-    if newer_than is not None:
-        bounds.append(_newer_than_filter(newer_than))
-    if older_than is not None:
-        bounds.append(_older_than_filter(older_than))
-    if not bounds:
+def prediction_page_filter(older_than=None):
+    """PostgREST ``(param, value)`` for the next older page. None on the first page."""
+    if older_than is None:
         return None
-    if len(bounds) == 1:
-        return "or", bounds[0]
-    return "and", "(or" + bounds[0] + ",or" + bounds[1] + ")"
+    return "or", _older_than_filter(older_than)
 
 
 def _keyset_ready(source: str, columns, order: str | None) -> bool:
@@ -800,7 +773,6 @@ def _fetch_rest_keyset(
     columns,
     order: str | None,
     limit: int,
-    newer_than=None,
 ) -> list:
     rows: list = []
     older = None
@@ -812,7 +784,7 @@ def _fetch_rest_keyset(
             "limit": str(batch),
             "order": order or PREDICTION_ORDER,
         }
-        bound = prediction_page_filter(older_than=older, newer_than=newer_than)
+        bound = prediction_page_filter(older)
         if bound:
             params[bound[0]] = bound[1]
         payload = _rest_get(base_url, key, source, params, columns)
@@ -840,16 +812,12 @@ def fetch_rest(
     columns,
     order: str | None,
     limit: int,
-    after=None,
     paging: str | None = None,
 ) -> list:
     """Read one relation.
 
-    ``run_predictions`` uses keyset pages on ``(bar_time, run_id, symbol)``.
-    ``after`` is the newest row already on hand; the read returns only rows
-    that sort strictly ahead of it. Other relations keep offset pages. A view
-    fallback ignores ``after`` and returns the full offset read so the caller
-    can still merge.
+    ``run_predictions`` with ``PREDICTION_ORDER`` uses a full keyset walk on
+    ``(bar_time, run_id, symbol)``. Other relations keep offset pages.
     """
     use_keyset = paging == "keyset" or (paging is None and _keyset_ready(source, columns, order))
     if paging == "offset":
@@ -857,7 +825,7 @@ def fetch_rest(
     if use_keyset:
         if not set(PREDICTION_KEY) <= set(columns):
             raise RuntimeError("keyset paging needs bar_time, run_id, and symbol")
-        return _fetch_rest_keyset(base_url, key, source, columns, order, limit, newer_than=after)
+        return _fetch_rest_keyset(base_url, key, source, columns, order, limit)
     return _fetch_rest_offset(base_url, key, source, columns, order, limit)
 
 
@@ -890,26 +858,7 @@ def _order_sql(order: str | None) -> str:
     return " order by " + ", ".join(parts)
 
 
-def _prediction_newer_sql(cursor: dict) -> tuple[str, list]:
-    """SQL for rows strictly newer than cursor. Values stay parameters."""
-    bar = cursor.get("bar_time")
-    run_id = cursor["run_id"]
-    symbol = cursor["symbol"]
-    if bar is None:
-        sql = (
-            "(bar_time is null and run_id > %s::uuid)"
-            " or (bar_time is null and run_id = %s::uuid and symbol > %s)"
-        )
-        return sql, [run_id, run_id, symbol]
-    sql = (
-        "(bar_time > %s::timestamptz)"
-        " or (bar_time = %s::timestamptz and run_id > %s::uuid)"
-        " or (bar_time = %s::timestamptz and run_id = %s::uuid and symbol > %s)"
-    )
-    return sql, [bar, bar, run_id, bar, run_id, symbol]
-
-
-def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int, after=None) -> list:
+def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int) -> list:
     try:
         import psycopg
         from psycopg.errors import UndefinedColumn, UndefinedTable
@@ -918,10 +867,6 @@ def fetch_db(db_url: str, source: str, columns, order: str | None, limit: int, a
     selected = ", ".join(_ident(column) for column in columns)
     sql = f"select {selected} from public.{_ident(source)}"
     params: list = []
-    if after is not None and source == PREDICTION_TABLE:
-        where, where_params = _prediction_newer_sql(after)
-        sql += " where " + where
-        params.extend(where_params)
     sql += _order_sql(order)
     sql += " limit %s"
     params.append(int(limit))
@@ -944,10 +889,10 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
     missing_rest: set[str] = set()
     secrets = [key or "", db_url or ""]
 
-    def read_rows(source: str, columns, order: str | None, limit: int, after=None) -> list:
+    def read_rows(source: str, columns, order: str | None, limit: int) -> list:
         if key and source not in missing_rest:
             try:
-                return fetch_rest(base_url, key, source, columns, order, limit, after=after)
+                return fetch_rest(base_url, key, source, columns, order, limit)
             except ColumnMissing:
                 raise
             except SourceMissing:
@@ -962,7 +907,7 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
                     raise SourceMissing(source) from None
         if db_url:
             try:
-                return fetch_db(db_url, source, columns, order, limit, after=after)
+                return fetch_db(db_url, source, columns, order, limit)
             except ColumnMissing:
                 raise
             except SourceMissing:
@@ -975,24 +920,13 @@ def make_reader(base_url: str, key: str | None, db_url: str | None):
     return read_rows
 
 
-def _invoke_reader(read_rows, source, cols, use_order, limit, after):
-    if after is None:
-        return read_rows(source, cols, use_order, limit)
-    try:
-        return read_rows(source, cols, use_order, limit, after=after)
-    except TypeError as exc:
-        if "after" not in str(exc):
-            raise
-        return read_rows(source, cols, use_order, limit)
-
-
-def read_with_columns(read_rows, source: str, columns, order: str | None, limit: int, after=None) -> list:
+def read_with_columns(read_rows, source: str, columns, order: str | None, limit: int) -> list:
     cols = list(columns)
     while cols:
         order_column = order.split(".", 1)[0] if order else None
         use_order = order if order_column in cols else None
         try:
-            return _invoke_reader(read_rows, source, cols, use_order, limit, after)
+            return read_rows(source, cols, use_order, limit)
         except ColumnMissing as exc:
             column = exc.column if exc.column in cols else None
             if column is None:
@@ -1004,11 +938,11 @@ def read_with_columns(read_rows, source: str, columns, order: str | None, limit:
     raise SourceMissing(source)
 
 
-def read_first(read_rows, sources, columns, order: str | None, limit: int, after=None):
+def read_first(read_rows, sources, columns, order: str | None, limit: int):
     notes = []
     for source in sources:
         try:
-            rows = read_with_columns(read_rows, source, columns, order, limit, after=after)
+            rows = read_with_columns(read_rows, source, columns, order, limit)
             return source, rows, notes
         except SourceMissing as exc:
             notes.append(str(exc) or source)
@@ -1021,84 +955,24 @@ def derive_prediction_outputs(rows: list) -> tuple[list, list]:
     return ordered[:PREDICTION_LIMIT], ordered
 
 
-def _prediction_key(row: dict):
-    cursor = prediction_cursor(row)
-    if cursor is None:
-        return None
-    return (cursor["run_id"], cursor["symbol"])
-
-
-def merge_prediction_rows(prior: list, fresh: list) -> list:
-    """Null bar times, then rows newer than the watermark, then the rest.
-
-    Both inputs are in PREDICTION_ORDER. Fresh rows replace the same primary key.
-    """
-    fresh_rows = []
-    seen: set[tuple] = set()
-    for row in fresh or []:
-        if not isinstance(row, dict):
-            continue
-        key = _prediction_key(row)
-        if key is not None and key in seen:
-            continue
-        if key is not None:
-            seen.add(key)
-        fresh_rows.append(row)
-    nulls = []
-    rest = []
-    for row in prior or []:
-        if not isinstance(row, dict):
-            continue
-        key = _prediction_key(row)
-        if key is not None and key in seen:
-            continue
-        if key is not None:
-            seen.add(key)
-        cursor = prediction_cursor(row)
-        if cursor and cursor.get("bar_time") is None:
-            nulls.append(row)
-        else:
-            rest.append(row)
-    return nulls + fresh_rows + rest
-
-
-def incremental_cursor(rows: list) -> dict | None:
-    """Newest non-null bar_time already on hand.
-
-    Page order is nulls-first, so the first row is not the max bar_time.
-    A cache of only null bar times cannot anchor an incremental read.
-    """
-    for row in rows or []:
-        cursor = prediction_cursor(row)
-        if cursor and cursor.get("bar_time"):
-            return cursor
-    return None
-
-
-def _read_predictions(read_rows, prior):
-    prior_rows = [row for row in (prior or []) if isinstance(row, dict)]
-    cursor = incremental_cursor(prior_rows) if prior_rows else None
+def _read_predictions(read_rows):
     source, rows, notes = read_first(
         read_rows,
         PREDICTION_SOURCES,
         PREDICTION_FETCH_COLUMNS,
         PREDICTION_ORDER,
         CALIBRATION_LIMIT,
-        after=cursor,
     )
     if source is None:
         return None, None, notes
     fetched = list(rows or [])
-    if cursor is not None:
-        fetched = merge_prediction_rows(prior_rows, fetched)
-    mode = "incremental" if cursor is not None else "full"
-    print(f"scoring runs: {source} {mode} rows={len(fetched)}")
+    print(f"scoring runs: {source} rows={len(fetched)}")
     return source, fetched, notes
 
 
-def collect(read_rows, fetched_at: str, *, prior_predictions=None, fetched_out=None):
+def collect(read_rows, fetched_at: str):
     run_source, runs, run_notes = read_first(read_rows, RUN_SOURCES, RUN_COLUMNS, "generated_at.desc", RUN_LIMIT)
-    pred_source, predictions, pred_notes = _read_predictions(read_rows, prior_predictions)
+    pred_source, predictions, pred_notes = _read_predictions(read_rows)
     version_source, versions, version_notes = read_first(
         read_rows, VERSION_SOURCES, VERSION_COLUMNS, "name.asc", VERSION_LIMIT
     )
@@ -1120,12 +994,6 @@ def collect(read_rows, fetched_at: str, *, prior_predictions=None, fetched_out=N
         bundle["calibration"] = calibrate(calibration_rows)
         bundle["calibration"]["scope"] = "all_predictions"
         bundle["calibration"]["full_precision"] = full_precision_calibration(calibration_rows)
-        if (
-            fetched_out is not None
-            and calibration_rows
-            and len(calibration_rows) < CALIBRATION_LIMIT
-        ):
-            fetched_out.extend(calibration_rows)
     else:
         bundle["calibration"]["scope"] = "exported_predictions"
         bundle["calibration"]["full_precision"] = None
@@ -1135,67 +1003,6 @@ def collect(read_rows, fetched_at: str, *, prior_predictions=None, fetched_out=N
         "model_versions": version_source,
     }
     return bundle, missing
-
-
-def remembered_predictions(folder: Path) -> list | None:
-    """Prior raw prediction rows, or None when this folder has no usable cache."""
-    path = folder / PREDICTION_STATE_NAME
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict) or payload.get("complete") is not True:
-        return None
-    if payload.get("order") != PREDICTION_ORDER:
-        return None
-    if list(payload.get("columns") or []) != list(PREDICTION_FETCH_COLUMNS):
-        return None
-    rows = payload.get("rows")
-    if not isinstance(rows, list) or not rows or len(rows) >= CALIBRATION_LIMIT:
-        return None
-    if not all(isinstance(row, dict) and prediction_cursor(row) for row in rows):
-        return None
-    return rows
-
-
-def _plain_state_row(row: dict) -> dict | None:
-    """JSON values for the page cache. None when a cell is not a scalar."""
-    plain = {}
-    for key, value in row.items():
-        if isinstance(value, bool) or value is None or isinstance(value, (int, float, str)):
-            plain[key] = value
-            continue
-        if isinstance(value, dt.datetime):
-            plain[key] = as_text(value)
-            continue
-        text = as_text(value)
-        if text is None:
-            continue
-        plain[key] = text
-    return plain
-
-
-def remember_prediction_state(folder: Path, rows: list) -> None:
-    """Write the raw page cache. A capped or empty read is not a resume point."""
-    if not rows or len(rows) >= CALIBRATION_LIMIT:
-        return
-    plain = []
-    for row in rows:
-        if prediction_cursor(row) is None:
-            return
-        stored = _plain_state_row(row)
-        if stored is None or prediction_cursor(stored) is None:
-            return
-        plain.append(stored)
-    payload = {
-        "order": PREDICTION_ORDER,
-        "columns": list(PREDICTION_FETCH_COLUMNS),
-        "complete": True,
-        "rows": plain,
-    }
-    path = folder / PREDICTION_STATE_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
 
 
 # Latest desk score. The public raw URL of signals/latest.json 404s when that
@@ -1371,12 +1178,10 @@ def publish(
     *,
     now: str | None = None,
     read_rows=None,
-    prior_predictions=None,
 ) -> None:
     """Write the public runs snapshot. Never raises; a miss is a log line.
 
-    A hidden page cache in ``target`` is the prior row set. When it is absent
-    the prediction read is a full keyset scan. The cache is not a published file.
+    Predictions are a full keyset read on every export.
     """
     fetched_at = now or utc_now()
     secrets = [key or "", db_url or ""]
@@ -1387,15 +1192,7 @@ def publish(
                 ensure_placeholder(target)
                 return
             read_rows = make_reader(base_url, key, db_url)
-        if prior_predictions is None:
-            prior_predictions = remembered_predictions(target)
-        fetched_out: list = []
-        bundle, missing = collect(
-            read_rows,
-            fetched_at,
-            prior_predictions=prior_predictions,
-            fetched_out=fetched_out,
-        )
+        bundle, missing = collect(read_rows, fetched_at)
         if bundle is None:
             print("scoring runs export skipped: " + ", ".join(missing))
             ensure_placeholder(target)
@@ -1403,11 +1200,6 @@ def publish(
         for note in missing:
             print(f"scoring runs source skipped: {note}")
         write_public(target, bundle)
-        if fetched_out:
-            try:
-                remember_prediction_state(target, fetched_out)
-            except Exception:
-                print("scoring runs: page state not saved")
     except Exception as exc:
         print(f"scoring runs export skipped: {_redact(exc, secrets)}", file=sys.stderr)
         try:

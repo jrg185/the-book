@@ -749,8 +749,8 @@ class PredictionKeysetTests(unittest.TestCase):
         rows = sorted(fixture_predictions(), key=prediction_sort_key)
         calls = []
 
-        def read_rows(source, columns, order, limit, after=None):
-            calls.append((source, tuple(columns), order, limit, after))
+        def read_rows(source, columns, order, limit):
+            calls.append((source, tuple(columns), order, limit))
             if source == "runs_public":
                 return [{"id": row["run_id"], "backend": "ml", "generated_at": "2026-10-24T07:00:00Z"} for row in rows]
             if source == "run_predictions":
@@ -771,7 +771,6 @@ class PredictionKeysetTests(unittest.TestCase):
             export_runs.PREDICTION_FETCH_COLUMNS,
             export_runs.PREDICTION_ORDER,
             export_runs.CALIBRATION_LIMIT,
-            None,
         )])
         self.assertEqual(missing, [])
         self.assertEqual(len(bundle["predictions"]), 2)
@@ -782,119 +781,21 @@ class PredictionKeysetTests(unittest.TestCase):
         blob = json.dumps(bundle)
         self.assertNotIn("features", blob)
 
-    def test_incremental_matches_a_full_keyset_scan(self):
-        ordered = sorted(fixture_predictions(), key=prediction_sort_key)
-        # Prior already holds the null bar and every row from the old watermark down.
-        prior = [ordered[0]] + ordered[3:]
-        cursor = export_runs.incremental_cursor(prior)
-        self.assertEqual(cursor["bar_time"], ordered[3]["bar_time"])
-        self.assertEqual(cursor["symbol"], ordered[3]["symbol"])
-        old_page = export_runs.PAGE_SIZE
-        old_limit = export_runs.PREDICTION_LIMIT
-        export_runs.PAGE_SIZE = 2
-        export_runs.PREDICTION_LIMIT = 4
-        try:
-            fresh_server = _PredictionServer(ordered)
-            with mock.patch.object(urllib.request, "urlopen", fresh_server.urlopen):
-                fresh = export_runs.fetch_rest(
-                    "https://example.invalid", "k", "run_predictions",
-                    export_runs.PREDICTION_FETCH_COLUMNS, export_runs.PREDICTION_ORDER,
-                    export_runs.CALIBRATION_LIMIT, after=cursor, paging="keyset",
-                )
-            full_server = _PredictionServer(ordered)
-            with mock.patch.object(urllib.request, "urlopen", full_server.urlopen):
-                full = export_runs.fetch_rest(
-                    "https://example.invalid", "k", "run_predictions",
-                    export_runs.PREDICTION_FETCH_COLUMNS, export_runs.PREDICTION_ORDER,
-                    export_runs.CALIBRATION_LIMIT, paging="keyset",
-                )
-            merged = export_runs.merge_prediction_rows(prior, fresh)
-            self.assertEqual(_markers(merged), _markers(full))
-            self.assertLess(len(fresh_server.queries), len(full_server.queries))
-            runs = []
-            seen = set()
-            for row in ordered:
-                if row["run_id"] in seen:
-                    continue
-                seen.add(row["run_id"])
-                runs.append({"id": row["run_id"], "backend": "ml", "generated_at": "2026-10-24T07:00:00Z"})
-            versions = [{"id": "ver-1", "name": "lgbm_v1", "status": "promoted"}]
-
-            def read_rows(source, columns, order, limit, after=None):
-                del columns, order, limit
-                if source == "runs_public":
-                    return runs
-                if source == "model_versions_public":
-                    return versions
-                if source != "run_predictions":
-                    raise export_runs.SourceMissing(source)
-                if after is None:
-                    return list(ordered)
-                name, value = export_runs.prediction_page_filter(newer_than=after)
-                return [row for row in ordered if _match_query(row, {name: [value]})]
-
-            incremental, _ = export_runs.collect(read_rows, "2026-10-24T08:00:00Z", prior_predictions=prior)
-            complete, _ = export_runs.collect(read_rows, "2026-10-24T08:00:00Z")
-        finally:
-            export_runs.PAGE_SIZE = old_page
-            export_runs.PREDICTION_LIMIT = old_limit
-        self.assertEqual(_markers(merged), _markers(ordered))
-        self.assertEqual(export_runs.bundle_json(incremental), export_runs.bundle_json(complete))
-        self.assertEqual(export_runs.bundle_csv(incremental), export_runs.bundle_csv(complete))
-
-    def test_missing_page_state_is_a_full_scan(self):
-        rows = sorted(fixture_predictions(), key=prediction_sort_key)
-        calls = []
-
-        def read_rows(source, columns, order, limit, after=None):
-            calls.append(after)
-            if source == "run_predictions":
-                return rows
-            if source == "runs_public":
-                return [{"id": rows[0]["run_id"], "generated_at": "2026-10-24T07:00:00Z"}]
-            if source == "model_versions_public":
-                return []
-            raise export_runs.SourceMissing(source)
-
-        with TemporaryDirectory() as tmp:
-            folder = Path(tmp)
-            (folder / "runs.json").write_text(json.dumps({"predictions": [{"bar_time": "2026-10-24T06:00:00Z"}]}), encoding="utf-8")
-            self.assertIsNone(export_runs.remembered_predictions(folder))
-            export_runs.publish(folder, "https://example.invalid", read_rows=read_rows, now="2026-10-24T08:00:00Z")
-            stored = export_runs.remembered_predictions(folder)
-            self.assertIsNotNone(stored)
-            self.assertEqual(_markers(stored), _markers(rows))
-            self.assertTrue((folder / ".cache" / "run_predictions_page_state.json").is_file())
-            import export_kpi
-            self.assertEqual(export_kpi.published_identifier_problems(folder), [])
-        self.assertIn(None, calls)
-
     def test_request_count_before_and_after(self):
         # ~63k rows, page size 1000. The public window stops at 20_000.
-        # 63_000 is an exact multiple of the page, so calibration pays one empty GET.
+        # 63_000 is an exact multiple of the page, so the full keyset walk pays one empty GET.
         full = export_runs.prediction_export_gets(63_000)
         self.assertEqual(full, {"before": 84, "after": 64})
-        incremental = export_runs.prediction_export_gets(63_000, new_rows=82)
-        self.assertEqual(incremental["after"], 1)
         self.assertEqual(export_runs.prediction_get_count(0, 10, 2), 1)
         self.assertEqual(export_runs.prediction_get_count(2, 10, 2), 2)
         self.assertEqual(export_runs.prediction_get_count(4, 4, 2), 2)
 
-    def test_sql_order_and_newer_bound_are_parameterized(self):
+    def test_sql_order_keeps_nulls_first(self):
         order = export_runs._order_sql(export_runs.PREDICTION_ORDER)
         self.assertIn("bar_time desc nulls first", order)
         self.assertIn("run_id desc", order)
         self.assertIn("symbol desc", order)
         self.assertEqual(export_runs._order_sql("generated_at.desc"), " order by generated_at desc nulls last")
-        where, params = export_runs._prediction_newer_sql({
-            "bar_time": "2026-10-24T06:00:00Z",
-            "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
-            "symbol": "BTC",
-        })
-        self.assertEqual(where.count("%s"), len(params))
-        self.assertNotIn("BTC'", where)
-        self.assertIn("timestamptz", where)
-        self.assertIn("uuid", where)
 
 
 def _public_bytes(runs, prediction_rows, versions):
